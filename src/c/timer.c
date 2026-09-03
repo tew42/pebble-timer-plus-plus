@@ -14,7 +14,6 @@
 #define PERSIST_VERSION 2
 #define PERSIST_VERSION_KEY 4342896
 #define PERSIST_TIMER_KEY 58734
-#define VIBRATION_LENGTH_MS 20000
 // legacy persistent storage
 #define PERSIST_TIMER_KEY_V2 3456
 

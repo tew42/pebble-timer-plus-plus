@@ -9,6 +9,7 @@
 
 #include "animation.h"
 #include "main.h"
+#include "settings.h"
 #include "text_render.h"
 #include "timer.h"
 #include "utility.h"
@@ -187,16 +188,12 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
 // Main Text
 //
 
-// Update main text drawing state
-static void prv_main_text_update_state(Layer *layer) {
-  // get properties
-  GRect bounds = layer_get_bounds(layer);
-  bool edit_mode = main_get_control_mode() != ControlModeCounting;
-  // calculate time parts
+// Format the timer value into the individual text fields (hr : min : sec)
+// `buff` must be zeroed by the caller; fields which are not drawn are left empty
+static void prv_format_text_fields(char buff[TEXT_FIELD_COUNT][6]) {
+  const bool edit_mode = main_get_control_mode() != ControlModeCounting;
   uint16_t hr, min, sec;
   timer_get_time_parts(&hr, &min, &sec);
-  // convert to strings
-  char buff[TEXT_FIELD_COUNT][6] = {{'\0'}};
   if (hr) {
     snprintf(buff[0], sizeof(buff[0]), edit_mode ? "%02d" : "%d", hr);
   }
@@ -204,6 +201,24 @@ static void prv_main_text_update_state(Layer *layer) {
   snprintf(buff[2], sizeof(buff[2]), (hr || edit_mode) ? "%02d" : "%d", min);
   snprintf(buff[3], sizeof(buff[3]), "%s", edit_mode ? "\0" : ":");
   snprintf(buff[4], sizeof(buff[4]), "%02d", sec);
+  // mask the trailing seconds digits which are no longer being refreshed, never while editing
+  // since the seconds being set must always be readable
+  if (!edit_mode) {
+    const uint8_t masked = settings_masked_second_digits(timer_get_value_ms());
+    for (uint8_t ii = 0; ii < masked; ii++) {
+      buff[4][1 - ii] = TEXT_RENDER_PLACEHOLDER_CHAR;
+    }
+  }
+}
+
+// Update main text drawing state
+static void prv_main_text_update_state(Layer *layer) {
+  // get properties
+  GRect bounds = layer_get_bounds(layer);
+  bool edit_mode = main_get_control_mode() != ControlModeCounting;
+  // convert to strings
+  char buff[TEXT_FIELD_COUNT][6] = {{'\0'}};
+  prv_format_text_fields(buff);
   // calculate new sizes for all text elements
   char tot_buff[26];
   snprintf(tot_buff, sizeof(tot_buff), "%s%s%s%s%s", buff[0], buff[1], buff[2], buff[3], buff[4]);
@@ -241,19 +256,9 @@ static void prv_main_text_update_state(Layer *layer) {
 
 // Draw main text onto drawing context
 static void prv_render_main_text(GContext *ctx, GRect bounds) {
-  // get time parts
-  uint16_t hr, min, sec;
-  timer_get_time_parts(&hr, &min, &sec);
   // convert to strings
-  bool edit_mode = main_get_control_mode() != ControlModeCounting;
   char buff[TEXT_FIELD_COUNT][6] = {{'\0'}};
-  if (hr) {
-    snprintf(buff[0], sizeof(buff[0]), edit_mode ? "%02d" : "%d", hr);
-  }
-  snprintf(buff[1], sizeof(buff[1]), "%s", hr && !edit_mode ? ":" : "\0");
-  snprintf(buff[2], sizeof(buff[2]), (hr || edit_mode) ? "%02d" : "%d", min);
-  snprintf(buff[3], sizeof(buff[3]), "%s", edit_mode ? "\0" : ":");
-  snprintf(buff[4], sizeof(buff[4]), "%02d", sec);
+  prv_format_text_fields(buff);
   // draw the main text elements in their respective bounds
   for (uint8_t ii = 0; ii < TEXT_FIELD_COUNT; ii++) {
     text_render_draw_scalable_text(ctx, buff[ii], drawing_data.text_fields[ii]);

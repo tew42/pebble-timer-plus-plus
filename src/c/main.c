@@ -9,6 +9,7 @@
 
 #include "main.h"
 #include "drawing.h"
+#include "settings.h"
 #include "timer.h"
 #include "utility.h"
 #include "rotary_kit.h"
@@ -17,6 +18,10 @@
 // Main constants
 #define BUTTON_HOLD_REPEAT_MS 100
 #define SYSTEM_ENTRANCE_ANIMATION_MS 400
+// Wake just past each boundary rather than exactly on it, so the time we render belongs to the
+// interval we are entering and not the one we are leaving. This also guarantees forward progress
+// when the timer value lands exactly on a boundary and the remainder is zero.
+#define REFRESH_OVERSHOOT_MS 5
 
 // Main data structure
 static struct {
@@ -217,11 +222,22 @@ static void prv_app_timer_callback(void *data) {
   // schedule next call
   main_data.app_timer = NULL;
   if (main_data.control_mode == ControlModeCounting) {
-    uint32_t duration = timer_get_value_ms() % MSEC_IN_SEC;
-    if (timer_is_chrono()) {
-      duration = MSEC_IN_SEC - duration;
-    }
-    main_data.app_timer = app_timer_register(duration + 5, prv_app_timer_callback, NULL);
+    uint32_t duration = settings_next_refresh_ms(timer_get_value_ms(), timer_is_chrono());
+    main_data.app_timer =
+        app_timer_register(duration + REFRESH_OVERSHOOT_MS, prv_app_timer_callback, NULL);
+  }
+}
+
+// New settings received from the phone
+static void prv_settings_updated(void) {
+  // refresh
+  drawing_update();
+  layer_mark_dirty(main_data.layer);
+  // adopt the new refresh cadence immediately rather than after the pending sleep
+  if (main_data.app_timer) {
+    app_timer_cancel(main_data.app_timer);
+    main_data.app_timer = NULL;
+    prv_app_timer_callback(NULL);
   }
 }
 
@@ -324,8 +340,9 @@ static void prv_tick_timer_service_callback(struct tm *tick_time, TimeUnits unit
 static void prv_initialize(void) {
   // cancel any existing wakeup events
   wakeup_cancel_all();
-  // load timer
+  // load timer and settings
   timer_persist_read();
+  settings_initialize(prv_settings_updated);
   // set initial states
   if (timer_is_paused()) {
     // get time parts
@@ -386,8 +403,9 @@ static void prv_initialize(void) {
 
 // Terminate the program
 static void prv_terminate(void) {
-  // unsubscribe from timer service
+  // unsubscribe from timer and settings services
   tick_timer_service_unsubscribe();
+  settings_terminate();
   // schedule wakeup
   if (!timer_is_chrono() && !timer_is_paused()) {
     time_t wakeup_time = (epoch() + timer_get_value_ms()) / MSEC_IN_SEC;

@@ -7,13 +7,14 @@
   ],
   "private": true,
   "dependencies": {
+    "@rebble/clay": "^1.1.0",
     "pebble-scalable": "^2.2.0"
   },
   "pebble": {
     "displayName": "Timer+",
     "uuid": "17bf83aa-88a9-459a-a6e5-60aa60e1dc07",
     "sdkVersion": "3",
-    "enableMultiJS": false,
+    "enableMultiJS": true,
     "targetPlatforms": [
       "aplite",
       "basalt",
@@ -26,6 +27,13 @@
     "watchapp": {
       "watchface": false
     },
+    "capabilities": [
+      "configurable"
+    ],
+    "messageKeys": [
+      "tenSecondUpdatesAbove",
+      "minuteUpdatesAbove"
+    ],
     "resources": {
       "media": [
         {

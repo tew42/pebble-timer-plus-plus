@@ -9,6 +9,25 @@ from 0:00 will cause Timer+ to go into stopwatch mode.
 | :-------------------------------------------------------------: | :-----------------------------------------------: | :---------------------------------------------: | :--------------------------------------------------------------: | :---------------------------------------------: | :------------------------------------------------------------: | :-----------------------------------------------: |
 | ![Aplite](assets/screenshots/aplite_diorite_flint_animated.gif) | ![Basalt](assets/screenshots/basalt_animated.gif) | ![Chalk](assets/screenshots/chalk_animated.gif) | ![Diorite](assets/screenshots/aplite_diorite_flint_animated.gif) | ![Emery](assets/screenshots/emery_animated.gif) | ![Flint](assets/screenshots/aplite_diorite_flint_animated.gif) | ![Gabbro](assets/screenshots/gabbro_animated.gif) |
 
+## Settings
+
+Timer+ normally redraws the time every second. Refreshing less often while the timer is a long way
+from zero saves battery, at the cost of not seeing the exact seconds. Two settings, configured from
+the Pebble app, each switch on a coarser update rate above a threshold:
+
+| Setting                   | Effect                                                       | Display |
+| ------------------------- | ------------------------------------------------------------ | ------- |
+| `10-second updates above` | Redraw every 10 seconds while the timer is above this value   | `5:3_`  |
+| `Minute updates above`    | Redraw once a minute while the timer is above this value      | `5:__`  |
+
+Seconds digits which are no longer being refreshed are shown as `_`, so every digit on screen is
+always accurate. Both settings default to *Never*, which is the original once-a-second behaviour.
+
+The thresholds apply to the time remaining in timer mode and to the time elapsed in stopwatch mode,
+so in both cases the display gets more detailed as it approaches the interesting moment. Editing a
+timer, pausing it, and the twenty seconds during which an elapsed timer vibrates always show live
+seconds.
+
 ## Building
 
 ### Command Line

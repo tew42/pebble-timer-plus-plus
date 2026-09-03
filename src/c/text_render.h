@@ -12,6 +12,10 @@
 #pragma once
 #include <pebble.h>
 
+//! Character which renders as a placeholder for a digit that is not being displayed.
+//! Drawn as the bottom bar of a digit, at a digit's width so substituting it never reflows text.
+#define TEXT_RENDER_PLACEHOLDER_CHAR '_'
+
 //! Gets the bounds of a certain text string at a certain font size
 //! @param buff The text string to measure
 //! @param font_size The font size to measure the string at

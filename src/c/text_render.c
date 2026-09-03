@@ -34,6 +34,7 @@ static const int8_t LECO_POINTS_X[] = {
     -7, -7, +7, +7, -7, -7, +5, +5, -3, -3, +3, +3, -3, -3, // 8
     -7, +3, +3, -3, -3, +5, +5, -7, -7, +7, +7, -7,         // 9
     -2, +2, +2, -2,                                         // :
+    -7, +7, +7, -7,                                         // _
 };
 static const int8_t LECO_POINTS_Y[] = {
     -10, -10, +10, +10, -10, -10, +6,  +6,  -6,  -6,                    // 0
@@ -47,12 +48,15 @@ static const int8_t LECO_POINTS_Y[] = {
     +2,  -10, -10, +10, +10, -2,  -2,  +2,  +2,  +6,  +6,  -6,  -6, +2, // 8
     +6,  +6,  -6,  -6,  -2,  -2,  +2,  +2,  -10, -10, +10, +10,         // 9
     -2,  -2,  +2,  +2,                                                  // :
+    +6,  +6,  +10, +10,                                                 // _
 };
 static const int8_t LECO_COLON_OFFSETS[] = {-4, 8};
 // offsets into point data for the start of every character padded with the count
-static const uint8_t LECO_OFFSETS[] = {0, 10, 20, 34, 46, 56, 70, 82, 90, 104, 116, 120};
+static const uint8_t LECO_OFFSETS[] = {0, 10, 20, 34, 46, 56, 70, 82, 90, 104, 116, 120, 124};
 // width of each character
-static const int8_t LECO_WIDTHS[] = {14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 4};
+// the placeholder is a digit's bottom bar, and must keep a digit's width so masking never reflows
+static const int8_t LECO_WIDTHS[] = {14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 4, 14};
+static const uint8_t LECO_PLACEHOLDER_INDEX = 11;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Private Functions
@@ -60,8 +64,11 @@ static const int8_t LECO_WIDTHS[] = {14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 4};
 
 // Obtain the character data index from the character value
 static uint8_t prv_get_character_index(char character) {
-  ASSERT(character >= 48 && character <= 58 && "Invalid character");
-  return character - 48;
+  if (character == TEXT_RENDER_PLACEHOLDER_CHAR) {
+    return LECO_PLACEHOLDER_INDEX;
+  }
+  ASSERT(character >= '0' && character <= ':' && "Invalid character");
+  return character - '0';
 }
 
 // Draws the path both filled and outlined to obtain a better rasterization
