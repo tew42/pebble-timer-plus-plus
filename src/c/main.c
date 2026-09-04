@@ -9,10 +9,10 @@
 
 #include "main.h"
 #include "drawing.h"
+#include "rotary_kit.h"
 #include "settings.h"
 #include "timer.h"
 #include "utility.h"
-#include "rotary_kit.h"
 #include <pebble.h>
 
 // Main constants
@@ -216,15 +216,22 @@ static void prv_click_config_provider(void *ctx) {
 static void prv_app_timer_callback(void *data) {
   // check if timer is complete
   timer_check_elapsed();
-  // refresh
-  drawing_update();
-  layer_mark_dirty(main_data.layer);
   // schedule next call
   main_data.app_timer = NULL;
+  bool superseded = false;
   if (main_data.control_mode == ControlModeCounting) {
     uint32_t duration = settings_next_refresh_ms(timer_get_value_ms(), timer_is_chrono());
     main_data.app_timer =
         app_timer_register(duration + REFRESH_OVERSHOOT_MS, prv_app_timer_callback, NULL);
+    // A timer started on a whole minute sits exactly on a refresh boundary, so the time we would
+    // draw now is replaced REFRESH_OVERSHOOT_MS later. Drawing it flashes the pre-boundary value,
+    // which reads as a glitch once the seconds are masked ("5:0_" then "4:5_").
+    superseded = (duration == 0);
+  }
+  // refresh
+  if (!superseded) {
+    drawing_update();
+    layer_mark_dirty(main_data.layer);
   }
 }
 
@@ -370,13 +377,13 @@ static void prv_initialize(void) {
   window_stack_push(main_data.window, true);
   // register rotary gestures (no-op on hardware without a touch surface)
   RotaryConfig rotary_cfg = rotary_kit_default_config();
-  rotary_cfg.center_x    = PBL_DISPLAY_WIDTH  / 2;
-  rotary_cfg.center_y    = PBL_DISPLAY_HEIGHT / 2;
+  rotary_cfg.center_x = PBL_DISPLAY_WIDTH / 2;
+  rotary_cfg.center_y = PBL_DISPLAY_HEIGHT / 2;
   rotary_cfg.degrees_per_click = 45;
   rotary_cfg.click_vibe_ms = 0;
-  rotary_cfg.on_click      = on_click;
+  rotary_cfg.on_click = on_click;
   rotary_cfg.on_center_tap = on_center_tap;
-  rotary_cfg.on_swipe      = on_swipe;
+  rotary_cfg.on_swipe = on_swipe;
   rotary_kit_set_window_config(main_data.window, &rotary_cfg);
   // initialize main layer
   main_data.layer = layer_create(window_bounds);

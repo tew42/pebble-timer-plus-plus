@@ -293,14 +293,23 @@ static void prv_render_progress_ring(GContext *ctx, GRect bounds) {
 
 // Update the progress ring position based on the current and total values
 static void prv_progress_ring_update(void) {
-  // calculate new angle
-  int32_t new_angle = TRIG_MAX_ANGLE * timer_get_value_ms() / timer_get_length_ms();
+  // calculate new angle, in chrono mode the ring repeats once a minute
+  // (the branches are exclusive because a timer of zero length is always chrono, which is what
+  // keeps the division below away from a zero total)
+  const int64_t value_ms = timer_get_value_ms();
+  int32_t new_angle;
   if (timer_is_chrono()) {
-    new_angle = TRIG_MAX_ANGLE * (timer_get_value_ms() % MSEC_IN_MIN) / MSEC_IN_MIN;
+    new_angle = TRIG_MAX_ANGLE * (value_ms % MSEC_IN_MIN) / MSEC_IN_MIN;
+  } else {
+    new_angle = TRIG_MAX_ANGLE * value_ms / timer_get_length_ms();
   }
+  // ANGLE_CHANGE_ANI_THRESHOLD assumes a one second refresh. A reduced-frequency refresh moves the
+  // ring far enough on every tick to always exceed it, which would sweep the ring for
+  // PROGRESS_ANI_DURATION and re-render the whole screen every animation tick until it settled.
+  const bool coarse = settings_masked_second_digits(value_ms) > 0;
   // check if large angle and animate
   animation_stop(&drawing_data.progress_angle);
-  if (abs(new_angle - drawing_data.progress_angle) >= ANGLE_CHANGE_ANI_THRESHOLD) {
+  if (!coarse && abs(new_angle - drawing_data.progress_angle) >= ANGLE_CHANGE_ANI_THRESHOLD) {
     animation_int32_start(&drawing_data.progress_angle, new_angle, PROGRESS_ANI_DURATION, 0,
                           CurveSinEaseOut);
   } else {
