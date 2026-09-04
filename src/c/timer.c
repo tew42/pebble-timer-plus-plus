@@ -9,13 +9,25 @@
 // @bugs No known bugs
 
 #include "timer.h"
+#include "settings.h"
 #include "utility.h"
 
 #define PERSIST_VERSION 2
 #define PERSIST_VERSION_KEY 4342896
 #define PERSIST_TIMER_KEY 58734
+#define VIBRATION_LENGTH_MS 20000
 // legacy persistent storage
 #define PERSIST_TIMER_KEY_V2 3456
+
+// The vibration below is re-enqueued from the same callback which refreshes the display, so a
+// reduced-frequency update mode which began part way through would cut it short. Every threshold
+// the settings page can select is large enough to keep the whole vibration on a one second
+// cadence; if this length grows past them, those thresholds and the options offered in
+// src/pkjs/config.json have to grow with it.
+_Static_assert((SETTINGS_TEN_SECOND_MIN_SEC) * (MSEC_IN_SEC) >= VIBRATION_LENGTH_MS,
+               "ten second updates must not begin before the elapse vibration has finished");
+_Static_assert((SETTINGS_MINUTE_MIN_MIN) * (MSEC_IN_MIN) >= VIBRATION_LENGTH_MS,
+               "minute updates must not begin before the elapse vibration has finished");
 
 // Vibration sequence
 static const uint32_t vibe_sequence[] = {150, 200, 300};

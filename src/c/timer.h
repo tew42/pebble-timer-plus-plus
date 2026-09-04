@@ -8,12 +8,7 @@
 //! @data October 26, 2015
 //! @bugs No known bugs
 
-#pragma once
 #include <pebble.h>
-
-//! How long the timer vibrates for once it has elapsed
-//! @note settings.c asserts that reduced-frequency updates cannot begin before this has passed
-#define VIBRATION_LENGTH_MS 20000
 
 //! Get timer value
 //! @param hr A pointer to where to store the hour value of the timer

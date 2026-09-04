@@ -17,7 +17,7 @@
 
 //! Smallest thresholds the configuration page may select.
 //! These must outlast the elapse vibration, because the vibration is re-enqueued from the same
-//! refresh callback the display uses; see the static assertions in settings.c.
+//! refresh callback the display uses; timer.c asserts that they do.
 #define SETTINGS_TEN_SECOND_MIN_SEC 20
 #define SETTINGS_MINUTE_MIN_MIN 1
 //! Largest thresholds the configuration page may select

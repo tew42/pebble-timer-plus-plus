@@ -7,7 +7,6 @@
 // @bugs No known bugs
 
 #include "settings.h"
-#include "timer.h"
 #include "utility.h"
 #include <pebble.h>
 
@@ -15,14 +14,6 @@
 #define PERSIST_SETTINGS_VERSION 1
 #define PERSIST_SETTINGS_VERSION_KEY 91742
 #define PERSIST_SETTINGS_KEY 91743
-
-// The elapse vibration is re-enqueued from the same callback which refreshes the display, so a
-// coarse update mode which began during the vibration would cut it short. Every selectable
-// threshold is at least this large, which keeps the whole vibration on a one second cadence.
-_Static_assert((SETTINGS_TEN_SECOND_MIN_SEC) * (MSEC_IN_SEC) >= VIBRATION_LENGTH_MS,
-               "ten second updates must not begin before the elapse vibration has finished");
-_Static_assert((SETTINGS_MINUTE_MIN_MIN) * (MSEC_IN_MIN) >= VIBRATION_LENGTH_MS,
-               "minute updates must not begin before the elapse vibration has finished");
 
 // How often the display refreshes at some timer value, and where that changes
 typedef struct {
