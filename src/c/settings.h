@@ -17,7 +17,11 @@
 
 //! Smallest thresholds the configuration page may select.
 //! These must outlast the elapse vibration, because the vibration is re-enqueued from the same
-//! refresh callback the display uses; timer.c asserts that they do.
+//! refresh callback the display uses; timer.c asserts that they do, so raising
+//! VIBRATION_LENGTH_MS past them will fail the build.
+//! Nothing checks these against src/pkjs/config.json, so they must be kept in step with the
+//! options it offers by hand: an option below these is silently rejected on arrival, leaving a
+//! setting the configuration page offers but the watch ignores.
 #define SETTINGS_TEN_SECOND_MIN_SEC 20
 #define SETTINGS_MINUTE_MIN_MIN 1
 //! Largest thresholds the configuration page may select
