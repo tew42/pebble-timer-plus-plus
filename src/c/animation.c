@@ -175,26 +175,29 @@ void animation_int32_start(int32_t *ptr, int32_t to, uint32_t duration, uint32_t
   prv_animation_timer_start();
 }
 
-// Cancel an animation by its pointer
+// Cancel every animation running on a pointer
+// Animations are not deduplicated when started, so a target can carry several at once; stopping
+// only the first would leave the others running and fighting over the same value
 void animation_stop(void *ptr) {
   AnimationNode *cur_node = head_node;
   AnimationNode *pre_node = NULL;
   while (cur_node) {
+    AnimationNode *next_node = cur_node->next;
     if (cur_node->target == ptr) {
       // link surrounding nodes
       if (pre_node) {
-        pre_node->next = cur_node->next;
+        pre_node->next = next_node;
       } else {
-        head_node = cur_node->next;
+        head_node = next_node;
       }
       // destroy node
       free(cur_node->from);
       free(cur_node->to);
       free(cur_node);
-      return;
+    } else {
+      pre_node = cur_node;
     }
-    pre_node = cur_node;
-    cur_node = cur_node->next;
+    cur_node = next_node;
   }
 }
 
