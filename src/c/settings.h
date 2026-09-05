@@ -40,6 +40,11 @@ void settings_terminate(void);
 //! @return 0 when the seconds are live, 1 when updating every ten seconds, 2 every minute
 uint8_t settings_masked_second_digits(int64_t value_ms);
 
+//! Get how long the display holds each frame at a certain timer value
+//! @param value_ms The current timer value in milliseconds
+//! @return The refresh interval in milliseconds, MSEC_IN_SEC while the seconds are live
+uint32_t settings_refresh_step_ms(int64_t value_ms);
+
 //! Get how long until the display next needs refreshing
 //! @param value_ms The current timer value in milliseconds
 //! @param counting_up True if the value is increasing, as it is in stopwatch mode

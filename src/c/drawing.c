@@ -77,13 +77,16 @@ typedef struct {
 // Main data
 static struct {
   Layer *layer;                        //< The main layer being drawn on, used to force a refresh
-  int32_t progress_angle;              //< The current angle of the progress ring
+  int32_t progress_angle;              //< Angle of the progress ring up to the last refresh
+  int32_t band_angle;                  //< Angle the ring reaches by the next refresh
+  bool show_band;                      //< Whether the refresh interval is worth showing
   DrawState draw_state;                //< An arbitrary description of the main drawing state
   GRect text_fields[TEXT_FIELD_COUNT]; //< The number of text fields (hr : min : sec)
   GRect focus_field;                   //< The selection field layer
   GColor fore_color;                   //< Color of text
   GColor mid_color;                    //< Color of center
   GColor ring_color;                   //< Color of ring
+  GColor band_color;                   //< Color of the ring within the current refresh interval
   GColor back_color;                   //< Color behind ring
 } drawing_data;
 
@@ -281,35 +284,58 @@ static void prv_render_progress_ring(GContext *ctx, GRect bounds) {
   // calculate ring bounds size
   int32_t gr_angle = atan2_lookup(bounds.size.h, bounds.size.w);
   int32_t radius = (int32_t)bounds.size.h * TRIG_MAX_RATIO / sin_lookup(gr_angle) / 2 + PADDING;
+  const GRect screen = bounds;
   bounds.origin.x += bounds.size.w / 2 - radius;
   bounds.origin.y += bounds.size.h / 2 - radius;
   bounds.size.w = bounds.size.h = radius * 2;
-  // draw ring on context
-  int32_t angle_1 = drawing_data.progress_angle;
-  int32_t angle_2 = TRIG_MAX_ANGLE;
+  // the screen is already filled with the ring, so the ring is drawn by covering what is past it
+  const int32_t solid_angle = drawing_data.progress_angle;
+  const int32_t band_angle = drawing_data.show_band ? drawing_data.band_angle : solid_angle;
   graphics_context_set_fill_color(ctx, drawing_data.back_color);
-  graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius, angle_1, angle_2);
+#ifdef PBL_BW
+  // one bit has no third tone to fill a wedge with, so cover from the solid arc, lay a lighter
+  // dither over everything (a no-op on the arc, whose pattern already contains it) and cover
+  // again past the band, leaving the interval a quarter tone between the ring and the background
+  graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius, solid_angle, TRIG_MAX_ANGLE);
+  if (band_angle != solid_angle) {
+    graphics_fill_rect_grey_light(ctx, screen);
+    graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius, band_angle, TRIG_MAX_ANGLE);
+  }
+#else
+  if (band_angle != solid_angle) {
+    graphics_context_set_fill_color(ctx, drawing_data.band_color);
+    graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius, solid_angle, band_angle);
+    graphics_context_set_fill_color(ctx, drawing_data.back_color);
+  }
+  graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius, band_angle, TRIG_MAX_ANGLE);
+#endif
 }
 
 // Update the progress ring position based on the current and total values
+// The ring advances with the digits: the solid arc ends at the last refresh boundary and the band
+// spans the interval the masked digits could mean, so the two never disagree.
 static void prv_progress_ring_update(void) {
-  // calculate new angle, in chrono mode the ring repeats once a minute
-  // (the branches are exclusive because a timer of zero length is always chrono, which is what
-  // keeps the division below away from a zero total)
   const int64_t value_ms = timer_get_value_ms();
-  int32_t new_angle;
-  if (timer_is_chrono()) {
-    new_angle = TRIG_MAX_ANGLE * (value_ms % MSEC_IN_MIN) / MSEC_IN_MIN;
-  } else {
-    new_angle = TRIG_MAX_ANGLE * value_ms / timer_get_length_ms();
-  }
+  const uint32_t step_ms = settings_refresh_step_ms(value_ms);
+  // the span the ring represents, and where the current refresh interval sits inside it
+  // (a timer of zero length is always chrono, which keeps the timer branch off a zero span)
+  const bool chrono = timer_is_chrono();
+  const int64_t span_ms = chrono ? MSEC_IN_MIN : timer_get_length_ms();
+  const int64_t offset_ms = chrono ? value_ms % MSEC_IN_MIN : value_ms;
+  // measure the interval from the unwrapped offset, so one ending on the minute fills the ring
+  // rather than wrapping back to nothing
+  const int64_t low_ms = offset_ms / step_ms * step_ms;
+  const int64_t high_ms = (low_ms + step_ms < span_ms) ? low_ms + step_ms : span_ms;
+  const int32_t new_angle = TRIG_MAX_ANGLE * low_ms / span_ms;
+  // the interval is only worth showing while the seconds it covers are masked
+  drawing_data.show_band = settings_masked_second_digits(value_ms) > 0;
+  drawing_data.band_angle = TRIG_MAX_ANGLE * high_ms / span_ms;
   // ANGLE_CHANGE_ANI_THRESHOLD assumes a one second refresh. A reduced-frequency refresh moves the
   // ring far enough on every tick to always exceed it, which would sweep the ring for
   // PROGRESS_ANI_DURATION and re-render the whole screen every animation tick until it settled.
-  const bool coarse = settings_masked_second_digits(value_ms) > 0;
-  // check if large angle and animate
   animation_stop(&drawing_data.progress_angle);
-  if (!coarse && abs(new_angle - drawing_data.progress_angle) >= ANGLE_CHANGE_ANI_THRESHOLD) {
+  if (!drawing_data.show_band &&
+      abs(new_angle - drawing_data.progress_angle) >= ANGLE_CHANGE_ANI_THRESHOLD) {
     animation_int32_start(&drawing_data.progress_angle, new_angle, PROGRESS_ANI_DURATION, 0,
                           CurveSinEaseOut);
   } else {
@@ -457,6 +483,8 @@ void drawing_initialize(Layer *layer) {
   drawing_data.layer = layer;
   // set visual states
   drawing_data.progress_angle = 0;
+  drawing_data.band_angle = 0;
+  drawing_data.show_band = false;
   for (uint8_t ii = 0; ii < TEXT_FIELD_COUNT; ii++) {
     drawing_data.text_fields[ii].origin = grect_center_point(&bounds);
     drawing_data.text_fields[ii].size = GSizeZero;
@@ -490,6 +518,7 @@ void drawing_initialize(Layer *layer) {
   drawing_data.fore_color = GColorBlack;
   drawing_data.mid_color = PBL_IF_COLOR_ELSE(GColorMintGreen, GColorWhite);
   drawing_data.ring_color = PBL_IF_COLOR_ELSE(GColorGreen, GColorWhite);
+  drawing_data.band_color = PBL_IF_COLOR_ELSE(GColorIslamicGreen, GColorWhite);
   drawing_data.back_color = PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack);
   // set animation update callback
   animation_register_update_callback(&prv_animation_update_callback);

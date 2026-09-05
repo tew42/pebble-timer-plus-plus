@@ -31,6 +31,11 @@ void graphics_fill_radial(GContext *ctx, GRect bounds, uint8_t fill_mode, int16_
 #ifdef PBL_BW
 //! Fill GRect with "grey" on Aplite
 void graphics_fill_rect_grey(GContext *ctx, GRect rect);
+
+//! OR a lighter "grey" onto a GRect on Aplite
+//! Its set pixel is one of the two graphics_fill_rect_grey sets, so ORing this over that pattern
+//! leaves it alone while a quarter of the pixels appear anywhere darker
+void graphics_fill_rect_grey_light(GContext *ctx, GRect rect);
 #endif
 
 //! Standard assertion definition

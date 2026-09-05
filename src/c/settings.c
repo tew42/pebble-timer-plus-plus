@@ -136,6 +136,9 @@ uint8_t settings_masked_second_digits(int64_t value_ms) {
   return (step_ms > MSEC_IN_SEC) ? 1 : 0;
 }
 
+// Get how long the display holds each frame at a certain timer value
+uint32_t settings_refresh_step_ms(int64_t value_ms) { return prv_cadence(value_ms).step_ms; }
+
 // Get how long until the display next needs refreshing
 uint32_t settings_next_refresh_ms(int64_t value_ms, bool counting_up) {
   const Cadence cadence = prv_cadence(value_ms);

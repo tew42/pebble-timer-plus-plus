@@ -71,6 +71,21 @@ void graphics_fill_rect_grey(GContext *ctx, GRect rect) {
   // draw grey rectangle with bitmap
   graphics_draw_bitmap_in_rect(ctx, grey_bmp, rect);
 }
+
+// OR a lighter "grey" onto a GRect on Aplite
+GBitmap *grey_light_bmp = NULL;
+void graphics_fill_rect_grey_light(GContext *ctx, GRect rect) {
+  // create if first call, setting one of the two pixels graphics_fill_rect_grey sets
+  if (!grey_light_bmp) {
+    grey_light_bmp = gbitmap_create_blank(GSize(2, 2), GBitmapFormat1Bit);
+    uint8_t *data = gbitmap_get_data(grey_light_bmp);
+    data[0] = 0b00000001;
+  }
+  // OR so the pattern only adds pixels, leaving anything already grey untouched
+  graphics_context_set_compositing_mode(ctx, GCompOpOr);
+  graphics_draw_bitmap_in_rect(ctx, grey_light_bmp, rect);
+  graphics_context_set_compositing_mode(ctx, GCompOpAssign);
+}
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
