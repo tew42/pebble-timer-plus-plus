@@ -35,6 +35,7 @@ static void (*ani_callback)(void) = NULL; //< Animation update callback
 
 // Functions
 static void prv_animation_timer_start(void);
+static void prv_list_remove_node(AnimationNode *node);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Private Functions
@@ -63,7 +64,7 @@ static void prv_animation_step_grect(AnimationNode *node) {
       interpolation_integer(from.size.h, to.size.h, percent, percent_max, node->interpolation);
   // continue animation
   if (percent >= percent_max) {
-    animation_stop(node->target);
+    prv_list_remove_node(node);
   }
 }
 
@@ -84,7 +85,7 @@ static void prv_animation_step_int32(AnimationNode *node) {
       interpolation_integer(from, to, percent, percent_max, node->interpolation);
   // continue animation
   if (percent >= percent_max) {
-    animation_stop(node->target);
+    prv_list_remove_node(node);
   }
 }
 
@@ -101,13 +102,38 @@ static void prv_list_add_node(AnimationNode *node) {
   cur_node->next = node;
 }
 
+// Unlink and destroy a single node
+// A finished animation retires itself through this rather than animation_stop(). drawing.c queues
+// its bounce and reset animations in pairs on one target, out then settle, so cancelling the whole
+// target would destroy the follow-up before it ever ran; and the node it destroys may be the one
+// prv_animation_timer_callback is about to step next.
+static void prv_list_remove_node(AnimationNode *node) {
+  AnimationNode *cur_node = head_node;
+  AnimationNode *pre_node = NULL;
+  while (cur_node) {
+    if (cur_node == node) {
+      if (pre_node) {
+        pre_node->next = cur_node->next;
+      } else {
+        head_node = cur_node->next;
+      }
+      free(cur_node->from);
+      free(cur_node->to);
+      free(cur_node);
+      return;
+    }
+    pre_node = cur_node;
+    cur_node = cur_node->next;
+  }
+}
+
 // Animation timer callback
 static void prv_animation_timer_callback(void *data) {
   ani_timer = NULL;
   // loop over list and step each animation
   AnimationNode *cur_node = head_node;
   while (cur_node) {
-    // save next pointer before stepping, since step may free cur_node via animation_stop()
+    // save next pointer before stepping, since a step which completes frees its own node
     AnimationNode *next_node = cur_node->next;
     if (epoch() > cur_node->start_time + (uint64_t)cur_node->delay) {
       (*cur_node->step_func)(cur_node);
@@ -177,7 +203,8 @@ void animation_int32_start(int32_t *ptr, int32_t to, uint32_t duration, uint32_t
 
 // Cancel every animation running on a pointer
 // Animations are not deduplicated when started, so a target can carry several at once; stopping
-// only the first would leave the others running and fighting over the same value
+// only the first would leave the others running and fighting over the same value. This is for
+// cancelling from outside; a finished animation retires itself with prv_list_remove_node().
 void animation_stop(void *ptr) {
   AnimationNode *cur_node = head_node;
   AnimationNode *pre_node = NULL;
@@ -207,6 +234,7 @@ void animation_stop_all(void) {
   if (ani_timer) {
     app_timer_cancel(ani_timer);
   }
+  ani_timer = NULL;
   // destroy all animations
   AnimationNode *cur_node = head_node;
   AnimationNode *tmp_node = NULL;
@@ -219,6 +247,7 @@ void animation_stop_all(void) {
     free(tmp_node->to);
     free(tmp_node);
   }
+  head_node = NULL;
 }
 
 // Register animation update callback
