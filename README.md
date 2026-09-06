@@ -11,22 +11,49 @@ from 0:00 will cause Timer+ to go into stopwatch mode.
 
 ## Settings
 
+Configured from the Pebble app.
+
+### Display updates
+
 Timer+ normally redraws the time every second. Refreshing less often while the timer is a long way
-from zero saves battery, at the cost of not seeing the exact seconds. Two settings, configured from
-the Pebble app, each switch on a coarser update rate above a threshold:
+from zero saves battery, at the cost of not seeing the exact seconds. Two settings each switch on a
+coarser update rate from a threshold upwards:
 
-| Setting                   | Effect                                                       | Display |
-| ------------------------- | ------------------------------------------------------------ | ------- |
-| `10-second updates above` | Redraw every 10 seconds while the timer is above this value   | `5:3_`  |
-| `Minute updates above`    | Redraw once a minute while the timer is above this value      | `5:__`  |
+| Setting                   | Effect                                                            | Display |
+| ------------------------- | ----------------------------------------------------------------- | ------- |
+| `10-second updates above` | Redraw every 10 seconds once the timer is this far from zero      | `5:3_`  |
+| `Minute updates above`    | Redraw once a minute once the timer is this far from zero         | `5:__`  |
 
-Seconds digits which are no longer being refreshed are shown as `_`, so every digit on screen is
-always accurate. Both settings default to *Never*, which is the original once-a-second behaviour.
+A threshold applies at its own value, and minute updates have to start further out than ten second
+ones, so each has a stretch of its own. Seconds digits which are no longer being refreshed are
+shown as `_`, so every digit on screen is always accurate. Both settings default to *Never*, which
+is the original once-a-second behaviour.
 
 The thresholds apply to the time remaining in timer mode and to the time elapsed in stopwatch mode,
-so in both cases the display gets more detailed as it approaches the interesting moment. Editing a
-timer, pausing it, and the twenty seconds during which an elapsed timer vibrates always show live
-seconds.
+so in both cases the display gets more detailed as it approaches the interesting moment. Setting a
+timer, a paused timer, and the twenty seconds during which an elapsed timer vibrates always show
+live seconds. On colour watches the progress ring shades the stretch the masked digits could mean,
+so the ring never claims to know more than the digits do.
+
+### Colours
+
+Counting down and counting up each have their own colour, and both start on the green the app has
+always used. Set them apart and the two modes become easy to tell at a glance, with a timer that
+runs past zero changing colour at the moment it turns into a stopwatch. Only the ring colour is
+chosen; the middle and the interval band are shaded from it. Colour watches only.
+
+## Controls
+
+| Button | Setting a timer | Counting down | Counting up |
+| ------ | --------------- | ------------- | ----------- |
+| Select | Move to the next field, then start | Pause, and go back to setting the time | Take a split: the time on screen holds while the stopwatch runs on. Press again to catch up |
+| Up / Down | Change the selected field | -- | -- |
+| Select, held | Reset to zero | Reset to zero | Reset to zero |
+| Back | Go back a field, or leave | Leave | Leave |
+
+The header says which of the two the watch is doing, and reads `Split` while a time is being held,
+so a held display is never mistaken for a stopped one. While a timer is going off, any button
+silences it and rewinds to the time it was set to.
 
 ## Building
 

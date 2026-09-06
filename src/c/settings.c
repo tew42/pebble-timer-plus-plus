@@ -2,7 +2,7 @@
 // @brief User settings for reduced-frequency display updates
 //
 // Per-second updating is the baseline. Two coarser update modes can each be switched on by a
-// threshold; a mode applies while the timer value is above its threshold.
+// threshold; a mode applies while the shown time is at or above its threshold.
 //
 // @bugs No known bugs
 
