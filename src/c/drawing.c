@@ -7,6 +7,7 @@
 // @date August 29, 2015
 // @bugs No known bugs
 
+#include "drawing.h"
 #include "animation.h"
 #include "main.h"
 #include "settings.h"
@@ -293,7 +294,10 @@ static void prv_render_progress_ring(GContext *ctx, GRect bounds) {
   // calculate ring bounds size
   int32_t gr_angle = atan2_lookup(bounds.size.h, bounds.size.w);
   int32_t radius = (int32_t)bounds.size.h * TRIG_MAX_RATIO / sin_lookup(gr_angle) / 2 + PADDING;
+#ifdef PBL_BW
+  // captured before bounds is reshaped into the ring's square, for the dither pass below
   const GRect screen = bounds;
+#endif
   bounds.origin.x += bounds.size.w / 2 - radius;
   bounds.origin.y += bounds.size.h / 2 - radius;
   bounds.size.w = bounds.size.h = radius * 2;
@@ -473,6 +477,14 @@ void drawing_render(Layer *layer, GContext *ctx) {
   prv_render_footer_text(ctx, bounds);
 }
 
+// Update the drawing states and recalculate everythings positions
+void drawing_update(void) {
+  // update drawing state
+  prv_update_draw_state(drawing_data.layer);
+  // update progress ring angle
+  prv_progress_ring_update();
+}
+
 // Update the drawing state, animating the progress ring to its new position
 void drawing_update_animated(void) {
   const int32_t from_angle = drawing_data.progress_angle;
@@ -482,14 +494,6 @@ void drawing_update_animated(void) {
   drawing_data.progress_angle = from_angle;
   animation_int32_start(&drawing_data.progress_angle, to_angle, PROGRESS_ANI_DURATION, 0,
                         CurveSinEaseOut);
-}
-
-// Update the drawing states and recalculate everythings positions
-void drawing_update(void) {
-  // update drawing state
-  prv_update_draw_state(drawing_data.layer);
-  // update progress ring angle
-  prv_progress_ring_update();
 }
 
 // Initialize the singleton drawing data
