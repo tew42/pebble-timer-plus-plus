@@ -18,13 +18,15 @@ var clay = new Clay(clayConfig, function() {
         if (!tenSecond || !minute) {
             return;
         }
-        var tenSecondValue = tenSecond.get();
+        // a select's get() and set() deal in strings, unlike a colour picker's, so parse before
+        // comparing: === against a number is false for every value a select can return
+        var tenSecondValue = parseInt(tenSecond.get(), 10);
         if (tenSecondValue === NEVER) {
             return;  // there is no coarse threshold to stay above
         }
         var minimumMinutes = Math.floor(tenSecondValue / 60) + 1;
-        if (minute.get() < minimumMinutes) {
-            minute.set(minimumMinutes);
+        if (parseInt(minute.get(), 10) < minimumMinutes) {
+            minute.set(String(minimumMinutes));
         }
     }
 
