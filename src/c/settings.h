@@ -2,8 +2,12 @@
 //! @brief User settings for reduced-frequency display updates
 //!
 //! Per-second updating is the baseline. Two coarser update modes can each be switched on by a
-//! threshold; a mode applies while the timer value is above its threshold. The seconds digits
-//! which are no longer being refreshed are masked with TEXT_RENDER_PLACEHOLDER_CHAR.
+//! threshold; a mode applies while the shown time is at or above its threshold. The seconds
+//! digits which are no longer being refreshed are masked with TEXT_RENDER_PLACEHOLDER_CHAR.
+//!
+//! Every function here works on the value as the digits show it, timer_get_display_ms(), not the
+//! exact one. That is what puts a change of cadence on a boundary between two shown times rather
+//! than in the middle of one.
 //!
 //! Settings arrive from a Clay configuration page and are cached in persistent storage.
 //!
@@ -36,17 +40,17 @@ void settings_initialize(void (*on_change)(void));
 void settings_terminate(void);
 
 //! Get the number of trailing seconds digits which should be replaced by the placeholder glyph
-//! @param value_ms The current timer value in milliseconds
+//! @param value_ms The shown time in milliseconds, from timer_get_display_ms()
 //! @return 0 when the seconds are live, 1 when updating every ten seconds, 2 every minute
 uint8_t settings_masked_second_digits(int64_t value_ms);
 
-//! Get how long the display holds each frame at a certain timer value
-//! @param value_ms The current timer value in milliseconds
+//! Get how long the display holds each frame at a certain shown time
+//! @param value_ms The shown time in milliseconds, from timer_get_display_ms()
 //! @return The refresh interval in milliseconds, MSEC_IN_SEC while the seconds are live
 uint32_t settings_refresh_step_ms(int64_t value_ms);
 
 //! Get how long until the display next needs refreshing
-//! @param value_ms The current timer value in milliseconds
+//! @param value_ms The exact timer value in milliseconds; this one rounds it itself
 //! @param counting_up True if the value is increasing, as it is in stopwatch mode
 //! @return The delay in milliseconds until the displayed time will change
 uint32_t settings_next_refresh_ms(int64_t value_ms, bool counting_up);

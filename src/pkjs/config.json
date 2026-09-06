@@ -18,7 +18,7 @@
         "type": "select",
         "messageKey": "tenSecondUpdatesAbove",
         "label": "10-second updates above",
-        "description": "Update every 10 seconds while the timer is further than this from zero, showing 5:3_.",
+        "description": "Update every 10 seconds while the timer is this far from zero or further, showing 5:3_.",
         "serializeValueAs": "integer",
         "defaultValue": "255",
         "options": [
@@ -34,7 +34,7 @@
         "type": "select",
         "messageKey": "minuteUpdatesAbove",
         "label": "Minute updates above",
-        "description": "Update once a minute while the timer is further than this from zero, showing 5:__.",
+        "description": "Update once a minute while the timer is this far from zero or further, showing 5:__. Must be further out than the 10-second setting.",
         "serializeValueAs": "integer",
         "defaultValue": "255",
         "options": [
