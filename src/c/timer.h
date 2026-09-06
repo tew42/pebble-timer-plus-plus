@@ -10,6 +10,12 @@
 
 #include <pebble.h>
 
+//! Get the timer value as the digits show it, rounded to a whole second
+//! Counting down rounds up, so a timer set to 1:50 reads 1:50 for a full second; counting up
+//! rounds down, so a stopwatch reads the seconds it has actually completed
+//! @return The displayed value in milliseconds, always a whole number of seconds
+int64_t timer_get_display_ms(void);
+
 //! Get timer value
 //! @param hr A pointer to where to store the hour value of the timer
 //! @param min A pointer to where to store the minute value of the timer

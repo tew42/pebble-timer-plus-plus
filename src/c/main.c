@@ -18,11 +18,6 @@
 // Main constants
 #define BUTTON_HOLD_REPEAT_MS 100
 #define SYSTEM_ENTRANCE_ANIMATION_MS 400
-// Wake just past each boundary rather than exactly on it, so the time we render belongs to the
-// interval we are entering and not the one we are leaving. This also guarantees forward progress
-// when the timer value lands exactly on a boundary and the remainder is zero.
-#define REFRESH_OVERSHOOT_MS 5
-
 // Main data structure
 static struct {
   Window *window;           //< The base window for the application
@@ -45,7 +40,7 @@ static bool main_timer_rewind(void) {
     vibes_cancel();
     main_data.control_mode = ControlModeEditSec;
     timer_rewind();
-    drawing_update();
+    drawing_update_animated();
     return true;
   }
   return false;
@@ -167,7 +162,7 @@ static void prv_select_long_click_handler(ClickRecognizerRef recognizer, void *c
   main_data.control_mode = ControlModeEditMin;
   timer_reset();
   // animate and refresh
-  drawing_update();
+  drawing_update_animated();
   layer_mark_dirty(main_data.layer);
 }
 
@@ -216,23 +211,15 @@ static void prv_click_config_provider(void *ctx) {
 static void prv_app_timer_callback(void *data) {
   // check if timer is complete
   timer_check_elapsed();
-  // schedule next call
+  // schedule next call, landing on the exact instant the shown time changes
   main_data.app_timer = NULL;
-  bool superseded = false;
   if (main_data.control_mode == ControlModeCounting) {
     uint32_t duration = settings_next_refresh_ms(timer_get_value_ms(), timer_is_chrono());
-    main_data.app_timer =
-        app_timer_register(duration + REFRESH_OVERSHOOT_MS, prv_app_timer_callback, NULL);
-    // A timer started on a whole minute sits exactly on a refresh boundary, so the time we would
-    // draw now is replaced REFRESH_OVERSHOOT_MS later. Drawing it flashes the pre-boundary value,
-    // which reads as a glitch once the seconds are masked ("5:0_" then "4:5_").
-    superseded = (duration == 0);
+    main_data.app_timer = app_timer_register(duration, prv_app_timer_callback, NULL);
   }
   // refresh
-  if (!superseded) {
-    drawing_update();
-    layer_mark_dirty(main_data.layer);
-  }
+  drawing_update();
+  layer_mark_dirty(main_data.layer);
 }
 
 // New settings received from the phone

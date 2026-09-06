@@ -30,7 +30,6 @@
 #else
 #define CIRCLE_RADIUS scl_y(375)
 #endif
-#define ANGLE_CHANGE_ANI_THRESHOLD 348
 #define PROGRESS_ANI_DURATION 250
 #define MAIN_TEXT_CIRCLE_RADIUS (CIRCLE_RADIUS - scl_y(42))
 #define MAIN_TEXT_BOUNDS                                                                           \
@@ -172,7 +171,7 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
   // in timer mode, get time
   time_t end_time = epoch() / MSEC_IN_SEC;
   if (main_get_control_mode() != ControlModeCounting && !timer_is_chrono()) {
-    end_time += timer_get_value_ms() / MSEC_IN_SEC;
+    end_time += timer_get_display_ms() / MSEC_IN_SEC;
   }
   // format to readable time
   struct tm end_tm = *localtime(&end_time);
@@ -191,12 +190,22 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
 // Main Text
 //
 
+// Decompose the value the digits show into its fields
+// timer_get_time_parts() decomposes the exact value instead, which is what the editing controls
+// increment, so everything the user reads goes through here
+static void prv_display_parts(uint16_t *hr, uint16_t *min, uint16_t *sec) {
+  const int64_t value = timer_get_display_ms();
+  (*hr) = value / MSEC_IN_HR;
+  (*min) = value % MSEC_IN_HR / MSEC_IN_MIN;
+  (*sec) = value % MSEC_IN_MIN / MSEC_IN_SEC;
+}
+
 // Format the timer value into the individual text fields (hr : min : sec)
 // `buff` must be zeroed by the caller; fields which are not drawn are left empty
 static void prv_format_text_fields(char buff[TEXT_FIELD_COUNT][6]) {
   const bool edit_mode = main_get_control_mode() != ControlModeCounting;
   uint16_t hr, min, sec;
-  timer_get_time_parts(&hr, &min, &sec);
+  prv_display_parts(&hr, &min, &sec);
   if (hr) {
     snprintf(buff[0], sizeof(buff[0]), edit_mode ? "%02d" : "%d", hr);
   }
@@ -207,7 +216,7 @@ static void prv_format_text_fields(char buff[TEXT_FIELD_COUNT][6]) {
   // mask the trailing seconds digits which are no longer being refreshed, never while editing
   // since the seconds being set must always be readable
   if (!edit_mode) {
-    const uint8_t masked = settings_masked_second_digits(timer_get_value_ms());
+    const uint8_t masked = settings_masked_second_digits(timer_get_display_ms());
     for (uint8_t ii = 0; ii < masked; ii++) {
       buff[4][1 - ii] = TEXT_RENDER_PLACEHOLDER_CHAR;
     }
@@ -312,35 +321,32 @@ static void prv_render_progress_ring(GContext *ctx, GRect bounds) {
 }
 
 // Update the progress ring position based on the current and total values
-// The ring advances with the digits: the solid arc ends at the last refresh boundary and the band
-// spans the interval the masked digits could mean, so the two never disagree.
+// The ring works on the value as the digits show it, so the arc ends at the last refresh boundary
+// and the band spans the interval the masked digits could mean; the two can never disagree.
 static void prv_progress_ring_update(void) {
-  const int64_t value_ms = timer_get_value_ms();
-  const uint32_t step_ms = settings_refresh_step_ms(value_ms);
+  const int64_t display_ms = timer_get_display_ms();
+  const bool chrono = timer_is_chrono();
   // the span the ring represents, and where the current refresh interval sits inside it
   // (a timer of zero length is always chrono, which keeps the timer branch off a zero span)
-  const bool chrono = timer_is_chrono();
   const int64_t span_ms = chrono ? MSEC_IN_MIN : timer_get_length_ms();
-  const int64_t offset_ms = chrono ? value_ms % MSEC_IN_MIN : value_ms;
+  int64_t offset_ms = chrono ? display_ms % MSEC_IN_MIN : display_ms;
+  if (offset_ms > span_ms) {
+    offset_ms = span_ms; // rounding up can pass the total when the timer was paused mid second
+  }
+  // while the timer is being set or paused the digits are exact, so the ring must be exact too
+  const bool counting = main_get_control_mode() == ControlModeCounting;
+  const uint32_t step_ms = counting ? settings_refresh_step_ms(display_ms) : MSEC_IN_SEC;
   // measure the interval from the unwrapped offset, so one ending on the minute fills the ring
   // rather than wrapping back to nothing
   const int64_t low_ms = offset_ms / step_ms * step_ms;
   const int64_t high_ms = (low_ms + step_ms < span_ms) ? low_ms + step_ms : span_ms;
-  const int32_t new_angle = TRIG_MAX_ANGLE * low_ms / span_ms;
   // the interval is only worth showing while the seconds it covers are masked
-  drawing_data.show_band = settings_masked_second_digits(value_ms) > 0;
+  drawing_data.show_band = counting && settings_masked_second_digits(display_ms) > 0;
   drawing_data.band_angle = TRIG_MAX_ANGLE * high_ms / span_ms;
-  // ANGLE_CHANGE_ANI_THRESHOLD assumes a one second refresh. A reduced-frequency refresh moves the
-  // ring far enough on every tick to always exceed it, which would sweep the ring for
-  // PROGRESS_ANI_DURATION and re-render the whole screen every animation tick until it settled.
+  // a scheduled refresh never animates, so the ring moves only when the digits do; jumps the user
+  // caused go through drawing_update_animated() instead
   animation_stop(&drawing_data.progress_angle);
-  if (!drawing_data.show_band &&
-      abs(new_angle - drawing_data.progress_angle) >= ANGLE_CHANGE_ANI_THRESHOLD) {
-    animation_int32_start(&drawing_data.progress_angle, new_angle, PROGRESS_ANI_DURATION, 0,
-                          CurveSinEaseOut);
-  } else {
-    drawing_data.progress_angle = new_angle;
-  }
+  drawing_data.progress_angle = TRIG_MAX_ANGLE * low_ms / span_ms;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -363,7 +369,7 @@ static bool prv_text_state_compare(DrawState text_state_1, DrawState text_state_
 static DrawState prv_draw_state_create(void) {
   // get states
   uint16_t hr, min, sec;
-  timer_get_time_parts(&hr, &min, &sec);
+  prv_display_parts(&hr, &min, &sec);
   return (DrawState){
       .control_mode = main_get_control_mode(),
       .hr_digits = (uint8_t)(hr > 0) + (uint8_t)(hr > 9) + (uint8_t)(hr > 99),
@@ -465,6 +471,17 @@ void drawing_render(Layer *layer, GContext *ctx) {
   graphics_context_set_text_color(ctx, drawing_data.fore_color);
   prv_render_header_text(ctx, bounds);
   prv_render_footer_text(ctx, bounds);
+}
+
+// Update the drawing state, animating the progress ring to its new position
+void drawing_update_animated(void) {
+  const int32_t from_angle = drawing_data.progress_angle;
+  drawing_update();
+  const int32_t to_angle = drawing_data.progress_angle;
+  // drawing_update() has already snapped the ring, so wind it back and travel there instead
+  drawing_data.progress_angle = from_angle;
+  animation_int32_start(&drawing_data.progress_angle, to_angle, PROGRESS_ANI_DURATION, 0,
+                        CurveSinEaseOut);
 }
 
 // Update the drawing states and recalculate everythings positions

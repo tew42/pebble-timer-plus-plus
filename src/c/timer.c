@@ -49,6 +49,17 @@ Timer timer_data;
 // API Functions
 //
 
+// Get the timer value as the digits show it
+// The two directions round opposite ways so that each displayed second is held for a whole
+// second either side of the moment the timer elapses and starts counting up instead
+int64_t timer_get_display_ms(void) {
+  const int64_t value = timer_get_value_ms();
+  if (timer_is_chrono()) {
+    return value / MSEC_IN_SEC * MSEC_IN_SEC;
+  }
+  return (value + MSEC_IN_SEC - 1) / MSEC_IN_SEC * MSEC_IN_SEC;
+}
+
 // Get timer value divided into time parts
 void timer_get_time_parts(uint16_t *hr, uint16_t *min, uint16_t *sec) {
   int64_t value = timer_get_value_ms();

@@ -15,10 +15,11 @@
 #define PERSIST_SETTINGS_VERSION_KEY 91742
 #define PERSIST_SETTINGS_KEY 91743
 
-// How often the display refreshes at some timer value, and where that changes
+// How often the display refreshes at some timer value, and the range of values that holds over
 typedef struct {
-  uint32_t step_ms;    //< Milliseconds between display refreshes
-  int64_t boundary_ms; //< Timer value at which the cadence next gets finer, zero if already finest
+  uint32_t step_ms; //< Milliseconds between display refreshes
+  int64_t min_ms;   //< Below this value the cadence is finer, zero if it is already the finest
+  int64_t max_ms;   //< Above this value it is coarser, INT64_MAX if it is already the coarsest
 } Cadence;
 
 // Main data structure, cached verbatim in persistent storage
@@ -48,14 +49,17 @@ static int64_t prv_threshold_ms(uint8_t threshold, int64_t unit_ms) {
 static Cadence prv_cadence(int64_t value_ms) {
   const int64_t minute_at_ms = prv_threshold_ms(settings_data.minute_above_min, MSEC_IN_MIN);
   if (value_ms > minute_at_ms) {
-    return (Cadence){.step_ms = MSEC_IN_MIN, .boundary_ms = minute_at_ms};
+    return (Cadence){.step_ms = MSEC_IN_MIN, .min_ms = minute_at_ms, .max_ms = INT64_MAX};
   }
   const int64_t ten_second_at_ms =
       prv_threshold_ms(settings_data.ten_second_above_sec, MSEC_IN_SEC);
   if (value_ms > ten_second_at_ms) {
-    return (Cadence){.step_ms = 10 * MSEC_IN_SEC, .boundary_ms = ten_second_at_ms};
+    return (Cadence){
+        .step_ms = 10 * MSEC_IN_SEC, .min_ms = ten_second_at_ms, .max_ms = minute_at_ms};
   }
-  return (Cadence){.step_ms = MSEC_IN_SEC, .boundary_ms = 0};
+  // the coarser mode wins where the two thresholds overlap, exactly as the tests above order them
+  const int64_t finest_max_ms = (ten_second_at_ms < minute_at_ms) ? ten_second_at_ms : minute_at_ms;
+  return (Cadence){.step_ms = MSEC_IN_SEC, .min_ms = 0, .max_ms = finest_max_ms};
 }
 
 // Accept a threshold if it is in range or SETTINGS_NEVER, otherwise keep the existing one
@@ -140,16 +144,31 @@ uint8_t settings_masked_second_digits(int64_t value_ms) {
 uint32_t settings_refresh_step_ms(int64_t value_ms) { return prv_cadence(value_ms).step_ms; }
 
 // Get how long until the display next needs refreshing
+// Everything works on the value as the digits show it, so the wake lands on the exact instant the
+// shown time changes rather than a moment either side of it
 uint32_t settings_next_refresh_ms(int64_t value_ms, bool counting_up) {
-  const Cadence cadence = prv_cadence(value_ms);
-  const uint32_t remainder = value_ms % cadence.step_ms;
+  const int64_t display_ms = counting_up ? value_ms / MSEC_IN_SEC * MSEC_IN_SEC
+                                         : (value_ms + MSEC_IN_SEC - 1) / MSEC_IN_SEC * MSEC_IN_SEC;
+  const Cadence cadence = prv_cadence(display_ms);
+  const int64_t quantum_ms = display_ms / cadence.step_ms * cadence.step_ms;
+  int64_t to_change_ms, to_cadence_ms;
   if (counting_up) {
-    return cadence.step_ms - remainder;
+    // the shown time changes when it reaches the next quantum
+    to_change_ms = quantum_ms + cadence.step_ms - value_ms;
+    // a second above the cadence range one more digit is masked, which shows too
+    to_cadence_ms =
+        (cadence.max_ms == INT64_MAX) ? INT64_MAX : cadence.max_ms + MSEC_IN_SEC - value_ms;
+  } else {
+    // counting down the value is rounded up, so the shown time changes a second below the quantum
+    to_change_ms = value_ms - (quantum_ms - MSEC_IN_SEC);
+    // at the bottom of the cadence range one fewer digit is masked, which shows too
+    to_cadence_ms = value_ms - cadence.min_ms;
   }
-  // counting down, never sleep past the value at which the cadence gets finer
-  // boundary_ms is zero at the finest cadence, which leaves the remainder untouched
-  const int64_t to_boundary_ms = value_ms - cadence.boundary_ms;
-  return (to_boundary_ms < remainder) ? (uint32_t)to_boundary_ms : remainder;
+  // never sleep past the value at which the cadence changes
+  if (to_cadence_ms > 0 && to_cadence_ms < to_change_ms) {
+    return (uint32_t)to_cadence_ms;
+  }
+  return (uint32_t)to_change_ms;
 }
 
 // Load the settings and open AppMessage to receive updates from the phone

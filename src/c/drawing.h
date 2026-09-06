@@ -23,7 +23,13 @@ void drawing_start_reset_animation(void);
 void drawing_render(Layer *layer, GContext *ctx);
 
 //! Update the drawing states and recalculate everythings positions
+//! The progress ring snaps to its new position, so it moves only when the digits do
 void drawing_update(void);
+
+//! Update the drawing state, animating the progress ring to its new position
+//! For jumps the user caused, where snapping would be abrupt; scheduled refreshes use
+//! drawing_update() and never animate
+void drawing_update_animated(void);
 
 //! Initialize the singleton drawing data
 //! @param layer The layer which the drawing code can force to refresh, for animations
