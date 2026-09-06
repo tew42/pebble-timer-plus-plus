@@ -290,10 +290,8 @@ static void prv_animation_update_callback(void) {
 //
 
 #ifndef PBL_BW
-// Shift every channel of a colour by the same amount, clamped, for a lighter or darker shade
-// GColor8 gives each channel two bits, so +2 and -1 reproduce the palette this app has always
-// had: green yields mint green for the middle and islamic green for the band, exactly.
-static GColor prv_shade(GColor color, int8_t step) {
+// Shift every channel of a colour by the same amount, clamped
+static GColor prv_shift(GColor color, int8_t step) {
   const int8_t channels[3] = {(int8_t)color.r + step, (int8_t)color.g + step,
                               (int8_t)color.b + step};
   uint8_t clamped[3];
@@ -305,6 +303,20 @@ static GColor prv_shade(GColor color, int8_t step) {
   out.g = clamped[1];
   out.b = clamped[2];
   return out;
+}
+
+// Shade a colour lighter or darker for the middle and the interval band
+// GColor8 gives each channel two bits, so +2 and -1 reproduce the palette this app has always
+// had: green yields mint green for the middle and islamic green for the band, exactly. Clamping
+// can leave a shade equal to the accent, though, since white cannot go lighter and black cannot
+// go darker, and a middle indistinguishable from the ring would hide the editing focus box drawn
+// on it. Where that happens, take a single step the other way instead.
+static GColor prv_shade(GColor color, int8_t step) {
+  const GColor shaded = prv_shift(color, step);
+  if (shaded.argb != color.argb) {
+    return shaded;
+  }
+  return prv_shift(color, (step > 0) ? -1 : 1);
 }
 #endif
 
