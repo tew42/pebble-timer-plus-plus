@@ -413,15 +413,18 @@ static void prv_terminate(void) {
   // unsubscribe from timer and settings services
   tick_timer_service_unsubscribe();
   settings_terminate();
-  // schedule wakeup
+  // schedule wakeup on the second the digits count down to, rather than truncating to just
+  // before it (the system refuses wakeups less than about half a minute out, which is why a
+  // nearly elapsed timer does not get one)
   if (!timer_is_chrono() && !timer_is_paused()) {
-    time_t wakeup_time = (epoch() + timer_get_value_ms()) / MSEC_IN_SEC;
+    time_t wakeup_time = (epoch() + timer_get_display_ms()) / MSEC_IN_SEC;
     wakeup_schedule(wakeup_time, 0, true);
   }
   // destroy
   timer_persist_store();
   rotary_kit_clear_window_config(main_data.window);
   drawing_terminate();
+  utility_terminate();
   layer_destroy(main_data.layer);
   window_destroy(main_data.window);
 }

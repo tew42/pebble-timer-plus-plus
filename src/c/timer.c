@@ -43,7 +43,7 @@ typedef struct {
   bool elapsed;      //< Used to start the vibration if first time as elapsed
   bool can_vibrate;  //< Flag used to tell when the timer has completed
 } Timer;
-Timer timer_data;
+static Timer timer_data;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // API Functions
@@ -191,18 +191,22 @@ void timer_persist_store(void) {
 
 // Read the timer from persistent storage
 void timer_persist_read(void) {
-  // read legacy version
+  // note the legacy version, but do not act on it until the read below, which would otherwise
+  // reset straight over the five second timer it starts
+  bool legacy_wakeup = false;
   if (persist_exists(PERSIST_TIMER_KEY_V2)) {
     persist_delete(PERSIST_TIMER_KEY_V2);
-    if (launch_reason() == APP_LAUNCH_WAKEUP) {
-      timer_increment(5000);
-      timer_toggle_play_pause();
-    }
+    legacy_wakeup = (launch_reason() == APP_LAUNCH_WAKEUP);
   }
   // read current version
   if (persist_exists(PERSIST_TIMER_KEY)) {
     persist_read_data(PERSIST_TIMER_KEY, &timer_data, sizeof(timer_data));
   } else {
     timer_reset();
+  }
+  // a wakeup scheduled by the legacy version starts a short timer, since it carried no length
+  if (legacy_wakeup) {
+    timer_increment(5000);
+    timer_toggle_play_pause();
   }
 }

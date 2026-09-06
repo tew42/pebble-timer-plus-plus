@@ -73,7 +73,7 @@ static int32_t prv_curve_sin_ease_in_out(int32_t from, int32_t to, uint32_t perc
 
 // Array of interpolation function pointers
 typedef int32_t (*InterpolationFunction)(int32_t, int32_t, uint32_t, uint32_t);
-InterpolationFunction interpolation_functions[] = {
+static InterpolationFunction interpolation_functions[] = {
     prv_curve_linear,           prv_curve_quad_ease_in, prv_curve_quad_ease_out,
     prv_curve_quad_ease_in_out, prv_curve_sin_ease_in,  prv_curve_sin_ease_out,
     prv_curve_sin_ease_in_out,

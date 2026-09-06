@@ -177,10 +177,8 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
   // format to readable time
   struct tm end_tm = *localtime(&end_time);
   strftime(buff, sizeof(buff), clock_is_24h_style() ? "%H:%M" : "%I:%M", &end_tm);
-  if (buff[0] == '0') { // Strip leading zero
-    for (uint8_t ii = 1; ii < ARRAY_LENGTH(buff); ii++) {
-      buff[ii - 1] = buff[ii];
-    }
+  if (buff[0] == '0') { // Strip leading zero, terminator included and nothing past it
+    memmove(buff, buff + 1, strlen(buff));
   }
   // draw text
   graphics_draw_text(ctx, buff, scl_get_font(ScalableFontTime), bounds, GTextOverflowModeFill,
@@ -328,6 +326,9 @@ static void prv_render_progress_ring(GContext *ctx, GRect bounds) {
 // The ring works on the value as the digits show it, so the arc ends at the last refresh boundary
 // and the band spans the interval the masked digits could mean; the two can never disagree.
 static void prv_progress_ring_update(void) {
+  // two readings of the clock, so at the exact millisecond a timer elapses one frame can pair a
+  // countdown value with a stopwatch verdict; the next refresh is at most a second away and
+  // corrects it
   const int64_t display_ms = timer_get_display_ms();
   const bool chrono = timer_is_chrono();
   // the span the ring represents, and where the current refresh interval sits inside it

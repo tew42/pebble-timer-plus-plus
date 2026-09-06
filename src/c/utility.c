@@ -59,7 +59,7 @@ void graphics_fill_radial(GContext *ctx, GRect bounds, uint8_t fill_mode, int16_
 
 #ifdef PBL_BW
 // Fill GRect with "grey" on Aplite
-GBitmap *grey_bmp = NULL;
+static GBitmap *grey_bmp = NULL;
 void graphics_fill_rect_grey(GContext *ctx, GRect rect) {
   // create if first call
   if (!grey_bmp) {
@@ -73,7 +73,7 @@ void graphics_fill_rect_grey(GContext *ctx, GRect rect) {
 }
 
 // OR a lighter "grey" onto a GRect on Aplite
-GBitmap *grey_light_bmp = NULL;
+static GBitmap *grey_light_bmp = NULL;
 void graphics_fill_rect_grey_light(GContext *ctx, GRect rect) {
   // create if first call, setting one of the two pixels graphics_fill_rect_grey sets
   if (!grey_light_bmp) {
@@ -102,6 +102,20 @@ void *malloc_check(uint16_t size, const char *file, int line) {
     exit();
   }
   return ptr;
+}
+
+// Release anything allocated lazily above
+void utility_terminate(void) {
+#ifdef PBL_BW
+  if (grey_bmp) {
+    gbitmap_destroy(grey_bmp);
+    grey_bmp = NULL;
+  }
+  if (grey_light_bmp) {
+    gbitmap_destroy(grey_light_bmp);
+    grey_light_bmp = NULL;
+  }
+#endif
 }
 
 // Get current epoch in milliseconds
