@@ -59,7 +59,7 @@
       },
       {
         "type": "text",
-        "defaultValue": "Counting down and counting up get their own colour, so the two are easy to tell apart -- and a timer running past zero changes colour as it does. The middle and the interval band are shaded from the colour you pick."
+        "defaultValue": "Counting down and counting up each have their own colour. Both start green, as they always have been; set them apart and the two modes become easy to tell at a glance, with a timer that runs past zero changing colour as it turns into a stopwatch. The middle and the interval band are shaded from the colour you pick."
       },
       {
         "type": "color",
@@ -72,7 +72,7 @@
         "type": "color",
         "messageKey": "chronoColor",
         "label": "Counting up",
-        "defaultValue": "00aaff",
+        "defaultValue": "00ff00",
         "sunlight": false
       }
     ]

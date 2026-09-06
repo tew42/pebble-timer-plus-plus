@@ -32,13 +32,14 @@
 #define SETTINGS_TEN_SECOND_MAX_SEC 120
 #define SETTINGS_MINUTE_MAX_MIN 10
 
-//! Accent colours, as 0xRRGGBB. Counting down and counting up get their own so the two modes can
-//! be told apart at a glance, which also marks the moment a timer runs into overtime.
-//! The countdown default is the green this app has always used; drawing.c derives the middle and
-//! band shades from it and reproduces the original palette exactly.
+//! Accent colours, as 0xRRGGBB, one for each counting direction. Both default to the green this
+//! app has always used, so out of the box nothing looks any different: drawing.c derives the
+//! middle and band shades from the colour and reproduces the original palette exactly. Setting
+//! them apart is what makes the two modes distinguishable, and makes a timer running past zero
+//! change colour as it turns into a stopwatch.
 //! These must match the defaults in src/pkjs/config.json.
 #define SETTINGS_TIMER_RGB_DEFAULT 0x00FF00  //< GColorGreen
-#define SETTINGS_CHRONO_RGB_DEFAULT 0x00AAFF //< GColorVividCerulean
+#define SETTINGS_CHRONO_RGB_DEFAULT 0x00FF00 //< GColorGreen, the same until it is changed
 
 //! Load the settings and open AppMessage to receive updates from the phone
 //! @param on_change Called whenever new settings arrive, to refresh anything derived from them
