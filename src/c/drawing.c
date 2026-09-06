@@ -286,6 +286,39 @@ static void prv_animation_update_callback(void) {
 // Progress Ring
 //
 
+#ifndef PBL_BW
+// Shift every channel of a colour by the same amount, clamped, for a lighter or darker shade
+// GColor8 gives each channel two bits, so +2 and -1 reproduce the palette this app has always
+// had: green yields mint green for the middle and islamic green for the band, exactly.
+static GColor prv_shade(GColor color, int8_t step) {
+  const int8_t channels[3] = {(int8_t)color.r + step, (int8_t)color.g + step,
+                              (int8_t)color.b + step};
+  uint8_t clamped[3];
+  for (uint8_t ii = 0; ii < 3; ii++) {
+    clamped[ii] = (channels[ii] < 0) ? 0 : ((channels[ii] > 3) ? 3 : (uint8_t)channels[ii]);
+  }
+  GColor out = color;
+  out.r = clamped[0];
+  out.g = clamped[1];
+  out.b = clamped[2];
+  return out;
+}
+#endif
+
+// Adopt the accent colour for the direction the timer is counting
+// On one bit hardware there is nothing to choose, so the ring stays white and the dither in
+// prv_render_progress_ring carries the distinction instead
+static void prv_palette_update(bool chrono) {
+#ifdef PBL_BW
+  (void)chrono;
+#else
+  const GColor accent = GColorFromHEX(settings_accent_rgb(chrono));
+  drawing_data.ring_color = accent;
+  drawing_data.mid_color = prv_shade(accent, 2);
+  drawing_data.band_color = prv_shade(accent, -1);
+#endif
+}
+
 // Draw progress ring
 static void prv_render_progress_ring(GContext *ctx, GRect bounds) {
   const int16_t PADDING = 1;
@@ -331,6 +364,7 @@ static void prv_progress_ring_update(void) {
   // corrects it
   const int64_t display_ms = timer_get_display_ms();
   const bool chrono = timer_is_chrono();
+  prv_palette_update(chrono);
   // the span the ring represents, and where the current refresh interval sits inside it
   // (a timer of zero length is always chrono, which keeps the timer branch off a zero span)
   const int64_t span_ms = chrono ? MSEC_IN_MIN : timer_get_length_ms();
@@ -544,12 +578,14 @@ void drawing_initialize(Layer *layer) {
     .g = font_bebas_35_bold, // Gabbro (Pebble Round 2)
   });
   // clang-format on
-  // set the colors
+  // set the colors; the accent three are chosen per counting direction, and the first frame is
+  // rendered before any refresh runs, so seed them here too
   drawing_data.fore_color = GColorBlack;
-  drawing_data.mid_color = PBL_IF_COLOR_ELSE(GColorMintGreen, GColorWhite);
-  drawing_data.ring_color = PBL_IF_COLOR_ELSE(GColorGreen, GColorWhite);
-  drawing_data.band_color = PBL_IF_COLOR_ELSE(GColorIslamicGreen, GColorWhite);
   drawing_data.back_color = PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack);
+  drawing_data.mid_color = GColorWhite;
+  drawing_data.ring_color = GColorWhite;
+  drawing_data.band_color = GColorWhite;
+  prv_palette_update(timer_is_chrono());
   // set animation update callback
   animation_register_update_callback(&prv_animation_update_callback);
 }

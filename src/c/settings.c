@@ -11,7 +11,7 @@
 #include <pebble.h>
 
 // Persistent storage
-#define PERSIST_SETTINGS_VERSION 1
+#define PERSIST_SETTINGS_VERSION 2
 #define PERSIST_SETTINGS_VERSION_KEY 91742
 #define PERSIST_SETTINGS_KEY 91743
 
@@ -27,11 +27,16 @@ typedef struct {
 typedef struct {
   uint8_t ten_second_above_sec; //< Update every ten seconds above this many seconds, or NEVER
   uint8_t minute_above_min;     //< Update every minute above this many minutes, or NEVER
+  uint32_t timer_rgb;           //< Accent colour while counting down
+  uint32_t chrono_rgb;          //< Accent colour while counting up
 } Settings;
-// both modes default to off, so upgrading users see exactly the behaviour they had before
+// both update modes default to off, so upgrading users see exactly the behaviour they had
+// before, and counting down keeps the colour the app has always had
 static Settings settings_data = {
     .ten_second_above_sec = SETTINGS_NEVER,
     .minute_above_min = SETTINGS_NEVER,
+    .timer_rgb = SETTINGS_TIMER_RGB_DEFAULT,
+    .chrono_rgb = SETTINGS_CHRONO_RGB_DEFAULT,
 };
 
 // Called when new settings arrive from the phone
@@ -90,6 +95,9 @@ static void prv_persist_read(void) {
   settings_data.minute_above_min =
       prv_validate(stored.minute_above_min, SETTINGS_MINUTE_MIN_MIN, SETTINGS_MINUTE_MAX_MIN,
                    settings_data.minute_above_min);
+  // any 24 bit value names a colour; GColorFromHEX quantises whatever it is handed
+  settings_data.timer_rgb = stored.timer_rgb & 0xFFFFFF;
+  settings_data.chrono_rgb = stored.chrono_rgb & 0xFFFFFF;
 }
 
 // Save the settings to persistent storage
@@ -137,6 +145,16 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context) 
         prv_validate(prv_tuple_int(tuple), SETTINGS_MINUTE_MIN_MIN, SETTINGS_MINUTE_MAX_MIN,
                      settings_data.minute_above_min);
   }
+  // the colour pickers are only offered on colour hardware, so a watch which cannot use them
+  // never sends them and keeps whatever is stored
+  tuple = dict_find(iter, MESSAGE_KEY_timerColor);
+  if (tuple) {
+    settings_data.timer_rgb = (uint32_t)prv_tuple_int(tuple) & 0xFFFFFF;
+  }
+  tuple = dict_find(iter, MESSAGE_KEY_chronoColor);
+  if (tuple) {
+    settings_data.chrono_rgb = (uint32_t)prv_tuple_int(tuple) & 0xFFFFFF;
+  }
   // the configuration page resends every key on each save, so only act on a genuine change
   if (memcmp(&previous, &settings_data, sizeof(previous)) != 0) {
     prv_persist_store();
@@ -157,6 +175,11 @@ uint8_t settings_masked_second_digits(int64_t value_ms) {
     return 2;
   }
   return (step_ms > MSEC_IN_SEC) ? 1 : 0;
+}
+
+// Get the accent colour for one of the two counting directions
+uint32_t settings_accent_rgb(bool chrono) {
+  return chrono ? settings_data.chrono_rgb : settings_data.timer_rgb;
 }
 
 // Get how long the display holds each frame at a certain timer value

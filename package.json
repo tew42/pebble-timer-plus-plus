@@ -32,7 +32,9 @@
     ],
     "messageKeys": [
       "tenSecondUpdatesAbove",
-      "minuteUpdatesAbove"
+      "minuteUpdatesAbove",
+      "timerColor",
+      "chronoColor"
     ],
     "resources": {
       "media": [

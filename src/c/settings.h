@@ -32,6 +32,14 @@
 #define SETTINGS_TEN_SECOND_MAX_SEC 120
 #define SETTINGS_MINUTE_MAX_MIN 10
 
+//! Accent colours, as 0xRRGGBB. Counting down and counting up get their own so the two modes can
+//! be told apart at a glance, which also marks the moment a timer runs into overtime.
+//! The countdown default is the green this app has always used; drawing.c derives the middle and
+//! band shades from it and reproduces the original palette exactly.
+//! These must match the defaults in src/pkjs/config.json.
+#define SETTINGS_TIMER_RGB_DEFAULT 0x00FF00  //< GColorGreen
+#define SETTINGS_CHRONO_RGB_DEFAULT 0x00AAFF //< GColorVividCerulean
+
 //! Load the settings and open AppMessage to receive updates from the phone
 //! @param on_change Called whenever new settings arrive, to refresh anything derived from them
 void settings_initialize(void (*on_change)(void));
@@ -48,6 +56,11 @@ uint8_t settings_masked_second_digits(int64_t value_ms);
 //! @param value_ms The shown time in milliseconds, from timer_get_display_ms()
 //! @return The refresh interval in milliseconds, MSEC_IN_SEC while the seconds are live
 uint32_t settings_refresh_step_ms(int64_t value_ms);
+
+//! Get the accent colour for one of the two counting directions
+//! @param chrono True when counting up, which has its own colour
+//! @return The colour as 0xRRGGBB, ready for GColorFromHEX
+uint32_t settings_accent_rgb(bool chrono);
 
 //! Get how long until the display next needs refreshing
 //! @param value_ms The exact timer value in milliseconds; this one rounds it itself

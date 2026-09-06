@@ -50,6 +50,34 @@
     ]
   },
   {
+    "type": "section",
+    "capabilities": ["COLOR"],
+    "items": [
+      {
+        "type": "heading",
+        "defaultValue": "Colours"
+      },
+      {
+        "type": "text",
+        "defaultValue": "Counting down and counting up get their own colour, so the two are easy to tell apart -- and a timer running past zero changes colour as it does. The middle and the interval band are shaded from the colour you pick."
+      },
+      {
+        "type": "color",
+        "messageKey": "timerColor",
+        "label": "Counting down",
+        "defaultValue": "00ff00",
+        "sunlight": false
+      },
+      {
+        "type": "color",
+        "messageKey": "chronoColor",
+        "label": "Counting up",
+        "defaultValue": "00aaff",
+        "sunlight": false
+      }
+    ]
+  },
+  {
     "type": "submit",
     "defaultValue": "Save Settings"
   }
