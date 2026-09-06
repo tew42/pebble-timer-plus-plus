@@ -38,6 +38,19 @@ bool timer_is_vibrating(void);
 //! @return True if it is counting up as a stopwatch
 bool timer_is_chrono(void);
 
+//! Hold the shown time where it is while the clock underneath keeps running
+//! A split is a display hold, not a pause: nothing stops, so releasing it reveals the time that
+//! passed meanwhile. Only ever taken while counting up, where losing real time to a pause would
+//! defeat the point of a stopwatch.
+void timer_split_hold(void);
+
+//! Release a held shown time, if one is held
+void timer_split_release(void);
+
+//! Check whether the shown time is being held
+//! @return True if a split is being shown rather than the live time
+bool timer_is_split(void);
+
 //! Check if timer or stopwatch is paused
 //! @return True if the timer is paused
 bool timer_is_paused(void);

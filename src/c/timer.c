@@ -43,6 +43,12 @@ typedef struct {
 } Timer;
 static Timer timer_data;
 
+// A split holds the shown time while the clock runs on. It is deliberately not part of the
+// structure above: it is a display state, so it neither belongs in persistent storage nor should
+// survive the app being closed.
+static int64_t split_display_ms;
+static bool split_active;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // API Functions
 //
@@ -65,6 +71,9 @@ static int64_t prv_signed_value_ms(void) {
 // The two directions round opposite ways so that each displayed second is held for a whole
 // second either side of the moment the timer elapses and starts counting up instead
 int64_t timer_get_display_ms(void) {
+  if (split_active) {
+    return split_display_ms;
+  }
   const int64_t value = prv_signed_value_ms();
   if (value <= 0) {
     // counting up, so show the seconds that have actually completed
@@ -97,6 +106,18 @@ bool timer_is_vibrating(void) {
 
 // Check if timer is in stopwatch mode
 bool timer_is_chrono(void) { return prv_signed_value_ms() <= 0; }
+
+// Hold the shown time where it is
+void timer_split_hold(void) {
+  split_display_ms = timer_get_display_ms(); // still the live one, the hold is not up yet
+  split_active = true;
+}
+
+// Release a held shown time
+void timer_split_release(void) { split_active = false; }
+
+// Check whether the shown time is being held
+bool timer_is_split(void) { return split_active; }
 
 // Check if timer or stopwatch is paused
 bool timer_is_paused(void) { return timer_data.start_ms <= 0; }
@@ -165,6 +186,7 @@ void timer_toggle_play_pause(void) {
 
 //! Rewind the timer back to its original value
 void timer_rewind(void) {
+  timer_split_release();
   timer_data.start_ms = 0;
   // enable vibration
   if (timer_data.length_ms) {
@@ -174,6 +196,7 @@ void timer_rewind(void) {
 
 // Reset the timer to zero
 void timer_reset(void) {
+  timer_split_release();
   timer_data.length_ms = 0;
   timer_data.start_ms = 0;
   // disable vibration

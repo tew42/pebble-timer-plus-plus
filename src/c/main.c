@@ -120,13 +120,11 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   layer_mark_dirty(main_data.layer);
 }
 
-// Select click handler
-static void prv_select_click_handler(ClickRecognizerRef recognizer, void *ctx) {
-  // rewind timer if clicked while timer is going off
-  if (main_timer_rewind()) {
-    return;
-  }
-  // change timer mode
+// Advance the select action, shared by the button and the touch screen
+// While counting, what select does follows what the header says: counting down it pauses into
+// edit mode, where the length can be changed; counting up it takes a split, holding the shown
+// time while the stopwatch runs on, because pausing a stopwatch would throw away real time.
+static void prv_select_advance(void) {
   switch (main_data.control_mode) {
   case ControlModeEditHr:
     main_data.control_mode = ControlModeEditMin;
@@ -140,11 +138,28 @@ static void prv_select_click_handler(ClickRecognizerRef recognizer, void *ctx) {
     prv_refresh_restart();
     break;
   case ControlModeCounting:
-    main_data.control_mode = ControlModeEditSec;
-    timer_toggle_play_pause();
-    prv_refresh_stop();
+    if (timer_is_chrono()) {
+      if (timer_is_split()) {
+        timer_split_release();
+      } else {
+        timer_split_hold();
+      }
+    } else {
+      main_data.control_mode = ControlModeEditSec;
+      timer_toggle_play_pause();
+      prv_refresh_stop();
+    }
     break;
   }
+}
+
+// Select click handler
+static void prv_select_click_handler(ClickRecognizerRef recognizer, void *ctx) {
+  // rewind timer if clicked while timer is going off
+  if (main_timer_rewind()) {
+    return;
+  }
+  prv_select_advance();
   // refresh
   drawing_update();
   layer_mark_dirty(main_data.layer);
@@ -220,9 +235,12 @@ static void prv_app_timer_callback(void *data) {
     uint32_t duration = settings_next_refresh_ms(timer_get_value_ms(), timer_is_chrono());
     main_data.app_timer = app_timer_register(duration, prv_app_timer_callback, NULL);
   }
-  // refresh
-  drawing_update();
-  layer_mark_dirty(main_data.layer);
+  // refresh, unless the shown time is being held: the loop still runs so timer_check_elapsed
+  // keeps the alert on its cadence, but a held display has nothing new to draw
+  if (!timer_is_split()) {
+    drawing_update();
+    layer_mark_dirty(main_data.layer);
+  }
 }
 
 // Stop the refresh loop
@@ -310,24 +328,7 @@ static void on_center_tap(void *context) {
   if (main_timer_rewind()) {
     return;
   }
-  switch (main_data.control_mode) {
-  case ControlModeEditHr:
-    main_data.control_mode = ControlModeEditMin;
-    break;
-  case ControlModeEditMin:
-    main_data.control_mode = ControlModeEditSec;
-    break;
-  case ControlModeEditSec:
-    main_data.control_mode = ControlModeCounting;
-    timer_toggle_play_pause();
-    prv_refresh_restart();
-    break;
-  case ControlModeCounting:
-    main_data.control_mode = ControlModeEditSec;
-    timer_toggle_play_pause();
-    prv_refresh_stop();
-    break;
-  }
+  prv_select_advance();
   drawing_update();
   layer_mark_dirty(main_data.layer);
 }
