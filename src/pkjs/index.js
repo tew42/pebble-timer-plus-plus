@@ -7,9 +7,11 @@ var NEVER = 255;
 var clay = new Clay(clayConfig, function() {
     var clayConfig = this;
 
-    // Minute updates should only begin at or above where ten second updates already have, so a
-    // ten second threshold over a minute rules out the shorter minute options. Clay can only
-    // disable a whole item rather than individual options, so raise the value instead.
+    // Minute updates must begin strictly above where ten second updates do, or the band between
+    // them is empty and the ten second setting does nothing: the watch would go straight from
+    // per-second to per-minute. So a ten second threshold rules out the minute options at or
+    // below it. Clay can only disable a whole item rather than individual options, so raise the
+    // value instead.
     function enforceThresholdOrder() {
         var tenSecond = clayConfig.getItemByMessageKey("tenSecondUpdatesAbove");
         var minute = clayConfig.getItemByMessageKey("minuteUpdatesAbove");
@@ -20,7 +22,7 @@ var clay = new Clay(clayConfig, function() {
         if (tenSecondValue === NEVER) {
             return;  // there is no coarse threshold to stay above
         }
-        var minimumMinutes = Math.ceil(tenSecondValue / 60);
+        var minimumMinutes = Math.floor(tenSecondValue / 60) + 1;
         if (minute.get() < minimumMinutes) {
             minute.set(minimumMinutes);
         }
