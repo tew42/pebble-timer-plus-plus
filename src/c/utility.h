@@ -19,15 +19,6 @@
 #define SEC_IN_MIN 60
 #define MIN_IN_HR 60
 
-//! Compatibility functions for Aplite
-#ifdef PBL_SDK_2
-#define GEdgeInsets1(value) value
-GRect grect_inset(GRect bounds, int16_t inset);
-static const uint8_t GOvalScaleModeFillCircle = 0;
-void graphics_fill_radial(GContext *ctx, GRect bounds, uint8_t fill_mode, int16_t inset,
-                          int32_t angle_start, int32_t angle_end);
-#endif
-
 #ifdef PBL_BW
 //! Fill GRect with "grey" on Aplite
 void graphics_fill_rect_grey(GContext *ctx, GRect rect);

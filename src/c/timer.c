@@ -16,8 +16,6 @@
 #define PERSIST_VERSION_KEY 4342896
 #define PERSIST_TIMER_KEY 58734
 #define VIBRATION_LENGTH_MS 20000
-// legacy persistent storage
-#define PERSIST_TIMER_KEY_V2 3456
 
 // The vibration below is re-enqueued from the same callback which refreshes the display, so a
 // reduced-frequency update mode which began part way through would cut it short. Every threshold
@@ -191,22 +189,9 @@ void timer_persist_store(void) {
 
 // Read the timer from persistent storage
 void timer_persist_read(void) {
-  // note the legacy version, but do not act on it until the read below, which would otherwise
-  // reset straight over the five second timer it starts
-  bool legacy_wakeup = false;
-  if (persist_exists(PERSIST_TIMER_KEY_V2)) {
-    persist_delete(PERSIST_TIMER_KEY_V2);
-    legacy_wakeup = (launch_reason() == APP_LAUNCH_WAKEUP);
-  }
-  // read current version
   if (persist_exists(PERSIST_TIMER_KEY)) {
     persist_read_data(PERSIST_TIMER_KEY, &timer_data, sizeof(timer_data));
   } else {
     timer_reset();
-  }
-  // a wakeup scheduled by the legacy version starts a short timer, since it carried no length
-  if (legacy_wakeup) {
-    timer_increment(5000);
-    timer_toggle_play_pause();
   }
 }
