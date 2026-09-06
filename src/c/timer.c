@@ -12,7 +12,7 @@
 #include "settings.h"
 #include "utility.h"
 
-#define PERSIST_VERSION 2
+#define PERSIST_VERSION 3
 #define PERSIST_VERSION_KEY 4342896
 #define PERSIST_TIMER_KEY 58734
 #define VIBRATION_LENGTH_MS 20000
@@ -38,7 +38,6 @@ static const VibePattern vibe_pattern = {
 typedef struct {
   int64_t length_ms; //< Length of timer in milliseconds
   int64_t start_ms;  //< The start epoch of the timer in milliseconds
-  bool elapsed;      //< Used to start the vibration if first time as elapsed
   bool can_vibrate;  //< Flag used to tell when the timer has completed
 } Timer;
 static Timer timer_data;
@@ -205,14 +204,18 @@ void timer_reset(void) {
 
 // Save the timer to persistent storage
 void timer_persist_store(void) {
-  // write out current persistent data version for potential future reference
+  // the version says which structure layout the blob below holds, and timer_persist_read checks it
   persist_write_int(PERSIST_VERSION_KEY, PERSIST_VERSION);
   persist_write_data(PERSIST_TIMER_KEY, &timer_data, sizeof(timer_data));
 }
 
 // Read the timer from persistent storage
 void timer_persist_read(void) {
-  if (persist_exists(PERSIST_TIMER_KEY)) {
+  // the blob is read back verbatim, so one written by a build with a different structure layout
+  // has to be discarded rather than reinterpreted. The version was written but never checked
+  // before, which left changing the structure unsafe.
+  if (persist_read_int(PERSIST_VERSION_KEY) == PERSIST_VERSION &&
+      persist_exists(PERSIST_TIMER_KEY)) {
     persist_read_data(PERSIST_TIMER_KEY, &timer_data, sizeof(timer_data));
   } else {
     timer_reset();
