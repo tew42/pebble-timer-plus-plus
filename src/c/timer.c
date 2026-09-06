@@ -21,9 +21,9 @@
 
 // The vibration below is re-enqueued from the same callback which refreshes the display, so a
 // reduced-frequency update mode which began part way through would cut it short. Every threshold
-// the settings page can select is large enough to keep the whole vibration on a one second
-// cadence; if this length grows past them, those thresholds and the options offered in
-// src/pkjs/config.json have to grow with it.
+// the settings page can select is at or beyond the end of the vibration, so the whole of it is
+// enqueued on a one second cadence; if this length grows past them, those thresholds and the
+// options offered in src/pkjs/config.json have to grow with it.
 _Static_assert((SETTINGS_TEN_SECOND_MIN_SEC) * (MSEC_IN_SEC) >= VIBRATION_LENGTH_MS,
                "ten second updates must not begin before the elapse vibration has finished");
 _Static_assert((SETTINGS_MINUTE_MIN_MIN) * (MSEC_IN_MIN) >= VIBRATION_LENGTH_MS,
@@ -49,13 +49,28 @@ Timer timer_data;
 // API Functions
 //
 
+// Get the signed timer value from a single reading of the clock
+// Positive is time remaining, zero or below is time elapsed past zero. Reading the clock once
+// matters: the value and its sign must come from the same instant, and the expression this
+// replaced read it three times, which for a freshly reset timer (start_ms of zero) let a single
+// millisecond of skew flip a branch and return a value the size of the whole epoch.
+static int64_t prv_signed_value_ms(void) {
+  if (timer_is_paused()) {
+    // start_ms is the negative of how long the timer ran before it was paused
+    return timer_data.length_ms + timer_data.start_ms;
+  }
+  // start_ms is the epoch the timer was started at
+  return timer_data.length_ms - ((int64_t)epoch() - timer_data.start_ms);
+}
+
 // Get the timer value as the digits show it
 // The two directions round opposite ways so that each displayed second is held for a whole
 // second either side of the moment the timer elapses and starts counting up instead
 int64_t timer_get_display_ms(void) {
-  const int64_t value = timer_get_value_ms();
-  if (timer_is_chrono()) {
-    return value / MSEC_IN_SEC * MSEC_IN_SEC;
+  const int64_t value = prv_signed_value_ms();
+  if (value <= 0) {
+    // counting up, so show the seconds that have actually completed
+    return -value / MSEC_IN_SEC * MSEC_IN_SEC;
   }
   return (value + MSEC_IN_SEC - 1) / MSEC_IN_SEC * MSEC_IN_SEC;
 }
@@ -68,16 +83,10 @@ void timer_get_time_parts(uint16_t *hr, uint16_t *min, uint16_t *sec) {
   (*sec) = value % MSEC_IN_MIN / MSEC_IN_SEC;
 }
 
-// Get the timer time in milliseconds assuming the following conditions
-// 1. when the timer is running, start_ms represents the epoch when it was started
-// 2. when it is paused, start_ms represents the negative of the time is has been running
+// Get the timer time in milliseconds, counting down to zero and then back up again
 int64_t timer_get_value_ms(void) {
-  int64_t value =
-      timer_data.length_ms - epoch() + (((timer_data.start_ms + epoch() - 1) % epoch()) + 1);
-  if (value < 0) {
-    return -value;
-  }
-  return value;
+  const int64_t value = prv_signed_value_ms();
+  return (value < 0) ? -value : value;
 }
 
 // Get the total timer time in milliseconds
@@ -89,12 +98,7 @@ bool timer_is_vibrating(void) {
 }
 
 // Check if timer is in stopwatch mode
-bool timer_is_chrono(void) {
-  // see timer_get_timer_parts for explanation of equation
-  return timer_data.length_ms - (int64_t)epoch() +
-             ((timer_data.start_ms + (int64_t)epoch() - 1) % (int64_t)epoch() + 1) <=
-         0;
-}
+bool timer_is_chrono(void) { return prv_signed_value_ms() <= 0; }
 
 // Check if timer or stopwatch is paused
 bool timer_is_paused(void) { return timer_data.start_ms <= 0; }
@@ -102,9 +106,12 @@ bool timer_is_paused(void) { return timer_data.start_ms <= 0; }
 // Check if the timer is elapsed and vibrate if this is the first call after elapsing
 void timer_check_elapsed(void) {
   if (timer_is_vibrating()) {
-    // stop vibration after certain duration
+    // stop vibration after certain duration, without enqueuing one last burst past the end of it:
+    // this runs on the display refresh, so once the coarse cadences begin the next call can be a
+    // whole minute later and the alert would buzz long after it visibly finished
     if (timer_get_value_ms() > VIBRATION_LENGTH_MS) {
       timer_data.can_vibrate = false;
+      return;
     }
     // vibrate
     vibes_enqueue_custom_pattern(vibe_pattern);

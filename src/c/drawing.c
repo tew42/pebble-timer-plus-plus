@@ -340,10 +340,18 @@ static void prv_progress_ring_update(void) {
   // while the timer is being set or paused the digits are exact, so the ring must be exact too
   const bool counting = main_get_control_mode() == ControlModeCounting;
   const uint32_t step_ms = counting ? settings_refresh_step_ms(display_ms) : MSEC_IN_SEC;
-  // measure the interval from the unwrapped offset, so one ending on the minute fills the ring
-  // rather than wrapping back to nothing
-  const int64_t low_ms = offset_ms / step_ms * step_ms;
+  // the band spans the real values the label covers, measured from the unwrapped offset so an
+  // interval ending on the minute fills the ring rather than wrapping back to nothing
+  int64_t low_ms = offset_ms / step_ms * step_ms;
+  if (!chrono && step_ms > MSEC_IN_SEC) {
+    // counting down rounds up, so the label changes a second below the quantum and that is where
+    // the interval it covers begins; counting up the quantum is already the bottom of it
+    low_ms -= MSEC_IN_SEC;
+  }
   const int64_t high_ms = (low_ms + step_ms < span_ms) ? low_ms + step_ms : span_ms;
+  if (low_ms < 0) {
+    low_ms = 0; // the last interval of a countdown reaches below zero, the ring does not
+  }
   // the interval is only worth showing while the seconds it covers are masked
   drawing_data.show_band = counting && settings_masked_second_digits(display_ms) > 0;
   drawing_data.band_angle = TRIG_MAX_ANGLE * high_ms / span_ms;

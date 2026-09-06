@@ -15,11 +15,12 @@
 #define PERSIST_SETTINGS_VERSION_KEY 91742
 #define PERSIST_SETTINGS_KEY 91743
 
-// How often the display refreshes at some timer value, and the range of values that holds over
+// How often the display refreshes at some timer value, over the half-open range of shown values
+// [low_ms, high_ms) that this cadence covers
 typedef struct {
   uint32_t step_ms; //< Milliseconds between display refreshes
-  int64_t min_ms;   //< Below this value the cadence is finer, zero if it is already the finest
-  int64_t max_ms;   //< Above this value it is coarser, INT64_MAX if it is already the coarsest
+  int64_t low_ms;   //< Below this shown value the cadence is finer, zero at the finest
+  int64_t high_ms;  //< At and above it the cadence is coarser, INT64_MAX at the coarsest
 } Cadence;
 
 // Main data structure, cached verbatim in persistent storage
@@ -45,21 +46,25 @@ static int64_t prv_threshold_ms(uint8_t threshold, int64_t unit_ms) {
   return (threshold == SETTINGS_NEVER) ? INT64_MAX : (int64_t)threshold * unit_ms;
 }
 
-// Get the refresh cadence at a certain timer value, coarsest mode first
+// Get the refresh cadence at a certain shown value, coarsest mode first
+// A threshold applies at its own value, not a second past it. Counting up floors the shown value,
+// so an exclusive test would only take effect a second late and leave the finer cadence showing
+// for one interval; inclusive, the cadence changes on a label boundary in both directions.
 static Cadence prv_cadence(int64_t value_ms) {
   const int64_t minute_at_ms = prv_threshold_ms(settings_data.minute_above_min, MSEC_IN_MIN);
-  if (value_ms > minute_at_ms) {
-    return (Cadence){.step_ms = MSEC_IN_MIN, .min_ms = minute_at_ms, .max_ms = INT64_MAX};
+  if (value_ms >= minute_at_ms) {
+    return (Cadence){.step_ms = MSEC_IN_MIN, .low_ms = minute_at_ms, .high_ms = INT64_MAX};
   }
   const int64_t ten_second_at_ms =
       prv_threshold_ms(settings_data.ten_second_above_sec, MSEC_IN_SEC);
-  if (value_ms > ten_second_at_ms) {
+  if (value_ms >= ten_second_at_ms) {
     return (Cadence){
-        .step_ms = 10 * MSEC_IN_SEC, .min_ms = ten_second_at_ms, .max_ms = minute_at_ms};
+        .step_ms = 10 * MSEC_IN_SEC, .low_ms = ten_second_at_ms, .high_ms = minute_at_ms};
   }
   // the coarser mode wins where the two thresholds overlap, exactly as the tests above order them
-  const int64_t finest_max_ms = (ten_second_at_ms < minute_at_ms) ? ten_second_at_ms : minute_at_ms;
-  return (Cadence){.step_ms = MSEC_IN_SEC, .min_ms = 0, .max_ms = finest_max_ms};
+  const int64_t finest_high_ms =
+      (ten_second_at_ms < minute_at_ms) ? ten_second_at_ms : minute_at_ms;
+  return (Cadence){.step_ms = MSEC_IN_SEC, .low_ms = 0, .high_ms = finest_high_ms};
 }
 
 // Accept a threshold if it is in range or SETTINGS_NEVER, otherwise keep the existing one
@@ -155,14 +160,14 @@ uint32_t settings_next_refresh_ms(int64_t value_ms, bool counting_up) {
   if (counting_up) {
     // the shown time changes when it reaches the next quantum
     to_change_ms = quantum_ms + cadence.step_ms - value_ms;
-    // a second above the cadence range one more digit is masked, which shows too
-    to_cadence_ms =
-        (cadence.max_ms == INT64_MAX) ? INT64_MAX : cadence.max_ms + MSEC_IN_SEC - value_ms;
+    // the shown value floors, so it reaches the next cadence exactly at that cadence's low end,
+    // where one more digit is masked; that shows too
+    to_cadence_ms = (cadence.high_ms == INT64_MAX) ? INT64_MAX : cadence.high_ms - value_ms;
   } else {
     // counting down the value is rounded up, so the shown time changes a second below the quantum
     to_change_ms = value_ms - (quantum_ms - MSEC_IN_SEC);
-    // at the bottom of the cadence range one fewer digit is masked, which shows too
-    to_cadence_ms = value_ms - cadence.min_ms;
+    // and it drops out of this cadence a second below its low end, unmasking a digit
+    to_cadence_ms = value_ms - (cadence.low_ms - MSEC_IN_SEC);
   }
   // never sleep past the value at which the cadence changes
   if (to_cadence_ms > 0 && to_cadence_ms < to_change_ms) {
