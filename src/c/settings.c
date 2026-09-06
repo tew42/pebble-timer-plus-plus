@@ -99,9 +99,23 @@ static void prv_persist_store(void) {
 }
 
 // Read a tuple as an integer, whichever way the configuration page serialized it
-// Clay sends select values as strings unless the item sets "serializeValueAs": "integer"
+// Clay sends select values as strings unless the item sets "serializeValueAs": "integer".
+// An integer is packed into the narrowest field that holds it, so which member of the union
+// carries the value depends on the tuple's length: reading int32 from a one byte tuple takes
+// three bytes of whatever follows it.
 static int32_t prv_tuple_int(const Tuple *tuple) {
-  return (tuple->type == TUPLE_CSTRING) ? atoi(tuple->value->cstring) : tuple->value->int32;
+  if (tuple->type == TUPLE_CSTRING) {
+    return atoi(tuple->value->cstring);
+  }
+  const bool is_signed = (tuple->type == TUPLE_INT);
+  switch (tuple->length) {
+  case 1:
+    return is_signed ? tuple->value->int8 : tuple->value->uint8;
+  case 2:
+    return is_signed ? tuple->value->int16 : tuple->value->uint16;
+  default:
+    return is_signed ? tuple->value->int32 : (int32_t)tuple->value->uint32;
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
