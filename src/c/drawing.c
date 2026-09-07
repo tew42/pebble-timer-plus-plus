@@ -7,6 +7,7 @@
 // @date August 29, 2015
 // @bugs No known bugs
 
+#include "drawing.h"
 #include "animation.h"
 #include "main.h"
 #include "text_render.h"
