@@ -48,6 +48,10 @@ static Timer timer_data;
 static int64_t split_display_ms;
 static bool split_active;
 
+// Whether the elapse alert has sounded in this session. Not persisted: a new session which finds
+// the alert window already past has still to sound it once.
+static bool has_vibrated;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // API Functions
 //
@@ -122,14 +126,19 @@ bool timer_is_paused(void) { return timer_data.start_ms <= 0; }
 // Check if the timer is elapsed and vibrate if this is the first call after elapsing
 void timer_check_elapsed(void) {
   if (timer_is_vibrating()) {
-    // stop vibration after certain duration, without enqueuing one last burst past the end of it:
-    // this runs on the display refresh, so once the coarse cadences begin the next call can be a
-    // whole minute later and the alert would buzz long after it visibly finished
+    // Stop the alert at the end of its window without enqueuing one last burst past it: this runs
+    // on the display refresh, so once the coarse cadences begin the next call can be a whole
+    // minute later and the alert would buzz long after it visibly finished.
+    // A session which only started after the window closed has not sounded the alert at all,
+    // though, which is what happens when the wakeup could only be scheduled late. It gets one.
     if (timer_get_value_ms() > VIBRATION_LENGTH_MS) {
       timer_data.can_vibrate = false;
-      return;
+      if (has_vibrated) {
+        return;
+      }
     }
     // vibrate
+    has_vibrated = true;
     vibes_enqueue_custom_pattern(vibe_pattern);
   }
 }
