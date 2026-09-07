@@ -103,10 +103,8 @@ static void prv_list_add_node(AnimationNode *node) {
 }
 
 // Unlink and destroy a single node
-// A finished animation retires itself through this rather than animation_stop(). drawing.c queues
-// its bounce and reset animations in pairs on one target, out then settle, so cancelling the whole
-// target would destroy the follow-up before it ever ran; and the node it destroys may be the one
-// prv_animation_timer_callback is about to step next.
+// A finished animation retires itself through this rather than animation_stop(), which unlinks
+// the first node on the target and so need not be the one that finished
 static void prv_list_remove_node(AnimationNode *node) {
   AnimationNode *cur_node = head_node;
   AnimationNode *pre_node = NULL;
