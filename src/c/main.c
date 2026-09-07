@@ -28,6 +28,8 @@ static struct {
 
 // Function declarations
 static void prv_app_timer_callback(void *data);
+static void prv_refresh_stop(void);
+static void prv_refresh_restart(void);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Private Functions
@@ -40,6 +42,7 @@ static bool main_timer_rewind(void) {
     vibes_cancel();
     main_data.control_mode = ControlModeEditSec;
     timer_rewind();
+    prv_refresh_stop();
     drawing_update();
     return true;
   }
@@ -134,13 +137,12 @@ static void prv_select_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   case ControlModeEditSec:
     main_data.control_mode = ControlModeCounting;
     timer_toggle_play_pause();
-    if (!main_data.app_timer) {
-      prv_app_timer_callback(NULL);
-    }
+    prv_refresh_restart();
     break;
   case ControlModeCounting:
     main_data.control_mode = ControlModeEditSec;
     timer_toggle_play_pause();
+    prv_refresh_stop();
     break;
   }
   // refresh
@@ -161,6 +163,7 @@ static void prv_select_raw_click_handler(ClickRecognizerRef recognizer, void *ct
 static void prv_select_long_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   main_data.control_mode = ControlModeEditMin;
   timer_reset();
+  prv_refresh_stop();
   // animate and refresh
   drawing_update();
   layer_mark_dirty(main_data.layer);
@@ -223,6 +226,22 @@ static void prv_app_timer_callback(void *data) {
     }
     main_data.app_timer = app_timer_register(duration + 5, prv_app_timer_callback, NULL);
   }
+}
+
+// Stop the refresh loop
+// prv_app_timer_callback clears the handle before it returns, so a fired timer is never cancelled
+static void prv_refresh_stop(void) {
+  if (main_data.app_timer) {
+    app_timer_cancel(main_data.app_timer);
+    main_data.app_timer = NULL;
+  }
+}
+
+// Restart the refresh loop from the current timer value
+// A sleep left over from an earlier run has to be cancelled rather than waited out
+static void prv_refresh_restart(void) {
+  prv_refresh_stop();
+  prv_app_timer_callback(NULL);
 }
 
 static void on_click(int direction, int click_num, void *context) {
@@ -297,13 +316,12 @@ static void on_center_tap(void *context) {
   case ControlModeEditSec:
     main_data.control_mode = ControlModeCounting;
     timer_toggle_play_pause();
-    if (!main_data.app_timer) {
-      prv_app_timer_callback(NULL);
-    }
+    prv_refresh_restart();
     break;
   case ControlModeCounting:
     main_data.control_mode = ControlModeEditSec;
     timer_toggle_play_pause();
+    prv_refresh_stop();
     break;
   }
   drawing_update();
@@ -380,7 +398,8 @@ static void prv_initialize(void) {
     // the system opening animation freezes the app on the first frame, wait until that is done
     // before animating elements in (ideally there would be a better way to detect/get when the
     // system animation finished)
-    app_timer_register(SYSTEM_ENTRANCE_ANIMATION_MS, prv_app_timer_callback, NULL);
+    main_data.app_timer =
+        app_timer_register(SYSTEM_ENTRANCE_ANIMATION_MS, prv_app_timer_callback, NULL);
   }
 }
 
