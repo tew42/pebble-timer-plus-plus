@@ -1,44 +1,45 @@
 var Clay = require('@rebble/clay');
 var clayConfig = require('./config.json');
 
-// Must match SETTINGS_NEVER in src/c/settings.h
-var NEVER = 255;
-
 var clay = new Clay(clayConfig, function() {
     var clayConfig = this;
+    // Clay stringifies this function into the configuration page and calls it there, so nothing
+    // else in this file is in scope: anything it needs has to be declared inside it.
+    var NEVER = 255;  // must match SETTINGS_NEVER in src/c/settings.h
+    var SEC_IN_MIN = 60;
 
-    // Minute updates must begin strictly above where ten second updates do, or the band between
-    // them is empty and the ten second setting does nothing: the watch would go straight from
-    // per-second to per-minute. So a ten second threshold rules out the minute options at or
-    // below it. Clay can only disable a whole item rather than individual options, so raise the
-    // value instead.
-    function enforceThresholdOrder() {
+    // Where the two thresholds overlap the watch takes the coarser mode, so a ten second
+    // threshold at or beyond the minute one leaves its band empty and does nothing at all. That
+    // is well defined, just misleading to look at, so the page switches the ten second setting to
+    // Never: the same behaviour, said plainly, and the minute threshold just chosen is kept.
+    function resolveThresholdOverlap() {
         var tenSecond = clayConfig.getItemByMessageKey("tenSecondUpdatesAbove");
         var minute = clayConfig.getItemByMessageKey("minuteUpdatesAbove");
         if (!tenSecond || !minute) {
             return;
         }
-        // a select's get() and set() deal in strings, unlike a colour picker's, so parse before
-        // comparing: === against a number is false for every value a select can return
+        // parse before comparing: a select's get() hands back the option string, or the number it
+        // spells where the item sets serializeValueAs "integer"
         var tenSecondValue = parseInt(tenSecond.get(), 10);
-        if (tenSecondValue === NEVER) {
-            return;  // there is no coarse threshold to stay above
+        var minuteValue = parseInt(minute.get(), 10);
+        if (tenSecondValue === NEVER || minuteValue === NEVER) {
+            return;  // neither mode can crowd the other out
         }
-        var minimumMinutes = Math.floor(tenSecondValue / 60) + 1;
-        if (parseInt(minute.get(), 10) < minimumMinutes) {
-            minute.set(String(minimumMinutes));
+        if (tenSecondValue >= minuteValue * SEC_IN_MIN) {
+            tenSecond.set(String(NEVER));
         }
     }
 
     clayConfig.on(clayConfig.EVENTS.AFTER_BUILD, function() {
-        enforceThresholdOrder();
+        // also normalises a redundant pair which was stored before this ran
+        resolveThresholdOverlap();
         var tenSecond = clayConfig.getItemByMessageKey("tenSecondUpdatesAbove");
         var minute = clayConfig.getItemByMessageKey("minuteUpdatesAbove");
         if (tenSecond) {
-            tenSecond.on("change", enforceThresholdOrder);
+            tenSecond.on("change", resolveThresholdOverlap);
         }
         if (minute) {
-            minute.on("change", enforceThresholdOrder);
+            minute.on("change", resolveThresholdOverlap);
         }
     });
 });

@@ -34,7 +34,7 @@
         "type": "select",
         "messageKey": "minuteUpdatesAbove",
         "label": "Minute updates above",
-        "description": "Update once a minute while the timer is this far from zero or further, showing 5:__. Must be further out than the 10-second setting.",
+        "description": "Update once a minute while the timer is this far from zero or further, showing 5:__. Set at or inside the 10-second setting, minute updates take over completely and the 10-second setting switches itself off.",
         "serializeValueAs": "integer",
         "defaultValue": "255",
         "options": [

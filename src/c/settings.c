@@ -66,7 +66,8 @@ static Cadence prv_cadence(int64_t value_ms) {
     return (Cadence){
         .step_ms = 10 * MSEC_IN_SEC, .low_ms = ten_second_at_ms, .high_ms = minute_at_ms};
   }
-  // the coarser mode wins where the two thresholds overlap, exactly as the tests above order them
+  // the coarser mode wins where the two thresholds overlap, exactly as the tests above order
+  // them, so a pair which overlaps simply leaves the finer of the two modes unused
   const int64_t finest_high_ms =
       (ten_second_at_ms < minute_at_ms) ? ten_second_at_ms : minute_at_ms;
   return (Cadence){.step_ms = MSEC_IN_SEC, .low_ms = 0, .high_ms = finest_high_ms};
