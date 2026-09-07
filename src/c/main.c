@@ -439,8 +439,7 @@ static void prv_terminate(void) {
   tick_timer_service_unsubscribe();
   settings_terminate();
   // schedule wakeup on the second the digits count down to, rather than truncating to just
-  // before it (the system refuses wakeups less than about half a minute out, which is why a
-  // nearly elapsed timer does not get one)
+  // before it
   if (!timer_is_chrono() && !timer_is_paused()) {
     prv_schedule_wakeup((epoch() + timer_get_display_ms()) / MSEC_IN_SEC);
   }
