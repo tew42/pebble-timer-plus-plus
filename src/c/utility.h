@@ -28,12 +28,16 @@ void graphics_fill_rect_grey(GContext *ctx, GRect rect);
 #ifdef NDEBUG
 #define ASSERT(expression) ((void)0)
 #else
+//! Wrapped so it is one statement: a bare `if` would bind a following `else` to the assertion
 #define ASSERT(expression)                                                                         \
-  if (!(expression)) {                                                                             \
-    APP_LOG(APP_LOG_LEVEL_ERROR, "Assertion failed: %s (%s:%d)", #expression, __FILE__, __LINE__); \
-    void (*exit)(void) = NULL;                                                                     \
-    exit();                                                                                        \
-  }
+  do {                                                                                             \
+    if (!(expression)) {                                                                           \
+      APP_LOG(APP_LOG_LEVEL_ERROR, "Assertion failed: %s (%s:%d)", #expression, __FILE__,          \
+              __LINE__);                                                                           \
+      void (*exit)(void) = NULL;                                                                   \
+      exit();                                                                                      \
+    }                                                                                              \
+  } while (0)
 #endif
 
 //! Malloc with failure check
