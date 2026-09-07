@@ -207,6 +207,15 @@ static void prv_display_parts(uint16_t *hr, uint16_t *min, uint16_t *sec) {
   (*sec) = value % MSEC_IN_MIN / MSEC_IN_SEC;
 }
 
+// Get how many trailing seconds digits the display is holding back
+// Editing and a split both hold an exact time, so neither of them masks anything.
+static uint8_t prv_masked_second_digits(void) {
+  if (main_get_control_mode() != ControlModeCounting || timer_is_split()) {
+    return 0;
+  }
+  return settings_masked_second_digits(timer_get_display_ms());
+}
+
 // Format the timer value into the individual text fields (hr : min : sec)
 // `buff` must be zeroed by the caller; fields which are not drawn are left empty
 static void prv_format_text_fields(char buff[TEXT_FIELD_COUNT][6]) {
@@ -220,13 +229,10 @@ static void prv_format_text_fields(char buff[TEXT_FIELD_COUNT][6]) {
   snprintf(buff[2], sizeof(buff[2]), (hr || edit_mode) ? "%02d" : "%d", min);
   snprintf(buff[3], sizeof(buff[3]), "%s", edit_mode ? "\0" : ":");
   snprintf(buff[4], sizeof(buff[4]), "%02d", sec);
-  // mask the trailing seconds digits which are no longer being refreshed, never while editing
-  // since the seconds being set must always be readable
-  if (!edit_mode) {
-    const uint8_t masked = settings_masked_second_digits(timer_get_display_ms());
-    for (uint8_t ii = 0; ii < masked; ii++) {
-      buff[4][1 - ii] = TEXT_RENDER_PLACEHOLDER_CHAR;
-    }
+  // mask the trailing seconds digits which are no longer being refreshed
+  const uint8_t masked = prv_masked_second_digits();
+  for (uint8_t ii = 0; ii < masked; ii++) {
+    buff[4][1 - ii] = TEXT_RENDER_PLACEHOLDER_CHAR;
   }
 }
 
@@ -392,9 +398,9 @@ static void prv_progress_ring_update(void) {
   if (offset_ms > span_ms) {
     offset_ms = span_ms; // rounding up can pass the total when the timer was paused mid second
   }
-  // while the timer is being set or paused the digits are exact, so the ring must be exact too
-  const bool counting = main_get_control_mode() == ControlModeCounting;
-  const uint32_t step_ms = counting ? settings_refresh_step_ms(display_ms) : MSEC_IN_SEC;
+  // the digits are exact whenever none of them are masked, and then the ring must be exact too
+  const uint8_t masked = prv_masked_second_digits();
+  const uint32_t step_ms = masked ? settings_refresh_step_ms(display_ms) : MSEC_IN_SEC;
   // the band spans the real values the label covers, measured from the unwrapped offset so an
   // interval ending on the minute fills the ring rather than wrapping back to nothing
   int64_t low_ms = offset_ms / step_ms * step_ms;
@@ -408,7 +414,7 @@ static void prv_progress_ring_update(void) {
     low_ms = 0; // the last interval of a countdown reaches below zero, the ring does not
   }
   // the interval is only worth showing while the seconds it covers are masked
-  drawing_data.show_band = counting && settings_masked_second_digits(display_ms) > 0;
+  drawing_data.show_band = masked > 0;
   drawing_data.band_angle = TRIG_MAX_ANGLE * high_ms / span_ms;
   // a scheduled refresh never animates, so the ring moves only when the digits do; jumps the user
   // caused go through drawing_update_animated() instead
