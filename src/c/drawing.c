@@ -329,19 +329,40 @@ static GColor prv_shade(GColor color, int8_t step) {
   }
   return prv_shift(color, (step > 0) ? -1 : 1);
 }
+
+// Shade the interval band, two steps so the difference from the ring is legible
+// The band also has to stay clear of the colour behind the ring, or the interval it marks would
+// read as ring the arc has not reached yet. The configuration page only offers accents which have
+// the room for this, but nothing stops an older stored colour arriving, so try the darker shades
+// first and settle for a lighter one rather than an invisible band.
+static GColor prv_band_shade(GColor color, GColor back) {
+  static const int8_t steps[] = {-2, -1, 1, 2};
+  for (uint8_t ii = 0; ii < ARRAY_LENGTH(steps); ii++) {
+    const GColor shaded = prv_shift(color, steps[ii]);
+    if (shaded.argb != color.argb && shaded.argb != back.argb) {
+      return shaded;
+    }
+  }
+  return prv_shift(color, -2);
+}
+
+// Whether the stopwatch accent applies
+// Only a running stopwatch gets it: a timer of zero length counts as one by its value alone, but
+// while that length is being set it is a timer, and it is the timer's colour which belongs there.
+static bool prv_chrono_accent(void) {
+  return timer_is_chrono() && main_get_control_mode() == ControlModeCounting;
+}
 #endif
 
 // Adopt the accent colour for the direction the timer is counting
 // On one bit hardware there is nothing to choose, so the ring stays white and the dither in
 // prv_render_progress_ring carries the distinction instead
-static void prv_palette_update(bool chrono) {
-#ifdef PBL_BW
-  (void)chrono;
-#else
-  const GColor accent = GColorFromHEX(settings_accent_rgb(chrono));
+static void prv_palette_update(void) {
+#ifndef PBL_BW
+  const GColor accent = GColorFromHEX(settings_accent_rgb(prv_chrono_accent()));
   drawing_data.ring_color = accent;
   drawing_data.mid_color = prv_shade(accent, 2);
-  drawing_data.band_color = prv_shade(accent, -1);
+  drawing_data.band_color = prv_band_shade(accent, drawing_data.back_color);
 #endif
 }
 
@@ -390,7 +411,7 @@ static void prv_progress_ring_update(void) {
   // corrects it
   const int64_t display_ms = timer_get_display_ms();
   const bool chrono = timer_is_chrono();
-  prv_palette_update(chrono);
+  prv_palette_update();
   // the span the ring represents, and where the current refresh interval sits inside it
   // (a timer of zero length is always chrono, which keeps the timer branch off a zero span)
   const int64_t span_ms = chrono ? MSEC_IN_MIN : timer_get_length_ms();
@@ -612,7 +633,7 @@ void drawing_initialize(Layer *layer) {
   drawing_data.mid_color = GColorWhite;
   drawing_data.ring_color = GColorWhite;
   drawing_data.band_color = GColorWhite;
-  prv_palette_update(timer_is_chrono());
+  prv_palette_update();
   // set animation update callback
   animation_register_update_callback(&prv_animation_update_callback);
 }
