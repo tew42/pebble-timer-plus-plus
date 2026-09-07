@@ -13,7 +13,7 @@
 
 #ifdef PBL_BW
 // Fill GRect with "grey" on Aplite
-GBitmap *grey_bmp = NULL;
+static GBitmap *grey_bmp = NULL;
 void graphics_fill_rect_grey(GContext *ctx, GRect rect) {
   // create if first call
   if (!grey_bmp) {

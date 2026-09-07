@@ -32,7 +32,7 @@ typedef struct {
   bool elapsed;      //< Used to start the vibration if first time as elapsed
   bool can_vibrate;  //< Flag used to tell when the timer has completed
 } Timer;
-Timer timer_data;
+static Timer timer_data;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // API Functions
