@@ -43,5 +43,15 @@ void *malloc_check(uint16_t size, const char *file, int line) {
   return ptr;
 }
 
+// Release anything allocated lazily above
+void utility_terminate(void) {
+#ifdef PBL_BW
+  if (grey_bmp) {
+    gbitmap_destroy(grey_bmp);
+    grey_bmp = NULL;
+  }
+#endif
+}
+
 // Get current epoch in milliseconds
 uint64_t epoch(void) { return (uint64_t)time(NULL) * 1000 + (uint64_t)time_ms(NULL, NULL); }

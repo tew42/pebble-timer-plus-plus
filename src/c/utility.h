@@ -49,3 +49,6 @@ void *malloc_check(uint16_t size, const char *file, int line);
 //! Get current epoch in milliseconds
 //! @return The current epoch time in milliseconds
 uint64_t epoch(void);
+
+//! Release anything these functions allocated lazily
+void utility_terminate(void);

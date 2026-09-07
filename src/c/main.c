@@ -296,6 +296,7 @@ static void prv_terminate(void) {
   // destroy
   timer_persist_store();
   drawing_terminate();
+  utility_terminate();
   layer_destroy(main_data.layer);
   window_destroy(main_data.window);
 }
