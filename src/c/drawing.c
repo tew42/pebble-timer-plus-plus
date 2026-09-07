@@ -174,10 +174,8 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
   // format to readable time
   struct tm end_tm = *localtime(&end_time);
   strftime(buff, sizeof(buff), clock_is_24h_style() ? "%H:%M" : "%I:%M", &end_tm);
-  if (buff[0] == '0') { // Strip leading zero
-    for (uint8_t ii = 1; ii < ARRAY_LENGTH(buff); ii++) {
-      buff[ii - 1] = buff[ii];
-    }
+  if (buff[0] == '0') { // Strip leading zero, terminator included and nothing past it
+    memmove(buff, buff + 1, strlen(buff));
   }
   // draw text
   graphics_draw_text(ctx, buff, scl_get_font(ScalableFontTime), bounds, GTextOverflowModeFill,
