@@ -53,10 +53,8 @@ static bool split_active;
 //
 
 // Get the signed timer value from a single reading of the clock
-// Positive is time remaining, zero or below is time elapsed past zero. Reading the clock once
-// matters: the value and its sign must come from the same instant, and the expression this
-// replaced read it three times, which for a freshly reset timer (start_ms of zero) let a single
-// millisecond of skew flip a branch and return a value the size of the whole epoch.
+// Positive is time remaining, zero or below is time elapsed past zero. One reading matters: the
+// value and its sign have to come from the same instant.
 static int64_t prv_signed_value_ms(void) {
   if (timer_is_paused()) {
     // start_ms is the negative of how long the timer ran before it was paused
