@@ -12,7 +12,7 @@
       },
       {
         "type": "text",
-        "defaultValue": "Timer++ normally redraws every second. Refreshing less often while the timer is a long way from zero saves battery; digits that are no longer refreshed show as _, so what you read is always right."
+        "defaultValue": "Redrawing every second is what uses the battery. These settings redraw less often while the time is a long way from zero; digits no longer being refreshed show as _ rather than a stale value."
       },
       {
         "type": "select",
@@ -34,7 +34,7 @@
         "type": "select",
         "messageKey": "minuteUpdatesAbove",
         "label": "Minute updates above",
-        "description": "Redraw once a minute from this far out, showing 5:__. Set at or inside the 10-second setting it takes over completely, so that setting switches itself off.",
+        "description": "Redraw once a minute from this far out, showing 5:__. Set at or below the 10-second setting, this takes over and switches that one off.",
         "serializeValueAs": "integer",
         "defaultValue": "255",
         "options": [
@@ -59,7 +59,7 @@
       },
       {
         "type": "text",
-        "defaultValue": "Counting down and counting up each have their own colour, both green to begin with. Set them apart and a timer that runs past zero changes colour as it turns into a stopwatch. The middle and the interval band are shaded from your choice, so the palette offers only colours that stay legible shaded."
+        "defaultValue": "Counting down and counting up each get their own colour, both green to start. Set them apart and a timer running past zero changes colour as it becomes a stopwatch. The middle and the interval band are shaded from your choice, so only colours that stay legible when shaded are offered."
       },
       {
         "type": "color",
