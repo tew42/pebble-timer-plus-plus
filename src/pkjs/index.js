@@ -1,3 +1,12 @@
+// @file index.js
+// @brief Configuration page glue
+//
+// Builds the Clay page from config.json and keeps the two update thresholds meaningful.
+//
+// @author Thomas Winkler (tew42)
+// @date September 3, 2026
+// @bugs No known bugs
+
 var Clay = require('@rebble/clay');
 var clayConfig = require('./config.json');
 

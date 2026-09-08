@@ -6,6 +6,7 @@
 //! which terminates program execution based on the state of a pointer.
 //!
 //! @author Eric D. Phillips
+//! @author Thomas Winkler (tew42) (single-reading epoch, teardown)
 //! @date August 29, 2015
 //! @bugs No known bugs
 

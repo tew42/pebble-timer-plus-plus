@@ -4,6 +4,8 @@
 // Contains the higher level logic code
 //
 // @author Eric D. Phillips
+// @author BrianEnders (touch controls)
+// @author Thomas Winkler (tew42) (refresh loop, wakeup fallback, settings and split)
 // @date August 27, 2015
 // @bugs No known bugs
 

@@ -1,16 +1,16 @@
 //! @file settings.h
 //! @brief User settings for reduced-frequency display updates
 //!
-//! Per-second updating is the baseline. Two coarser update modes can each be switched on by a
-//! threshold; a mode applies while the shown time is at or above its threshold. The seconds
-//! digits which are no longer being refreshed are masked with TEXT_RENDER_PLACEHOLDER_CHAR.
+//! Per-second updating is the baseline. Two coarser modes each switch on at a threshold and apply
+//! at or above it, masking the seconds digits they no longer refresh with
+//! TEXT_RENDER_PLACEHOLDER_CHAR. Settings arrive from a Clay configuration page and are cached in
+//! persistent storage.
 //!
-//! Every function here works on the value as the digits show it, timer_get_display_ms(), not the
-//! exact one. That is what puts a change of cadence on a boundary between two shown times rather
-//! than in the middle of one.
+//! Everything here works on the value the digits show, timer_get_display_ms(), so a change of
+//! cadence lands on a boundary between two shown times rather than inside one.
 //!
-//! Settings arrive from a Clay configuration page and are cached in persistent storage.
-//!
+//! @author Thomas Winkler (tew42)
+//! @date September 3, 2026
 //! @bugs No known bugs
 
 #pragma once

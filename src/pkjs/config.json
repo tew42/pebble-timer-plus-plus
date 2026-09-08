@@ -1,7 +1,7 @@
 [
   {
     "type": "heading",
-    "defaultValue": "Timer+ Settings"
+    "defaultValue": "Timer++ Settings"
   },
   {
     "type": "section",
@@ -12,13 +12,13 @@
       },
       {
         "type": "text",
-        "defaultValue": "Timer+ normally redraws the time every second. Refreshing less often while the timer is a long way from zero saves battery. Seconds digits which are no longer being refreshed are shown as _."
+        "defaultValue": "Timer++ normally redraws every second. Refreshing less often while the timer is a long way from zero saves battery; digits that are no longer refreshed show as _, so what you read is always right."
       },
       {
         "type": "select",
         "messageKey": "tenSecondUpdatesAbove",
         "label": "10-second updates above",
-        "description": "Update every 10 seconds while the timer is this far from zero or further, showing 5:3_.",
+        "description": "Redraw every 10 seconds from this far out, showing 5:3_.",
         "serializeValueAs": "integer",
         "defaultValue": "255",
         "options": [
@@ -34,7 +34,7 @@
         "type": "select",
         "messageKey": "minuteUpdatesAbove",
         "label": "Minute updates above",
-        "description": "Update once a minute while the timer is this far from zero or further, showing 5:__. Set at or inside the 10-second setting, minute updates take over completely and the 10-second setting switches itself off.",
+        "description": "Redraw once a minute from this far out, showing 5:__. Set at or inside the 10-second setting it takes over completely, so that setting switches itself off.",
         "serializeValueAs": "integer",
         "defaultValue": "255",
         "options": [
@@ -59,7 +59,7 @@
       },
       {
         "type": "text",
-        "defaultValue": "Counting down and counting up each have their own colour. Both start green, as they always have been; set them apart and the two modes become easy to tell at a glance, with a timer that runs past zero changing colour as it turns into a stopwatch. The middle and the interval band are shaded from the colour you pick, so the palette holds the colours which stay legible once shaded."
+        "defaultValue": "Counting down and counting up each have their own colour, both green to begin with. Set them apart and a timer that runs past zero changes colour as it turns into a stopwatch. The middle and the interval band are shaded from your choice, so the palette offers only colours that stay legible shaded."
       },
       {
         "type": "color",

@@ -4,6 +4,7 @@
 //! Contains all the drawing code for this app.
 //!
 //! @author Eric D. Phillips
+//! @author Thomas Winkler (tew42) (reduced-frequency display, band, mode colours)
 //! @date August 29, 2015
 //! @bugs No known bugs
 

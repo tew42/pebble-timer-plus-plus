@@ -1,4 +1,4 @@
-// @file text_render.h
+// @file text_render.c
 // @brief Text rendering library to draw LECO font
 //
 // Library to draw LECO font at any size as well as to calculate the
@@ -7,6 +7,7 @@
 // All text in this library have half-size kerning on both sides of letters.
 //
 // @author Eric D. Phillips
+// @author Thomas Winkler (tew42) (placeholder glyph)
 // @bug No known bugs
 
 #include "text_render.h"

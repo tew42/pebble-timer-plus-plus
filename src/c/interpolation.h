@@ -6,7 +6,7 @@
 //!
 //! @author Eric D. Phillips
 //! @date October 31, 2015
-//! @bug No know bugs
+//! @bug No known bugs
 
 #pragma once
 #include <pebble.h>

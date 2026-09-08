@@ -1,4 +1,4 @@
-//! @file main.c
+//! @file main.h
 //! @brief Main logic for Timer++
 //!
 //! Contains the higher level logic code

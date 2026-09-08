@@ -1,9 +1,11 @@
 // @file settings.c
 // @brief User settings for reduced-frequency display updates
 //
-// Per-second updating is the baseline. Two coarser update modes can each be switched on by a
-// threshold; a mode applies while the shown time is at or above its threshold.
+// Per-second updating is the baseline. Two coarser modes each switch on at a threshold and apply
+// at or above it.
 //
+// @author Thomas Winkler (tew42)
+// @date September 3, 2026
 // @bugs No known bugs
 
 #include "settings.h"

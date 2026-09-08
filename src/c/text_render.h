@@ -7,6 +7,7 @@
 //! All text in this library have half-size kerning on both sides of letters.
 //!
 //! @author Eric D. Phillips
+//! @author Thomas Winkler (tew42) (placeholder glyph)
 //! @bug No known bugs
 
 #pragma once

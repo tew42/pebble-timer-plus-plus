@@ -5,7 +5,8 @@
 // a timer. Also saves and loads timers between closing and reopening.
 //
 // @author Eric D. Phillips
-// @data October 26, 2015
+// @author Thomas Winkler (tew42) (shown value, split, persistence)
+// @date October 26, 2015
 // @bugs No known bugs
 
 #include "timer.h"

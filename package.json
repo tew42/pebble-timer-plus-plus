@@ -1,7 +1,7 @@
 {
-  "name": "pebble-timer-plus",
-  "author": "Ycleptic Studios",
-  "version": "4.4.0",
+  "name": "timer-plus-plus",
+  "author": "Thomas Winkler",
+  "version": "1.0",
   "keywords": [
     "pebble-app"
   ],
@@ -11,8 +11,8 @@
     "pebble-scalable": "^2.2.0"
   },
   "pebble": {
-    "displayName": "Timer+",
-    "uuid": "17bf83aa-88a9-459a-a6e5-60aa60e1dc07",
+    "displayName": "Timer++",
+    "uuid": "c1a8292f-bf99-44ee-888c-517a7f2a48f1",
     "sdkVersion": "3",
     "enableMultiJS": true,
     "targetPlatforms": [
