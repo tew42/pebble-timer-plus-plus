@@ -90,6 +90,7 @@ static struct {
   GColor ring_color;                   //< Color of ring
   GColor band_color;                   //< Color of the ring within the current refresh interval
   GColor back_color;                   //< Color behind ring
+  bool accent_chrono;                  //< Whether the accent in force is the counting up one
 } drawing_data;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -347,20 +348,23 @@ static GColor prv_band_shade(GColor color, GColor back) {
   return prv_shift(color, -2);
 }
 
-// Whether the stopwatch accent applies
-// Only a running stopwatch gets it: a timer of zero length counts as one by its value alone, but
-// while that length is being set it is a timer, and it is the timer's colour which belongs there.
-static bool prv_chrono_accent(void) {
-  return timer_is_chrono() && main_get_control_mode() == ControlModeCounting;
-}
 #endif
 
 // Adopt the accent colour for the direction the timer is counting
+// Only a running stopwatch gets the counting up accent: a timer of zero length counts as one by
+// its value alone, but while that length is being set it is a timer, and it is the timer's colour
+// which belongs there. A reset holds on to the accent it was counting in until the ring has run
+// down, since the value is zero from the moment the button is released and recolouring an arc
+// which is still collapsing would hand the run that just ended the other direction's colour.
 // On one bit hardware there is nothing to choose, so the ring stays white and the dither in
 // prv_render_progress_ring carries the distinction instead
 static void prv_palette_update(void) {
 #ifndef PBL_BW
-  const GColor accent = GColorFromHEX(settings_accent_rgb(prv_chrono_accent()));
+  const bool counting = main_get_control_mode() == ControlModeCounting;
+  if (counting || drawing_data.progress_angle == 0) {
+    drawing_data.accent_chrono = counting && timer_is_chrono();
+  }
+  const GColor accent = GColorFromHEX(settings_accent_rgb(drawing_data.accent_chrono));
   drawing_data.ring_color = accent;
   drawing_data.mid_color = prv_shade(accent, 2);
   drawing_data.band_color = prv_band_shade(accent, drawing_data.back_color);
@@ -412,7 +416,6 @@ static void prv_progress_ring_update(void) {
   // corrects it
   const int64_t display_ms = timer_get_display_ms();
   const bool chrono = timer_is_chrono();
-  prv_palette_update();
   // the span the ring represents, and where the current refresh interval sits inside it
   // (a timer of zero length is always chrono, which keeps the timer branch off a zero span)
   const int64_t span_ms = chrono ? MSEC_IN_MIN : timer_get_length_ms();
@@ -544,6 +547,8 @@ void drawing_stop_reset_animation(void) {
 void drawing_render(Layer *layer, GContext *ctx) {
   // get properties
   GRect bounds = layer_get_bounds(layer);
+  // pick the accent, which the ring's own position can change part way through an animation
+  prv_palette_update();
   // draw background
   // this is actually the ring, which is then covered up with the background
   graphics_context_set_fill_color(ctx, drawing_data.ring_color);
