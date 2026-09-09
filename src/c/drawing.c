@@ -164,6 +164,8 @@ static void prv_render_header_text(GContext *ctx, GRect bounds) {
     buff = "Alarm";
   } else if (timer_is_split()) {
     buff = "Split";
+  } else if (main_is_peeking()) {
+    buff = "Peek";
   } else if (timer_is_chrono()) {
     buff = "Chrono";
   } else {
