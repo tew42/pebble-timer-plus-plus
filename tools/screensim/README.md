@@ -96,6 +96,15 @@ positioning modelled at arbitrary sizes, and the same in reverse when the stopwa
 The reset after the stopwatch collapses in red. That is the app as `prv_chrono_accent()` should
 behave, not as it did when this was built — see the commit that follows this one.
 
+## Previews
+
+`preview.py` renders `out/preview_coarse_reset.gif`: a stopwatch at `0:4_` with the interval shaded,
+then a reset. Neither reset in the committed animation carries a band — the first happens from the
+edit beat and the second from a five-second stopwatch — so this is the only rendering of what the
+shading does when a reset lands on it: it goes the moment the digits become exact, and the arc
+travels on alone from the exact reading. Useful for looking at behaviour before flashing a watch;
+not a screenshot of the app, and not for `assets/screenshots/`.
+
 ## Still to do
 
 The other four platforms: `basalt`, `aplite_diorite_flint`, `chalk`, `gabbro`. Each needs
