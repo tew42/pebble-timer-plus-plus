@@ -1,3 +1,4 @@
-frames/
-contact.png
+frames_*/
+layout/
+contact_*.png
 __pycache__/
