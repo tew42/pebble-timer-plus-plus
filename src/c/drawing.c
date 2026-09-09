@@ -211,9 +211,9 @@ static void prv_display_parts(uint16_t *hr, uint16_t *min, uint16_t *sec) {
 }
 
 // Get how many trailing seconds digits the display is holding back
-// Editing and a split both hold an exact time, so neither of them masks anything.
+// Editing, a split and a peek all show an exact time, so none of them masks anything.
 static uint8_t prv_masked_second_digits(void) {
-  if (main_get_control_mode() != ControlModeCounting || timer_is_split()) {
+  if (main_get_control_mode() != ControlModeCounting || timer_is_split() || main_is_peeking()) {
     return 0;
   }
   return settings_masked_second_digits(timer_get_display_ms());

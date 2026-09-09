@@ -19,6 +19,7 @@
 
 // Main constants
 #define BUTTON_HOLD_REPEAT_MS 100
+#define PEEK_DURATION_MS 1000
 #define SYSTEM_ENTRANCE_ANIMATION_MS 400
 // Wakeup scheduling
 // A wakeup is refused within a minute either side of another app's, so stepping clear of one
@@ -38,6 +39,7 @@ static struct {
 
 // Function declarations
 static void prv_app_timer_callback(void *data);
+static void prv_peek_end(void *data);
 static void prv_refresh_stop(void);
 static void prv_refresh_restart(void);
 
@@ -75,6 +77,31 @@ static bool prv_rewind_alert(void) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Callbacks
 //
+
+// Check whether a peek at the exact time is in progress
+bool main_is_peeking(void) { return main_data.peeking; }
+
+// Show the exact time for a moment
+// The coarse cadences hold digits back, and this is how to see them without disturbing the timer.
+// A moment is all it is: holding it would stop nothing, so it would go stale rather than wait.
+static void prv_peek_start(void) {
+  if (!settings_masked_second_digits(timer_get_display_ms())) {
+    return; // nothing is being held back, so there is nothing to reveal
+  }
+  if (main_data.peek_timer) {
+    app_timer_cancel(main_data.peek_timer);
+  }
+  main_data.peeking = true;
+  main_data.peek_timer = app_timer_register(PEEK_DURATION_MS, prv_peek_end, NULL);
+}
+
+// End a peek and put the masked digits back
+static void prv_peek_end(void *data) {
+  main_data.peek_timer = NULL;
+  main_data.peeking = false;
+  drawing_update();
+  layer_mark_dirty(main_data.layer);
+}
 
 // Get the current control mode of the timer
 // Not stored: the timer knows whether the clock is moving and this file knows where the buttons
@@ -191,16 +218,19 @@ static void prv_select_advance(void) {
 
 // What up and down do while the clock is running
 // Neither of them sets anything then, so both ask the same question in the direction the clock is
-// going: hold this reading, if it is a stopwatch which will run on without it.
+// going: show me exactly where you are.
 static void prv_reveal_exact_time(void) {
-  if (!timer_is_chrono()) {
+  if (timer_is_chrono()) {
+    // counting up, the clock runs on without the display, so the reading can be held: a split
+    if (timer_is_split()) {
+      timer_split_release();
+    } else {
+      timer_split_hold();
+    }
     return;
   }
-  if (timer_is_split()) {
-    timer_split_release();
-  } else {
-    timer_split_hold();
-  }
+  // counting down there is nothing to hold onto, so the exact time shows for a moment: a peek
+  prv_peek_start();
 }
 
 // Select click handler

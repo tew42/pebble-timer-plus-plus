@@ -28,3 +28,8 @@ typedef enum {
 //! Get the current control mode of the app
 //! @return The current ControlMode
 ControlMode main_get_control_mode(void);
+
+//! Check whether the exact time is being shown for a moment at the user's asking
+//! Up or down while counting down asks for it: nothing is masked while a peek lasts
+//! @return True if a peek is in progress
+bool main_is_peeking(void);
