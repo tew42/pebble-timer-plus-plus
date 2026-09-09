@@ -80,6 +80,7 @@ static struct {
   Layer *layer;                        //< The main layer being drawn on, used to force a refresh
   int32_t progress_angle;              //< Angle of the progress ring up to the last refresh
   int32_t band_angle;                  //< Angle the ring reaches by the next refresh
+  int32_t exact_angle;                 //< Angle the ring would reach with nothing masked
   bool show_band;                      //< Whether the refresh interval is worth showing
   DrawState draw_state;                //< An arbitrary description of the main drawing state
   GRect text_fields[TEXT_FIELD_COUNT]; //< The number of text fields (hr : min : sec)
@@ -441,6 +442,9 @@ static void prv_progress_ring_update(void) {
   // the interval is only worth showing while the seconds it covers are masked
   drawing_data.show_band = masked > 0;
   drawing_data.band_angle = TRIG_MAX_ANGLE * high_ms / span_ms;
+  // where the arc would end if the digits were exact, which is inside the interval and where an
+  // animated move starts from: the shading stands for a value the move has settled
+  drawing_data.exact_angle = TRIG_MAX_ANGLE * offset_ms / span_ms;
   // a scheduled refresh never animates, so the ring moves only when the digits do; jumps the user
   // caused go through drawing_update_animated() instead
   animation_stop(&drawing_data.progress_angle);
@@ -582,10 +586,18 @@ void drawing_update(void) {
 }
 
 // Update the drawing state, animating the progress ring to its new position
+// For the moves which are not the timer counting: a reset, or a rewind. A ring showing a coarse
+// interval travels from the exact reading rather than from the arc, and the interval itself is
+// gone by the first frame, since the move has settled what the masked digits stood for. Nothing
+// about the shading animates, and the arc never has to cross it.
 void drawing_update_animated(void) {
-  const int32_t from_angle = drawing_data.progress_angle;
+  const int32_t from_angle =
+      drawing_data.show_band ? drawing_data.exact_angle : drawing_data.progress_angle;
   drawing_update();
   const int32_t to_angle = drawing_data.progress_angle;
+  if (from_angle == to_angle) {
+    return; // nowhere to travel, and an animation which moves nothing still costs its frames
+  }
   // drawing_update() has already snapped the ring, so wind it back and travel there instead
   drawing_data.progress_angle = from_angle;
   animation_int32_start(&drawing_data.progress_angle, to_angle, PROGRESS_ANI_DURATION, 0,
@@ -601,6 +613,7 @@ void drawing_initialize(Layer *layer) {
   // set visual states
   drawing_data.progress_angle = 0;
   drawing_data.band_angle = 0;
+  drawing_data.exact_angle = 0;
   drawing_data.show_band = false;
   for (uint8_t ii = 0; ii < TEXT_FIELD_COUNT; ii++) {
     drawing_data.text_fields[ii].origin = grect_center_point(&bounds);

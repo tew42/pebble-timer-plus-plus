@@ -86,8 +86,9 @@ static void prv_back_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   } else {
     window_stack_pop(true);
   }
-  // refresh
-  drawing_update();
+  // refresh, travelling if the press rewound a timer which was going off; where it only moved the
+  // selected field the ring has nowhere to go and drawing_update_animated() snaps
+  drawing_update_animated();
   layer_mark_dirty(main_data.layer);
 }
 
@@ -128,11 +129,15 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.control_mode == ControlModeEditHr) {
     main_data.control_mode = ControlModeEditMin;
   }
-  // animate and refresh
+  // animate and refresh; setting the time snaps, as the counting does, but a rewind travels
   if (!click_recognizer_is_repeating(recognizer)) {
     drawing_start_bounce_animation(true);
   }
-  drawing_update();
+  if (rewinding) {
+    drawing_update_animated();
+  } else {
+    drawing_update();
+  }
   layer_mark_dirty(main_data.layer);
 }
 
@@ -224,16 +229,22 @@ static void prv_down_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   } else {
     increment = -MSEC_IN_SEC;
   }
+  // a press on a started stopwatch throws the run away instead of setting the time
+  const bool rewinding = timer_increment_rewinds();
   timer_increment(increment);
   // check if switched out of ControlModeEditHr
   if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.control_mode == ControlModeEditHr) {
     main_data.control_mode = ControlModeEditMin;
   }
-  // animate and refresh
+  // animate and refresh; setting the time snaps, as the counting does, but a rewind travels
   if (!click_recognizer_is_repeating(recognizer)) {
     drawing_start_bounce_animation(false);
   }
-  drawing_update();
+  if (rewinding) {
+    drawing_update_animated();
+  } else {
+    drawing_update();
+  }
   layer_mark_dirty(main_data.layer);
 }
 
@@ -330,7 +341,12 @@ static void on_click(int direction, int click_num, void *context) {
   if (click_num == 1) {
     drawing_start_bounce_animation(direction > 0);
   }
-  drawing_update();
+  // setting the time snaps, as the counting does, but a rewind travels
+  if (rewinding) {
+    drawing_update_animated();
+  } else {
+    drawing_update();
+  }
   layer_mark_dirty(main_data.layer);
 }
 
@@ -348,7 +364,7 @@ static void on_swipe(RotarySwipeDirection direction, void *context) {
   } else {
     window_stack_pop(true);
   }
-  drawing_update();
+  drawing_update_animated();
   layer_mark_dirty(main_data.layer);
 }
 
