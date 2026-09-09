@@ -1,16 +1,12 @@
 # Pebble Timer++
 
-A timer and stopwatch for the Pebble smartwatch, with battery life as the point: tell it how
-coarsely to show the time while it is a long way from zero and it stops waking every second to
-redraw. Digits it is no longer refreshing show as `_` rather than a stale value.
+A beautiful, simple timer/stopwatch for the Pebble smartwatch, now optimized battery life and more! 
 
-Also here: touch controls, a colour of its own for counting down and for counting up, and a split
-for the stopwatch. It runs in the background using the WakeUp API, so there is no need to keep the
-app open. Holding select resets at any point, and starting a timer from 0:00 turns it into a
-stopwatch.
+Tell it how coarsely to show the time while it is a long way from zero, and it stops redrawing every second - but if you want to take a peek at the exact time, you can. It also runs in the background using the WakeUp API, so there is no need to keep the app open
 
-A fork of [Timer+](https://github.com/YclepticStudios/pebble-timer-plus) by way of
-[BrianEnders's touch fork](https://github.com/BrianEnders/pebble-timer-plus-touch).
+Also here: touch controls, updated button controls including stopwatch split & edit, independent timer & stopwatch color configuration.
+
+A fork of [Timer+](https://github.com/YclepticStudios/pebble-timer-plus) by way of [BrianEnders's touch fork](https://github.com/BrianEnders/pebble-timer-plus-touch).
 
 |                             Aplite                              |                      Basalt                       |                      Chalk                      |                             Diorite                              |                      Emery                      |                             Flint                              |                      Gabbro                       |
 | :-------------------------------------------------------------: | :-----------------------------------------------: | :---------------------------------------------: | :--------------------------------------------------------------: | :---------------------------------------------: | :------------------------------------------------------------: | :-----------------------------------------------: |
@@ -25,16 +21,9 @@ A fork of [Timer+](https://github.com/YclepticStudios/pebble-timer-plus) by way 
 | Select, held | Reset to zero             | Reset to zero                     | Reset to zero                                   |
 | Back         | Back a field, or leave    | Leave                             | Leave                                           |
 
-Select is always the state change and a held select is always the reset; up and down set the time
-while it is stopped and ask for the exact one while it runs. Pausing keeps the time, including a
-stopwatch's, so it can be read, adjusted and started again.
+Select is always the state change and a held select is always the reset; up and down set the time while it is stopped and ask for the exact one while it runs. Pausing keeps the time, including a stopwatch's, so it can be read, adjusted and started again. When the timer alarm goes off, any button dismisses the vibration - with short-press select functioning as a rewind.
 
-The header says which of the two the watch is doing, and reads `Peek` or `Split` while a time is
-being shown exactly, or `Alarm` while a timer is going off. Any button stops the buzzing then and does nothing else by it —
-except select, which also hands back the time the timer was set to, and select held, which resets.
-
-On touch watches the click wheel turns for up and down, a tap in the centre acts as select, and a
-swipe left acts as back.
+On touch watches the click wheel turns for up and down, a tap in the centre acts as select, and a swipe left acts as back.
 
 ## Settings
 
@@ -50,22 +39,13 @@ remaining counting down and the time elapsed counting up:
 | `10-second updates above` | Redraw every 10 seconds from this far out | `5:3_`  |
 | `Minute updates above`    | Redraw once a minute from this far out    | `5:__`  |
 
-Both default to *Never*, the original once-a-second behaviour. Where they overlap the coarser one
-takes over, and the settings page switches the 10-second setting to *Never* to say so.
+Both default to *Never*, the original once-a-second behaviour. Where they overlap the coarser one takes over, and the settings page switches the 10-second setting to *Never* to say so.
 
-Live seconds always show while setting a timer, while paused, on a split, and for the twenty
-seconds an elapsed timer vibrates. Up or down asks for the exact time at any other point: counting
-down it shows for a second, counting up it holds until you let it go. On colour watches the
-progress ring shades the stretch the masked digits could mean, so it never claims to know more than
-they do.
+The progress ring shades the stretch the masked digits could mean, so it never claims to know more than they do. Live seconds always show for the last or first 20 seconds, when paused, or when using up or down buttons to peek (timer) or split (stopwatch). 
 
-### Colours
+### Colors
 
-Counting down and counting up each get their own accent, both green to start. Set them apart and a
-timer running past zero changes colour as it becomes a stopwatch, and a stopwatch keeps its colour
-while it is paused. Only the ring colour is chosen;
-the middle and the interval band are shaded from it, so only colours that stay legible when shaded
-are offered. Colour watches only.
+Counting down (timer) and counting up (stopwatch) each get their own accent, both green to start. Only the primary ring color is chosen; the middle and the interval band are shaded from it, so only colors that stay legible when shaded are offered. Color watches only.
 
 ## Building
 
