@@ -132,11 +132,10 @@ void timer_get_time_parts(uint16_t *hr, uint16_t *min, uint16_t *sec) {
 
 // Get the milliseconds the digits are not showing, where they are worth showing
 bool timer_get_held_fraction_ms(uint16_t *ms) {
-  if (!split_active && !(timer_is_paused() && timer_shows_run())) {
+  if (!split_active) {
     return false;
   }
-  const int64_t value_ms = split_active ? split_value_ms : timer_get_value_ms();
-  (*ms) = (uint16_t)(value_ms % MSEC_IN_SEC);
+  (*ms) = (uint16_t)(split_value_ms % MSEC_IN_SEC);
   return true;
 }
 

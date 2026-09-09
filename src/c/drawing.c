@@ -196,9 +196,10 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
   bounds.size.h = CIRCLE_RADIUS - FOOTER_Y_OFFSET;
   // calculate text
   char buff[10];
-  // a stopwatch reading held still is the one place the millisecond the clock keeps underneath is
-  // worth reading, and the footer is where there is room for it: the clock time it usually gives
-  // is the least of what the screen says, and it comes back the moment the reading moves again
+  // a split is the one place the millisecond the clock keeps underneath is worth reading -- a
+  // reading taken deliberately, of a clock which is still going -- and the footer is where there
+  // is room for it: the clock time it usually gives is the least of what the screen says, and it
+  // comes back the moment the split is let go
   uint16_t fraction_ms;
   if (timer_get_held_fraction_ms(&fraction_ms)) {
     snprintf(buff, sizeof(buff), ".%03d", fraction_ms);

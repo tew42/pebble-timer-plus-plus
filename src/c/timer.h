@@ -27,11 +27,11 @@ int64_t timer_get_display_ms(void);
 void timer_get_time_parts(uint16_t *hr, uint16_t *min, uint16_t *sec);
 
 //! Get the milliseconds the digits are not showing, where they are worth showing
-//! A stopwatch reading held still -- a split, or a paused run -- is the one place the millisecond
-//! the clock keeps underneath is worth reading: a moving reading is too fast to read, and a length
-//! being dialled has no fraction that means anything.
+//! A split is the one place the millisecond the clock keeps underneath is worth reading: it is a
+//! reading taken deliberately, of a clock which is still going. A moving reading is too fast to
+//! read, and a time which is being dialled is being written rather than read.
 //! @param ms A pointer to where to store the milliseconds, 0 to 999
-//! @return True if there is a fraction worth showing, in which case ms was written
+//! @return True if a split is being shown, in which case ms was written
 bool timer_get_held_fraction_ms(uint16_t *ms);
 
 //! Get the timer time in milliseconds
