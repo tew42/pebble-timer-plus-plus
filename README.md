@@ -49,9 +49,9 @@ Both default to *Never*, the original once-a-second behaviour. Where they overla
 takes over, and the settings page switches the 10-second setting to *Never* to say so.
 
 Live seconds always show while setting a timer, while paused, on a split, and for the twenty
-seconds an elapsed timer vibrates, so select brings the exact time back whenever you want it. On
-colour watches the progress ring shades the stretch the masked digits could mean, so it never
-claims to know more than they do.
+seconds an elapsed timer vibrates. So the exact time is always one press away: select pauses a
+countdown, and splits the stopwatch. On colour watches the progress ring shades the stretch the
+masked digits could mean, so it never claims to know more than they do.
 
 ### Colours
 
