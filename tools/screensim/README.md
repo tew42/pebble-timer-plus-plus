@@ -15,6 +15,7 @@ pip install pillow
 python3 decode.py capture/emery_animated.gif frames_emery   # 137 frames in, 51 that change
 python3 measure.py emery                                    # writes layout/emery.json
 python3 assemble.py                                         # writes out/*_animated.gif, all five
+python3 stills.py                                           # writes out/stills/*.png, three each
 python3 verify.py                                           # 150 checks, and contact_*.png to look at
 ```
 
@@ -140,6 +141,21 @@ pixels' worth. Every other glyph the captures show is exact at every size they u
 every counting frame in all five captures rebuilds pixel for pixel, which covers `0` and `4`
 through `9` at fonts 35, 48 and 50. Nothing composed here draws a `5` at 24. `1`, `2`, `3` and the
 placeholder are unverified at every size, because no capture contains them.
+
+## The three stills
+
+`assets/screenshots/` also carries three single frames per platform, and `stills.py` renders them
+from the same `Composer` the animation uses, so there is no second rendering path:
+
+| | |
+| --- | --- |
+| `<platform>_setting.png` | the timer set to a minute, a field boxed, the ring filled to match — the capture's own frame, verbatim |
+| `<platform>_counting.png` | the coarse cadence: `0:4_` with the trailing digit held back and the ring shading the ten seconds those digits could mean |
+| `<platform>_chrono.png` | five seconds of stopwatch in the second accent, counting up |
+
+Those three names are upstream's. What the originals showed cannot be read back here — they are
+Git LFS objects and this environment cannot fetch them — so these keep the names' meanings rather
+than reproducing them frame for frame.
 
 ## Previews
 
