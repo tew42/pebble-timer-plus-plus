@@ -157,9 +157,12 @@ static void prv_render_header_text(GContext *ctx, GRect bounds) {
   bounds.size.w = CIRCLE_RADIUS * 2;
   bounds.size.h = CIRCLE_RADIUS / 2;
   // draw text
-  // the header also says which of the two things select will do: hold the shown time, or pause
+  // the header names the state the buttons are acting on, so it says the alert before anything
+  // else: while it stands, select hands back the time the timer was set to
   char *buff;
-  if (timer_is_split()) {
+  if (timer_is_alerting()) {
+    buff = "Alarm";
+  } else if (timer_is_split()) {
     buff = "Split";
   } else if (timer_is_chrono()) {
     buff = "Chrono";

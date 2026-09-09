@@ -29,9 +29,9 @@ Select is always the state change and a held select is always the reset; up and 
 while it is stopped and ask for the exact one while it runs. Pausing keeps the time, including a
 stopwatch's, so it can be read, adjusted and started again.
 
-The header says which of the two the watch is doing, and reads `Split` while a time is held. While
-a timer is going off, any button stops the buzzing and does nothing else by it — except select,
-which also hands back the time the timer was set to, and select held, which resets.
+The header says which of the two the watch is doing, and reads `Split` while a time is held or
+`Alarm` while a timer is going off. Any button stops the buzzing then and does nothing else by it —
+except select, which also hands back the time the timer was set to, and select held, which resets.
 
 On touch watches the click wheel turns for up and down, a tap in the centre acts as select, and a
 swipe left acts as back.
