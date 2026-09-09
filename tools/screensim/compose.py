@@ -61,9 +61,13 @@ def _sep(a, b):
 
 
 def to_red(c):
-    """Swap the accent hue. Every colour in a capture is (a, b, a) with b >= a, so the red-accent
-    equivalent is (b, a, a): green and its blends move over, grey and black stay put."""
-    return (c[1], c[0], c[0]) if c[1] > c[0] and c[0] == c[2] else c
+    """Swap the accent hue: red and green trade places, which moves the accent and every blend of
+    it across and leaves grey and black where they are, since swapping equal channels is a no-op.
+
+    Testing the shape of the colour instead -- (a, b, a) with b >= a, which is what a GColor8 green
+    and its blends are -- misses the handful of colours a capture's own resampling leaves slightly
+    off that shape, and one green pixel in a red frame is a pixel you can see."""
+    return (c[1], c[0], c[2])
 
 
 def render(ch, size):
@@ -156,8 +160,13 @@ class Composer:
         except FileNotFoundError:
             return []
 
-    def _snap(self, colour):
-        return min(self.palette, key=lambda c: sum((c[k] - colour[k]) ** 2 for k in range(3)))
+    def _snap(self, colour, tones):
+        """The nearest colour this platform can actually show: one the capture contains, or one of
+        the tones being blended. The tones have to be candidates in their own right -- the coarse
+        interval's is not in any capture, so a rim pixel of it has no near neighbour there and
+        would otherwise snap to black, which is a hole in the ring you can see."""
+        return min(self.palette + list(tones),
+                   key=lambda c: sum((c[k] - colour[k]) ** 2 for k in range(3)))
 
     def arc_of(self, i):
         """Where the capture put the arc's edge, to the fraction of a degree: the last pixel of
@@ -223,7 +232,7 @@ class Composer:
                 else:
                     # a masked pixel's tones are already off GColor8's lattice, so the grid to
                     # land the mix of them back on is the capture's own set of colours
-                    p[x, y] = self._snap(mixed)
+                    p[x, y] = self._snap(mixed, tones)
 
     # -- painting on the middle circle ---------------------------------------------------------
 
