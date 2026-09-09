@@ -98,9 +98,22 @@ static struct {
 // Focus Layer
 //
 
+// Move one of the laid-out rects to where it belongs, travelling there or arriving outright
+// A layout has somewhere to travel from only when the fields it is made of are the same ones: when
+// the hours appear or go, the rect they need has no width to grow from and the rects beside them
+// change size as well as place, which reads as a glitch rather than as a move
+static void prv_place_field(GRect *field, GRect to, uint32_t duration, bool snap) {
+  if (snap) {
+    animation_stop(field);
+    (*field) = to;
+    return;
+  }
+  animation_grect_start(field, to, duration, 0, CurveSinEaseOut);
+}
+
 // Update focus layer drawing state
 static void prv_focus_layer_update_state(Layer *layer, GRect hr_bounds, GRect min_bounds,
-                                         GRect sec_bounds) {
+                                         GRect sec_bounds, bool snap) {
   // get properties
   GRect bounds = layer_get_bounds(layer);
   // check current control mode
@@ -111,8 +124,7 @@ static void prv_focus_layer_update_state(Layer *layer, GRect hr_bounds, GRect mi
     bounds.size.w = sec_bounds.size.w;
     bounds.size.h = sec_bounds.size.h / 2;
     // animate the focus layer
-    animation_grect_start(&drawing_data.focus_field, bounds, FOCUS_FIELD_ANI_DURATION, 0,
-                          CurveSinEaseOut);
+    prv_place_field(&drawing_data.focus_field, bounds, FOCUS_FIELD_ANI_DURATION, snap);
   } else {
     // get final bounds when in editing mode
     if (main_get_control_mode() == ControlModeEditHr) {
@@ -125,8 +137,7 @@ static void prv_focus_layer_update_state(Layer *layer, GRect hr_bounds, GRect mi
     // add border
     bounds = grect_inset(bounds, GEdgeInsets1(-FOCUS_FIELD_BORDER));
     // animate the focus field to those bounds
-    animation_grect_start(&drawing_data.focus_field, bounds, FOCUS_FIELD_ANI_DURATION, 0,
-                          CurveSinEaseOut);
+    prv_place_field(&drawing_data.focus_field, bounds, FOCUS_FIELD_ANI_DURATION, snap);
   }
 }
 
@@ -243,7 +254,7 @@ static void prv_format_text_fields(char buff[TEXT_FIELD_COUNT][6]) {
 }
 
 // Update main text drawing state
-static void prv_main_text_update_state(Layer *layer) {
+static void prv_main_text_update_state(Layer *layer, bool snap) {
   // get properties
   GRect bounds = layer_get_bounds(layer);
   bool edit_mode = main_get_control_mode() != ControlModeCounting;
@@ -277,12 +288,11 @@ static void prv_main_text_update_state(Layer *layer) {
   }
   // animate to new positions
   for (uint8_t ii = 0; ii < TEXT_FIELD_COUNT; ii++) {
-    animation_grect_start(&drawing_data.text_fields[ii], field_bounds[ii], TEXT_FIELD_ANI_DURATION,
-                          0, CurveSinEaseOut);
+    prv_place_field(&drawing_data.text_fields[ii], field_bounds[ii], TEXT_FIELD_ANI_DURATION, snap);
   }
 
   // update the focus layers
-  prv_focus_layer_update_state(layer, field_bounds[0], field_bounds[2], field_bounds[4]);
+  prv_focus_layer_update_state(layer, field_bounds[0], field_bounds[2], field_bounds[4], snap);
 }
 
 // Draw main text onto drawing context
@@ -491,9 +501,13 @@ static void prv_update_draw_state(Layer *layer) {
   // check for changes in the states of things
   DrawState cur_draw_state = prv_draw_state_create();
   if (!prv_text_state_compare(cur_draw_state, drawing_data.draw_state)) {
+    // the hours coming or going changes which fields there are, and the first layout of all has
+    // nothing to move from either: both arrive rather than travel
+    const bool snap = drawing_data.draw_state.hr_digits > 2 ||
+                      (cur_draw_state.hr_digits != 0) != (drawing_data.draw_state.hr_digits != 0);
     drawing_data.draw_state = cur_draw_state;
     // update text state
-    prv_main_text_update_state(layer);
+    prv_main_text_update_state(layer, snap);
   }
 }
 
