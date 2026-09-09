@@ -12,7 +12,12 @@
 
 #define BUTTON_HOLD_RESET_MS 750
 
+// Which field the buttons are pointed at while the time is being set
+typedef enum { FieldHr, FieldMin, FieldSec } Field;
+
 // Current control mode
+// Derived rather than stored: the timer says whether the clock is moving, and the field above
+// says where the buttons are pointed. See main_get_control_mode().
 typedef enum {
   ControlModeEditHr,
   ControlModeEditMin,

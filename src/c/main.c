@@ -30,10 +30,10 @@
 
 // Main data structure
 static struct {
-  Window *window;           //< The base window for the application
-  Layer *layer;             //< The base layer on which everything will be drawn
-  ControlMode control_mode; //< The current control mode of the timer
-  AppTimer *app_timer;      //< The AppTimer to keep the screen refreshing
+  Window *window;      //< The base window for the application
+  Layer *layer;        //< The base layer on which everything will be drawn
+  Field field;         //< Which field the buttons are pointed at
+  AppTimer *app_timer; //< The AppTimer to keep the screen refreshing
 } main_data;
 
 // Function declarations
@@ -50,7 +50,7 @@ static bool main_timer_rewind(void) {
   // check if timer is vibrating
   if (timer_is_vibrating()) {
     vibes_cancel();
-    main_data.control_mode = ControlModeEditSec;
+    main_data.field = FieldSec;
     timer_rewind();
     prv_refresh_stop();
     drawing_update_animated();
@@ -64,7 +64,21 @@ static bool main_timer_rewind(void) {
 //
 
 // Get the current control mode of the timer
-ControlMode main_get_control_mode(void) { return main_data.control_mode; }
+// Not stored: the timer knows whether the clock is moving and this file knows where the buttons
+// are pointed, and keeping a third copy of the answer only let the three disagree
+ControlMode main_get_control_mode(void) {
+  if (!timer_is_paused()) {
+    return ControlModeCounting;
+  }
+  switch (main_data.field) {
+  case FieldHr:
+    return ControlModeEditHr;
+  case FieldMin:
+    return ControlModeEditMin;
+  default:
+    return ControlModeEditSec;
+  }
+}
 
 // Background layer update procedure
 static void prv_layer_update_proc_handler(Layer *layer, GContext *ctx) {
@@ -80,9 +94,8 @@ static void prv_back_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   uint16_t hr, min, sec;
   timer_get_time_parts(&hr, &min, &sec);
   // change control mode
-  if ((hr && main_data.control_mode == ControlModeEditMin) ||
-      main_data.control_mode == ControlModeEditSec) {
-    main_data.control_mode--;
+  if (timer_is_paused() && ((hr && main_data.field == FieldMin) || main_data.field == FieldSec)) {
+    main_data.field--;
   } else {
     window_stack_pop(true);
   }
@@ -95,14 +108,14 @@ static void prv_back_click_handler(ClickRecognizerRef recognizer, void *ctx) {
 // Up click handler
 static void prv_up_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   // rewind timer if clicked while timer is going off
-  if (main_timer_rewind() || main_data.control_mode == ControlModeCounting) {
+  if (main_timer_rewind() || !timer_is_paused()) {
     return;
   }
   // increment timer
   int64_t increment;
-  if (main_data.control_mode == ControlModeEditHr) {
+  if (main_data.field == FieldHr) {
     increment = MSEC_IN_HR;
-  } else if (main_data.control_mode == ControlModeEditMin) {
+  } else if (main_data.field == FieldMin) {
     increment = MSEC_IN_MIN;
   } else {
     increment = MSEC_IN_SEC;
@@ -117,11 +130,11 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   timer_get_time_parts(&n_hr, &n_min, &n_sec);
   if (o_min > n_min && !o_hr) {
     timer_increment(MSEC_IN_HR);
-    main_data.control_mode = ControlModeEditHr;
+    main_data.field = FieldHr;
   }
   // check if switched out of ControlModeEditHr
-  if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.control_mode == ControlModeEditHr) {
-    main_data.control_mode = ControlModeEditMin;
+  if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.field == FieldHr) {
+    main_data.field = FieldMin;
   }
   // animate and refresh
   if (!click_recognizer_is_repeating(recognizer)) {
@@ -136,32 +149,31 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *ctx) {
 // edit mode, where the length can be changed; counting up it takes a split, holding the shown
 // time while the stopwatch runs on, because pausing a stopwatch would throw away real time.
 static void prv_select_advance(void) {
-  switch (main_data.control_mode) {
-  case ControlModeEditHr:
-    main_data.control_mode = ControlModeEditMin;
-    break;
-  case ControlModeEditMin:
-    main_data.control_mode = ControlModeEditSec;
-    break;
-  case ControlModeEditSec:
-    main_data.control_mode = ControlModeCounting;
-    timer_toggle_play_pause();
-    prv_refresh_restart();
-    break;
-  case ControlModeCounting:
-    if (timer_is_chrono()) {
-      if (timer_is_split()) {
-        timer_split_release();
-      } else {
-        timer_split_hold();
-      }
+  if (timer_is_paused()) {
+    // through the fields, and from the last of them the clock starts
+    if (main_data.field == FieldHr) {
+      main_data.field = FieldMin;
+    } else if (main_data.field == FieldMin) {
+      main_data.field = FieldSec;
     } else {
-      main_data.control_mode = ControlModeEditSec;
       timer_toggle_play_pause();
-      prv_refresh_stop();
+      prv_refresh_restart();
     }
-    break;
+    return;
   }
+  if (timer_is_chrono()) {
+    // counting up: hold the shown time, or let a held one go
+    if (timer_is_split()) {
+      timer_split_release();
+    } else {
+      timer_split_hold();
+    }
+    return;
+  }
+  // counting down: pause, back to the seconds field
+  main_data.field = FieldSec;
+  timer_toggle_play_pause();
+  prv_refresh_stop();
 }
 
 // Select click handler
@@ -194,7 +206,7 @@ static void prv_select_raw_release_handler(ClickRecognizerRef recognizer, void *
 
 // Select long click handler
 static void prv_select_long_click_handler(ClickRecognizerRef recognizer, void *ctx) {
-  main_data.control_mode = ControlModeEditMin;
+  main_data.field = FieldMin;
   timer_reset();
   prv_refresh_stop();
   // the hold has done what it was hinting at, so the focus layer returns to full size now
@@ -207,22 +219,22 @@ static void prv_select_long_click_handler(ClickRecognizerRef recognizer, void *c
 // Down click handler
 static void prv_down_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   // rewind timer if clicked while timer is going off
-  if (main_timer_rewind() || main_data.control_mode == ControlModeCounting) {
+  if (main_timer_rewind() || !timer_is_paused()) {
     return;
   }
   // increment timer
   int64_t increment;
-  if (main_data.control_mode == ControlModeEditHr) {
+  if (main_data.field == FieldHr) {
     increment = -MSEC_IN_HR;
-  } else if (main_data.control_mode == ControlModeEditMin) {
+  } else if (main_data.field == FieldMin) {
     increment = -MSEC_IN_MIN;
   } else {
     increment = -MSEC_IN_SEC;
   }
   timer_increment(increment);
   // check if switched out of ControlModeEditHr
-  if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.control_mode == ControlModeEditHr) {
-    main_data.control_mode = ControlModeEditMin;
+  if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.field == FieldHr) {
+    main_data.field = FieldMin;
   }
   // animate and refresh
   if (!click_recognizer_is_repeating(recognizer)) {
@@ -252,7 +264,7 @@ static void prv_app_timer_callback(void *data) {
   timer_check_elapsed();
   // schedule next call, landing on the exact instant the shown time changes
   main_data.app_timer = NULL;
-  if (main_data.control_mode == ControlModeCounting) {
+  if (!timer_is_paused()) {
     uint32_t duration = settings_next_refresh_ms(timer_get_value_ms(), timer_is_chrono());
     main_data.app_timer = app_timer_register(duration, prv_app_timer_callback, NULL);
   }
@@ -289,14 +301,14 @@ static void prv_settings_updated(void) {
 
 static void on_click(int direction, int click_num, void *context) {
   // rewind timer if it's currently going off
-  if (main_timer_rewind() || main_data.control_mode == ControlModeCounting) {
+  if (main_timer_rewind() || !timer_is_paused()) {
     return;
   }
   // CW (+1) = increment (like UP), CCW (-1) = decrement (like DOWN)
   int64_t increment;
-  if (main_data.control_mode == ControlModeEditHr) {
+  if (main_data.field == FieldHr) {
     increment = (int64_t)direction * MSEC_IN_HR;
-  } else if (main_data.control_mode == ControlModeEditMin) {
+  } else if (main_data.field == FieldMin) {
     increment = (int64_t)direction * MSEC_IN_MIN;
   } else {
     increment = (int64_t)direction * MSEC_IN_SEC;
@@ -311,12 +323,12 @@ static void on_click(int direction, int click_num, void *context) {
     timer_get_time_parts(&n_hr, &n_min, &n_sec);
     if (o_min > n_min && !o_hr) {
       timer_increment(MSEC_IN_HR);
-      main_data.control_mode = ControlModeEditHr;
+      main_data.field = FieldHr;
     }
   }
   // drop out of EditHr if hours are now zero
-  if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.control_mode == ControlModeEditHr) {
-    main_data.control_mode = ControlModeEditMin;
+  if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.field == FieldHr) {
+    main_data.field = FieldMin;
   }
   // only trigger the bounce animation on the first detent of a gesture
   if (click_num == 1) {
@@ -334,9 +346,8 @@ static void on_swipe(RotarySwipeDirection direction, void *context) {
   main_timer_rewind();
   uint16_t hr, min, sec;
   timer_get_time_parts(&hr, &min, &sec);
-  if ((hr && main_data.control_mode == ControlModeEditMin) ||
-      main_data.control_mode == ControlModeEditSec) {
-    main_data.control_mode--;
+  if (timer_is_paused() && ((hr && main_data.field == FieldMin) || main_data.field == FieldSec)) {
+    main_data.field--;
   } else {
     window_stack_pop(true);
   }
@@ -371,19 +382,11 @@ static void prv_initialize(void) {
   // load timer and settings
   timer_persist_read();
   settings_initialize(prv_settings_updated);
-  // set initial states
-  if (timer_is_paused()) {
-    // get time parts
-    uint16_t hr, min, sec;
-    timer_get_time_parts(&hr, &min, &sec);
-    if (hr) {
-      main_data.control_mode = ControlModeEditHr;
-    } else {
-      main_data.control_mode = ControlModeEditMin;
-    }
-  } else {
-    main_data.control_mode = ControlModeCounting;
-  }
+  // point the buttons at the coarsest field the stored time uses; whether that shows at all is
+  // the timer's business, and main_get_control_mode() asks it
+  uint16_t hr, min, sec;
+  timer_get_time_parts(&hr, &min, &sec);
+  main_data.field = hr ? FieldHr : FieldMin;
 
   // initialize window
   main_data.window = window_create();
