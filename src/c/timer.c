@@ -197,8 +197,12 @@ void timer_check_elapsed(void) {
 // Increment timer value currently being edited
 // The edit is on the time the digits show, so it reads the same in either direction: a stopwatch
 // reading and a timer reading are both just the number on the screen.
-void timer_increment(int64_t increment) {
-  // identify increment class
+// A field wraps inside its own place -- seconds roll over at a minute, minutes at an hour -- and
+// `carry` says to take the next place up instead of wrapping. Asking for it here rather than
+// following the wrap with a second increment matters: the way from 59 minutes to an hour passes
+// through zero, and a stopwatch run is not a run any more once it gets there.
+bool timer_increment(int64_t increment, bool carry) {
+  // identify increment class, which is also the place the field wraps inside
   int64_t interval;
   if (llabs(increment) < MSEC_IN_MIN) {
     interval = MSEC_IN_MIN;
@@ -207,12 +211,14 @@ void timer_increment(int64_t increment) {
   } else {
     interval = MSEC_IN_HR * 100;
   }
-  // each field wraps inside its own place rather than carrying, so seconds roll over at a minute
-  // and main.c decides whether a carry is what the user meant
   const int64_t value_ms = timer_get_value_ms();
   const int64_t place_ms = value_ms % interval;
   const int64_t step_ms = (place_ms + interval + increment) % interval - place_ms;
-  prv_set_display_value_ms(value_ms + step_ms);
+  // the step turning back on the increment is the field having run past its top or its bottom
+  const bool wrapped = (increment > 0) ? (step_ms < 0) : (step_ms > 0);
+  const bool carried = carry && wrapped;
+  const int64_t carry_ms = carried ? ((increment > 0) ? interval : -interval) : 0;
+  prv_set_display_value_ms(value_ms + step_ms + carry_ms);
   // if at zero, remove any leftover milliseconds
   if (timer_get_value_ms() < MSEC_IN_SEC) {
     timer_reset();
@@ -221,6 +227,7 @@ void timer_increment(int64_t increment) {
   if (timer_data.target_ms) {
     timer_data.can_vibrate = true;
   }
+  return carried;
 }
 
 // Toggle play pause state for timer

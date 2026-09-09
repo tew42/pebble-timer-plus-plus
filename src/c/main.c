@@ -147,6 +147,33 @@ static void prv_back_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   layer_mark_dirty(main_data.layer);
 }
 
+// Move the selected field by one step in the given direction
+// Shared by the two buttons and the touch screen, which differ only in how they animate. The
+// carry into hours is the timer's to make so that the value never passes through zero on the way:
+// a stopwatch run dialled from 59 minutes up to an hour stays a run.
+static void prv_step_selected_field(int direction) {
+  uint16_t hr, min, sec;
+  timer_get_time_parts(&hr, &min, &sec);
+  int64_t place_ms;
+  if (main_data.field == FieldHr) {
+    place_ms = MSEC_IN_HR;
+  } else if (main_data.field == FieldMin) {
+    place_ms = MSEC_IN_MIN;
+  } else {
+    place_ms = MSEC_IN_SEC;
+  }
+  // minutes carry into hours where there are none yet, and only upwards: dialling down has always
+  // wrapped inside the hour rather than borrowing from it
+  const bool carry = direction > 0 && main_data.field == FieldMin && !hr;
+  if (timer_increment((int64_t)direction * place_ms, carry)) {
+    main_data.field = FieldHr;
+  }
+  // drop back out of the hours field once there are no hours
+  if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.field == FieldHr) {
+    main_data.field = FieldMin;
+  }
+}
+
 // Up click handler
 static void prv_up_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   // the press which stops the buzzing does nothing else
@@ -160,31 +187,7 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *ctx) {
     layer_mark_dirty(main_data.layer);
     return;
   }
-  // increment timer
-  int64_t increment;
-  if (main_data.field == FieldHr) {
-    increment = MSEC_IN_HR;
-  } else if (main_data.field == FieldMin) {
-    increment = MSEC_IN_MIN;
-  } else {
-    increment = MSEC_IN_SEC;
-  }
-  // get starting time components
-  uint16_t o_hr, o_min, o_sec;
-  timer_get_time_parts(&o_hr, &o_min, &o_sec);
-  // increment timer
-  timer_increment(increment);
-  // compare final time parts and switch into edit hr mode
-  uint16_t n_hr, n_min, n_sec;
-  timer_get_time_parts(&n_hr, &n_min, &n_sec);
-  if (o_min > n_min && !o_hr) {
-    timer_increment(MSEC_IN_HR);
-    main_data.field = FieldHr;
-  }
-  // drop back out of the hours field once there are no hours
-  if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.field == FieldHr) {
-    main_data.field = FieldMin;
-  }
+  prv_step_selected_field(1);
   // animate and refresh
   if (!click_recognizer_is_repeating(recognizer)) {
     drawing_start_bounce_animation(true);
@@ -287,20 +290,7 @@ static void prv_down_click_handler(ClickRecognizerRef recognizer, void *ctx) {
     layer_mark_dirty(main_data.layer);
     return;
   }
-  // increment timer
-  int64_t increment;
-  if (main_data.field == FieldHr) {
-    increment = -MSEC_IN_HR;
-  } else if (main_data.field == FieldMin) {
-    increment = -MSEC_IN_MIN;
-  } else {
-    increment = -MSEC_IN_SEC;
-  }
-  timer_increment(increment);
-  // drop back out of the hours field once there are no hours
-  if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.field == FieldHr) {
-    main_data.field = FieldMin;
-  }
+  prv_step_selected_field(-1);
   // animate and refresh
   if (!click_recognizer_is_repeating(recognizer)) {
     drawing_start_bounce_animation(false);
@@ -376,32 +366,8 @@ static void on_click(int direction, int click_num, void *context) {
     layer_mark_dirty(main_data.layer);
     return;
   }
-  // CW (+1) = increment (like UP), CCW (-1) = decrement (like DOWN)
-  int64_t increment;
-  if (main_data.field == FieldHr) {
-    increment = (int64_t)direction * MSEC_IN_HR;
-  } else if (main_data.field == FieldMin) {
-    increment = (int64_t)direction * MSEC_IN_MIN;
-  } else {
-    increment = (int64_t)direction * MSEC_IN_SEC;
-  }
-  // capture pre-increment components to detect minute→hour rollover
-  uint16_t o_hr, o_min, o_sec;
-  timer_get_time_parts(&o_hr, &o_min, &o_sec);
-  timer_increment(increment);
-  // if incrementing, check for minute rollover into hours
-  if (direction > 0) {
-    uint16_t n_hr, n_min, n_sec;
-    timer_get_time_parts(&n_hr, &n_min, &n_sec);
-    if (o_min > n_min && !o_hr) {
-      timer_increment(MSEC_IN_HR);
-      main_data.field = FieldHr;
-    }
-  }
-  // drop back out of the hours field once there are no hours
-  if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.field == FieldHr) {
-    main_data.field = FieldMin;
-  }
+  // CW (+1) steps like up, CCW (-1) like down
+  prv_step_selected_field(direction);
   // only trigger the bounce animation on the first detent of a gesture
   if (click_num == 1) {
     drawing_start_bounce_animation(direction > 0);

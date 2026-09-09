@@ -75,8 +75,14 @@ bool timer_is_paused(void);
 void timer_check_elapsed(void);
 
 //! Increment timer value currently being edited
-//! @param increment The amount to increment by
-void timer_increment(int64_t increment);
+//! A field wraps inside its own place: seconds roll over at a minute and minutes at an hour. The
+//! carry is of one of that place, so there is none to ask for on the hours field.
+//! @param increment The amount to increment by, which also says which field is being set
+//! @param carry True to take the next place up where the field runs past its top or bottom,
+//!   rather than wrapping inside it. Worth asking for here rather than adding the next place
+//!   afterwards: the wrap goes through zero, and a stopwatch run stops being one there.
+//! @return True if the carry was made, so the caller can point the buttons at the new field
+bool timer_increment(int64_t increment, bool carry);
 
 //! Toggle play pause state for timer
 void timer_toggle_play_pause(void);
