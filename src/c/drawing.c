@@ -361,9 +361,13 @@ static GColor prv_band_shade(GColor color, GColor back) {
 // prv_render_progress_ring carries the distinction instead
 static void prv_palette_update(void) {
 #ifndef PBL_BW
-  const bool counting = main_get_control_mode() == ControlModeCounting;
-  if (counting || drawing_data.progress_angle == 0) {
-    drawing_data.accent_chrono = counting && timer_is_chrono();
+  // the accent belongs to what the time on the screen is, not to whether it is moving: a
+  // stopwatch run keeps the counting up colour while it is held, and a timer waiting to be
+  // started keeps the timer's. Zero is a timer, which is where a length is dialled from.
+  // A reset is the one thing which gets ahead of the ring -- the value is zero from the moment
+  // the button comes up -- so the accent waits there until the arc has run down.
+  if (timer_get_value_ms() > 0 || drawing_data.progress_angle == 0) {
+    drawing_data.accent_chrono = timer_shows_run();
   }
   const GColor accent = GColorFromHEX(settings_accent_rgb(drawing_data.accent_chrono));
   drawing_data.ring_color = accent;

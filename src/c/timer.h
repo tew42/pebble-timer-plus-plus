@@ -31,9 +31,19 @@ int64_t timer_get_value_ms(void);
 //! @return The total value of the timer in milliseconds
 int64_t timer_get_length_ms(void);
 
+//! Check whether the timer has just elapsed and is still owed its alert
+//! The alert is a state as well as a noise: while it stands, select hands the set time back
+//! @return True if the timer is inside its alert window
+bool timer_is_alerting(void);
+
 //! Check if the timer is vibrating
 //! @return True if the timer is currently vibrating
 bool timer_is_vibrating(void);
+
+//! Call off the buzzing without ending the alert
+//! Any button stops the noise; leaving the alert standing keeps the next press free to mean what
+//! it usually means
+void timer_silence(void);
 
 //! Check if timer is in stopwatch mode
 //! @return True if it is counting up as a stopwatch

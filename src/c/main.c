@@ -45,18 +45,31 @@ static void prv_refresh_restart(void);
 // Private Functions
 //
 
-// Rewind timer if button is clicked to stop vibration
-static bool main_timer_rewind(void) {
-  // check if timer is vibrating
-  if (timer_is_vibrating()) {
-    vibes_cancel();
-    main_data.field = FieldSec;
-    timer_rewind();
-    prv_refresh_stop();
-    drawing_update_animated();
-    return true;
+// Stop the buzzing if the timer is sounding its alert
+// Any button does this much, and the press which does it means nothing else. The alert itself
+// stands, so the next press means what it usually would -- and select can still hand the set time
+// back for as long as the window lasts.
+static bool prv_silence_alert(void) {
+  if (!timer_is_vibrating()) {
+    return false;
   }
-  return false;
+  vibes_cancel();
+  timer_silence();
+  return true;
+}
+
+// Put the timer back to the time it was set to, if it is inside its alert window
+// This is select's job at the alert: the timer is ready to run again, held, on the seconds field
+static bool prv_rewind_alert(void) {
+  if (!timer_is_alerting()) {
+    return false;
+  }
+  prv_silence_alert();
+  main_data.field = FieldSec;
+  timer_rewind();
+  prv_refresh_stop();
+  drawing_update_animated();
+  return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -88,8 +101,11 @@ static void prv_layer_update_proc_handler(Layer *layer, GContext *ctx) {
 
 // Back click handler
 static void prv_back_click_handler(ClickRecognizerRef recognizer, void *ctx) {
-  // cancel vibrations
-  main_timer_rewind();
+  // the press which stops the buzzing does nothing else
+  if (prv_silence_alert()) {
+    layer_mark_dirty(main_data.layer);
+    return;
+  }
   // get time parts
   uint16_t hr, min, sec;
   timer_get_time_parts(&hr, &min, &sec);
@@ -99,16 +115,22 @@ static void prv_back_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   } else {
     window_stack_pop(true);
   }
-  // refresh, travelling if the press rewound a timer which was going off; where it only moved the
-  // selected field the ring has nowhere to go and drawing_update_animated() snaps
-  drawing_update_animated();
+  // the ring does not move for this: the alert's rewind is select's now
+  drawing_update();
   layer_mark_dirty(main_data.layer);
 }
 
 // Up click handler
 static void prv_up_click_handler(ClickRecognizerRef recognizer, void *ctx) {
-  // rewind timer if clicked while timer is going off
-  if (main_timer_rewind() || !timer_is_paused()) {
+  // the press which stops the buzzing does nothing else
+  if (prv_silence_alert()) {
+    layer_mark_dirty(main_data.layer);
+    return;
+  }
+  if (!timer_is_paused()) {
+    prv_reveal_exact_time();
+    drawing_update();
+    layer_mark_dirty(main_data.layer);
     return;
   }
   // increment timer
@@ -132,7 +154,7 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *ctx) {
     timer_increment(MSEC_IN_HR);
     main_data.field = FieldHr;
   }
-  // check if switched out of ControlModeEditHr
+  // drop back out of the hours field once there are no hours
   if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.field == FieldHr) {
     main_data.field = FieldMin;
   }
@@ -161,25 +183,31 @@ static void prv_select_advance(void) {
     }
     return;
   }
-  if (timer_is_chrono()) {
-    // counting up: hold the shown time, or let a held one go
-    if (timer_is_split()) {
-      timer_split_release();
-    } else {
-      timer_split_hold();
-    }
-    return;
-  }
-  // counting down: pause, back to the seconds field
+  // counting, either way: pause, back to the seconds field
   main_data.field = FieldSec;
   timer_toggle_play_pause();
   prv_refresh_stop();
 }
 
+// What up and down do while the clock is running
+// Neither of them sets anything then, so both ask the same question in the direction the clock is
+// going: hold this reading, if it is a stopwatch which will run on without it.
+static void prv_reveal_exact_time(void) {
+  if (!timer_is_chrono()) {
+    return;
+  }
+  if (timer_is_split()) {
+    timer_split_release();
+  } else {
+    timer_split_hold();
+  }
+}
+
 // Select click handler
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *ctx) {
-  // rewind timer if clicked while timer is going off
-  if (main_timer_rewind()) {
+  // at the alert, select hands the time back rather than advancing
+  if (prv_rewind_alert()) {
+    layer_mark_dirty(main_data.layer);
     return;
   }
   prv_select_advance();
@@ -190,8 +218,8 @@ static void prv_select_click_handler(ClickRecognizerRef recognizer, void *ctx) {
 
 // Select raw click handler
 static void prv_select_raw_click_handler(ClickRecognizerRef recognizer, void *ctx) {
-  // stop vibration
-  vibes_cancel();
+  // stop the buzzing on the way down, before the press has decided what it is
+  prv_silence_alert();
   // animate and refresh
   drawing_start_reset_animation();
   layer_mark_dirty(main_data.layer);
@@ -218,8 +246,15 @@ static void prv_select_long_click_handler(ClickRecognizerRef recognizer, void *c
 
 // Down click handler
 static void prv_down_click_handler(ClickRecognizerRef recognizer, void *ctx) {
-  // rewind timer if clicked while timer is going off
-  if (main_timer_rewind() || !timer_is_paused()) {
+  // the press which stops the buzzing does nothing else
+  if (prv_silence_alert()) {
+    layer_mark_dirty(main_data.layer);
+    return;
+  }
+  if (!timer_is_paused()) {
+    prv_reveal_exact_time();
+    drawing_update();
+    layer_mark_dirty(main_data.layer);
     return;
   }
   // increment timer
@@ -232,7 +267,7 @@ static void prv_down_click_handler(ClickRecognizerRef recognizer, void *ctx) {
     increment = -MSEC_IN_SEC;
   }
   timer_increment(increment);
-  // check if switched out of ControlModeEditHr
+  // drop back out of the hours field once there are no hours
   if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.field == FieldHr) {
     main_data.field = FieldMin;
   }
@@ -300,8 +335,15 @@ static void prv_settings_updated(void) {
 }
 
 static void on_click(int direction, int click_num, void *context) {
-  // rewind timer if it's currently going off
-  if (main_timer_rewind() || !timer_is_paused()) {
+  // the detent which stops the buzzing does nothing else
+  if (prv_silence_alert()) {
+    layer_mark_dirty(main_data.layer);
+    return;
+  }
+  if (!timer_is_paused()) {
+    prv_reveal_exact_time();
+    drawing_update();
+    layer_mark_dirty(main_data.layer);
     return;
   }
   // CW (+1) = increment (like UP), CCW (-1) = decrement (like DOWN)
@@ -326,7 +368,7 @@ static void on_click(int direction, int click_num, void *context) {
       main_data.field = FieldHr;
     }
   }
-  // drop out of EditHr if hours are now zero
+  // drop back out of the hours field once there are no hours
   if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.field == FieldHr) {
     main_data.field = FieldMin;
   }
@@ -343,7 +385,10 @@ static void on_swipe(RotarySwipeDirection direction, void *context) {
     return;
   }
   // mirrors prv_back_click_handler
-  main_timer_rewind();
+  if (prv_silence_alert()) {
+    layer_mark_dirty(main_data.layer);
+    return;
+  }
   uint16_t hr, min, sec;
   timer_get_time_parts(&hr, &min, &sec);
   if (timer_is_paused() && ((hr && main_data.field == FieldMin) || main_data.field == FieldSec)) {
@@ -351,13 +396,14 @@ static void on_swipe(RotarySwipeDirection direction, void *context) {
   } else {
     window_stack_pop(true);
   }
-  drawing_update_animated();
+  drawing_update();
   layer_mark_dirty(main_data.layer);
 }
 
 static void on_center_tap(void *context) {
   // mirrors prv_select_click_handler
-  if (main_timer_rewind()) {
+  if (prv_rewind_alert()) {
+    layer_mark_dirty(main_data.layer);
     return;
   }
   prv_select_advance();

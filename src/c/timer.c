@@ -57,6 +57,12 @@ static bool split_active;
 // the alert window already past has still to sound it once.
 static bool has_vibrated;
 
+// Whether the buzzing has been called off. The alert is two things: a state -- the timer has just
+// elapsed, and select will hand the set time back -- and a noise. Any button stops the noise, so
+// this silences that without ending the state, which is what leaves the next press free to mean
+// what it usually means.
+static bool silenced;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // API Functions
 //
@@ -128,10 +134,16 @@ int64_t timer_get_value_ms(void) {
 // Get the total timer time in milliseconds
 int64_t timer_get_length_ms(void) { return timer_data.target_ms; }
 
-// Check if the timer is vibrating
-bool timer_is_vibrating(void) {
+// Check whether the timer has just elapsed and is still owed its alert
+bool timer_is_alerting(void) {
   return timer_is_chrono() && !timer_is_paused() && timer_data.can_vibrate;
 }
+
+// Check if the timer is vibrating
+bool timer_is_vibrating(void) { return timer_is_alerting() && !silenced; }
+
+// Call off the buzzing, leaving the alert itself standing
+void timer_silence(void) { silenced = true; }
 
 // Check if timer is in stopwatch mode
 bool timer_is_chrono(void) { return prv_signed_value_ms() <= 0; }
@@ -208,6 +220,10 @@ void timer_increment(int64_t increment) {
 // Toggle play pause state for timer
 // The run carries across the change, in whichever form the anchor then takes
 void timer_toggle_play_pause(void) {
+  // a hold is a display state, and stopping or starting the clock ends it: what is shown when the
+  // clock is not moving should be the time itself
+  timer_split_release();
+  silenced = false;
   const int64_t elapsed_ms = prv_elapsed_ms();
   timer_data.running = !timer_data.running;
   prv_set_elapsed_ms(elapsed_ms);
@@ -217,6 +233,7 @@ void timer_toggle_play_pause(void) {
 // The run is given back and the clock stops, so this lands where a timer waiting to be started is
 void timer_rewind(void) {
   timer_split_release();
+  silenced = false;
   timer_data.running = false;
   prv_set_elapsed_ms(0);
   // enable vibration
@@ -228,6 +245,7 @@ void timer_rewind(void) {
 // Reset the timer to zero
 void timer_reset(void) {
   timer_split_release();
+  silenced = false;
   timer_data.target_ms = 0;
   timer_data.running = false;
   prv_set_elapsed_ms(0);
