@@ -31,8 +31,10 @@ void animation_grect_start(GRect *ptr, GRect to, uint32_t duration, uint32_t del
 void animation_int32_start(int32_t *ptr, int32_t to, uint32_t duration, uint32_t delay,
                            InterpolationCurve interpolation);
 
-//! Cancel an animation by its pointer
-//! @param ptr A pointer for which to cancel an animation
+//! Cancel every animation on a value, by its pointer
+//! A value can carry more than one at a time, the bounce being two with the second delayed behind
+//! the first, and one left behind is one which fires later against whatever has replaced it.
+//! @param ptr A pointer for which to cancel all animations
 void animation_stop(void *ptr);
 
 //! Cancel all running animations

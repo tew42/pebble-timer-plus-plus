@@ -201,25 +201,31 @@ void animation_int32_start(int32_t *ptr, int32_t to, uint32_t duration, uint32_t
 
 // Cancel an animation by its pointer
 // For cancelling from outside; a finished animation retires itself with prv_list_remove_node()
+// A value can carry more than one animation at a time -- the bounce is two, the second delayed
+// behind the first -- so stopping one has to mean all of them. Leaving the rest behind lets a
+// delayed animation nobody expected any more fire later and drag the value off to a place the
+// layout it was computed from has since left.
 void animation_stop(void *ptr) {
   AnimationNode *cur_node = head_node;
   AnimationNode *pre_node = NULL;
   while (cur_node) {
-    if (cur_node->target == ptr) {
-      // link surrounding nodes
-      if (pre_node) {
-        pre_node->next = cur_node->next;
-      } else {
-        head_node = cur_node->next;
-      }
-      // destroy node
-      free(cur_node->from);
-      free(cur_node->to);
-      free(cur_node);
-      return;
+    if (cur_node->target != ptr) {
+      pre_node = cur_node;
+      cur_node = cur_node->next;
+      continue;
     }
-    pre_node = cur_node;
-    cur_node = cur_node->next;
+    // link surrounding nodes, then carry on down the list from the one after this
+    AnimationNode *next_node = cur_node->next;
+    if (pre_node) {
+      pre_node->next = next_node;
+    } else {
+      head_node = next_node;
+    }
+    // destroy node
+    free(cur_node->from);
+    free(cur_node->to);
+    free(cur_node);
+    cur_node = next_node;
   }
 }
 

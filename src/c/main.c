@@ -192,11 +192,12 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *ctx) {
     return;
   }
   prv_step_selected_field(1);
-  // animate and refresh
+  // refresh, then animate: the bounce is computed from the laid-out rects and the field it is
+  // aimed at, so it has to be asked for after the layout has taken the press into account
+  drawing_update();
   if (!click_recognizer_is_repeating(recognizer)) {
     drawing_start_bounce_animation(true);
   }
-  drawing_update();
   layer_mark_dirty(main_data.layer);
 }
 
@@ -295,11 +296,11 @@ static void prv_down_click_handler(ClickRecognizerRef recognizer, void *ctx) {
     return;
   }
   prv_step_selected_field(-1);
-  // animate and refresh
+  // as prv_up_click_handler: the layout first, then the bounce over the top of it
+  drawing_update();
   if (!click_recognizer_is_repeating(recognizer)) {
     drawing_start_bounce_animation(false);
   }
-  drawing_update();
   layer_mark_dirty(main_data.layer);
 }
 
@@ -372,11 +373,11 @@ static void on_click(int direction, int click_num, void *context) {
   }
   // CW (+1) steps like up, CCW (-1) like down
   prv_step_selected_field(direction);
-  // only trigger the bounce animation on the first detent of a gesture
+  // as prv_up_click_handler, and only on the first detent of a gesture
+  drawing_update();
   if (click_num == 1) {
     drawing_start_bounce_animation(direction > 0);
   }
-  drawing_update();
   layer_mark_dirty(main_data.layer);
 }
 

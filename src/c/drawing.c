@@ -101,10 +101,13 @@ static struct {
 // Move one of the laid-out rects to where it belongs, travelling there or arriving outright
 // A layout has somewhere to travel from only when the fields it is made of are the same ones: when
 // the hours appear or go, the rect they need has no width to grow from and the rects beside them
-// change size as well as place, which reads as a glitch rather than as a move
+// change size as well as place, which reads as a glitch rather than as a move.
+// Either way the new layout replaces whatever was moving these rects before. A layout is a
+// statement about where things belong, so anything still travelling towards an older one -- the
+// tail of a bounce, most often -- has nothing left to say.
 static void prv_place_field(GRect *field, GRect to, uint32_t duration, bool snap) {
+  animation_stop(field);
   if (snap) {
-    animation_stop(field);
     (*field) = to;
     return;
   }
