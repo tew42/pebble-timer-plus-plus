@@ -144,10 +144,16 @@ void timer_check_elapsed(void) {
   }
 }
 
+// Whether incrementing would discard a run rather than set the time
+// A stopwatch which has been started has a run behind it, and up or down throws that away instead
+// of changing a length there is none of. The ring moves a long way when it happens, so main.c
+// animates that press and not an ordinary one; both read this so the two cannot drift.
+bool timer_increment_rewinds(void) { return timer_is_chrono() && timer_data.start_ms; }
+
 // Increment timer value currently being edited
 void timer_increment(int64_t increment) {
   // if in paused stopwatch mode, rewind to previous time
-  if (timer_is_chrono() && timer_data.start_ms) {
+  if (timer_increment_rewinds()) {
     timer_rewind();
     return;
   }

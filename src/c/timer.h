@@ -63,6 +63,10 @@ void timer_check_elapsed(void);
 //! @param increment The amount to increment by
 void timer_increment(int64_t increment);
 
+//! Check whether incrementing would discard a run rather than set the time
+//! @return True if the timer is a stopwatch which has been started
+bool timer_increment_rewinds(void);
+
 //! Toggle play pause state for timer
 void timer_toggle_play_pause(void);
 
