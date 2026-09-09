@@ -50,7 +50,7 @@ static Timer timer_data;
 // A split holds the shown time while the clock runs on. It is deliberately not part of the
 // structure above: it is a display state, so it neither belongs in persistent storage nor should
 // survive the app being closed.
-static int64_t split_display_ms;
+static int64_t split_value_ms;
 static bool split_active;
 
 // Whether the elapse alert has sounded in this session. Not persisted: a new session which finds
@@ -102,27 +102,42 @@ static void prv_set_display_value_ms(int64_t value_ms) {
   }
 }
 
-// Get the timer value as the digits show it
+// Round a signed value to the second the digits would show
 // The two directions round opposite ways so that each displayed second is held for a whole
 // second either side of the moment the timer elapses and starts counting up instead
-int64_t timer_get_display_ms(void) {
-  if (split_active) {
-    return split_display_ms;
-  }
-  const int64_t value = prv_signed_value_ms();
-  if (value <= 0) {
+static int64_t prv_display_of(int64_t value_ms) {
+  if (value_ms <= 0) {
     // counting up, so show the seconds that have actually completed
-    return -value / MSEC_IN_SEC * MSEC_IN_SEC;
+    return -value_ms / MSEC_IN_SEC * MSEC_IN_SEC;
   }
-  return (value + MSEC_IN_SEC - 1) / MSEC_IN_SEC * MSEC_IN_SEC;
+  return (value_ms + MSEC_IN_SEC - 1) / MSEC_IN_SEC * MSEC_IN_SEC;
 }
 
-// Get timer value divided into time parts
+// Get the timer value as the digits show it
+// A split is only ever taken counting up, so its held reading rounds the way counting up does
+int64_t timer_get_display_ms(void) {
+  return prv_display_of(split_active ? -split_value_ms : prv_signed_value_ms());
+}
+
+// Get the displayed value divided into time parts
+// The digits are what the editing controls act on, so this decomposes the same number they show:
+// a value which rounds up into the next place has already made that place appear on the screen,
+// and a field the user cannot see is not one the buttons should be pointed at
 void timer_get_time_parts(uint16_t *hr, uint16_t *min, uint16_t *sec) {
-  int64_t value = timer_get_value_ms();
+  const int64_t value = timer_get_display_ms();
   (*hr) = value / MSEC_IN_HR;
   (*min) = value % MSEC_IN_HR / MSEC_IN_MIN;
   (*sec) = value % MSEC_IN_MIN / MSEC_IN_SEC;
+}
+
+// Get the milliseconds the digits are not showing, where they are worth showing
+bool timer_get_held_fraction_ms(uint16_t *ms) {
+  if (!split_active && !(timer_is_paused() && timer_shows_run())) {
+    return false;
+  }
+  const int64_t value_ms = split_active ? split_value_ms : timer_get_value_ms();
+  (*ms) = (uint16_t)(value_ms % MSEC_IN_SEC);
+  return true;
 }
 
 // Get the timer time in milliseconds, counting down to zero and then back up again
@@ -155,7 +170,7 @@ bool timer_shows_run(void) { return timer_is_chrono() && timer_get_value_ms() > 
 
 // Hold the shown time where it is
 void timer_split_hold(void) {
-  split_display_ms = timer_get_display_ms(); // still the live one, the hold is not up yet
+  split_value_ms = timer_get_value_ms(); // still the live one, the hold is not up yet
   split_active = true;
 }
 
@@ -211,17 +226,28 @@ bool timer_increment(int64_t increment, bool carry) {
   } else {
     interval = MSEC_IN_HR * 100;
   }
-  const int64_t value_ms = timer_get_value_ms();
-  const int64_t place_ms = value_ms % interval;
+  // The arithmetic is done on the number the digits show rather than the one behind them. A
+  // paused reading keeps its milliseconds -- a stopwatch's are the point of it -- and rounding
+  // them can already have carried the display into a place the value itself has not reached, so
+  // working from the value would step a field the user is not looking at. The remainder goes back
+  // on afterwards, which leaves the two unable to disagree.
+  const int64_t display_ms = timer_get_display_ms();
+  const int64_t remainder_ms = timer_get_value_ms() - display_ms;
+  const int64_t place_ms = display_ms % interval;
   const int64_t step_ms = (place_ms + interval + increment) % interval - place_ms;
   // the step turning back on the increment is the field having run past its top or its bottom
   const bool wrapped = (increment > 0) ? (step_ms < 0) : (step_ms > 0);
-  const bool carried = carry && wrapped;
+  // the hours have a top of their own, and nothing above to carry into, so a carry which would
+  // run past it wraps in place instead
+  const bool room = display_ms + step_ms + interval < MSEC_IN_HR * 100;
+  const bool carried = carry && wrapped && room;
   const int64_t carry_ms = carried ? ((increment > 0) ? interval : -interval) : 0;
-  prv_set_display_value_ms(value_ms + step_ms + carry_ms);
-  // if at zero, remove any leftover milliseconds
-  if (timer_get_value_ms() < MSEC_IN_SEC) {
+  const int64_t next_ms = display_ms + step_ms + carry_ms;
+  // dialled to nothing: a clean zero rather than the remainder on its own
+  if (next_ms <= 0) {
     timer_reset();
+  } else {
+    prv_set_display_value_ms(next_ms + remainder_ms);
   }
   // enable vibration
   if (timer_data.target_ms) {

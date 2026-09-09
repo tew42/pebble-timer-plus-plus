@@ -152,11 +152,9 @@ static void prv_back_click_handler(ClickRecognizerRef recognizer, void *ctx) {
 
 // Move the selected field by one step in the given direction
 // Shared by the two buttons and the touch screen, which differ only in how they animate. The
-// carry into hours is the timer's to make so that the value never passes through zero on the way:
-// a stopwatch run dialled from 59 minutes up to an hour stays a run.
+// carry into the next place is the timer's to make so that the value never passes through zero on
+// the way: a stopwatch run dialled from 59 minutes up to an hour stays a run.
 static void prv_step_selected_field(int direction) {
-  uint16_t hr, min, sec;
-  timer_get_time_parts(&hr, &min, &sec);
   int64_t place_ms;
   if (main_data.field == FieldHr) {
     place_ms = MSEC_IN_HR;
@@ -165,14 +163,17 @@ static void prv_step_selected_field(int direction) {
   } else {
     place_ms = MSEC_IN_SEC;
   }
-  // minutes carry into hours where there are none yet, and only upwards: dialling down has always
-  // wrapped inside the hour rather than borrowing from it
-  const bool carry = direction > 0 && main_data.field == FieldMin && !hr;
-  if (timer_increment((int64_t)direction * place_ms, carry)) {
-    main_data.field = FieldHr;
-  }
-  // drop back out of the hours field once there are no hours
-  if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.field == FieldHr) {
+  // A field runs over into the place above it, and only upwards: dialling down has always wrapped
+  // inside the place rather than borrowing from it, which is the friendlier way round -- carrying
+  // both ways would make a single press able to change two fields in either direction.
+  // The buttons stay where they were pointed either way. Following the carry up to the new field
+  // would leave the next press stepping hours when the one before it stepped minutes.
+  const bool carry = direction > 0 && main_data.field != FieldHr;
+  timer_increment((int64_t)direction * place_ms, carry);
+  // drop back out of the hours field once the digits no longer show any
+  uint16_t hr, min, sec;
+  timer_get_time_parts(&hr, &min, &sec);
+  if (!hr && main_data.field == FieldHr) {
     main_data.field = FieldMin;
   }
 }

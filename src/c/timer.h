@@ -17,11 +17,22 @@
 //! @return The displayed value in milliseconds, always a whole number of seconds
 int64_t timer_get_display_ms(void);
 
-//! Get timer value
+//! Get the displayed value divided into time parts
+//! This decomposes the number the digits show, not the one behind them: a value whose rounding
+//! carries it into the next place has already put that place on the screen, and a field the user
+//! cannot see is not one the buttons should be pointed at.
 //! @param hr A pointer to where to store the hour value of the timer
 //! @param min A pointer to where to store the minute value of the timer
 //! @param sec A pointer to where to store the second value of the timer
 void timer_get_time_parts(uint16_t *hr, uint16_t *min, uint16_t *sec);
+
+//! Get the milliseconds the digits are not showing, where they are worth showing
+//! A stopwatch reading held still -- a split, or a paused run -- is the one place the millisecond
+//! the clock keeps underneath is worth reading: a moving reading is too fast to read, and a length
+//! being dialled has no fraction that means anything.
+//! @param ms A pointer to where to store the milliseconds, 0 to 999
+//! @return True if there is a fraction worth showing, in which case ms was written
+bool timer_get_held_fraction_ms(uint16_t *ms);
 
 //! Get the timer time in milliseconds
 //! @return The current value of the timer in milliseconds
@@ -74,14 +85,17 @@ bool timer_is_paused(void);
 //! Check if the timer is elapsed and vibrate if this is the first call after elapsing
 void timer_check_elapsed(void);
 
-//! Increment timer value currently being edited
-//! A field wraps inside its own place: seconds roll over at a minute and minutes at an hour. The
-//! carry is of one of that place, so there is none to ask for on the hours field.
+//! Increment the field of the displayed value currently being edited
+//! A field wraps inside its own place: seconds roll over at a minute, minutes at an hour and hours
+//! at a hundred of them. The carry is of one of that place, so there is none to be had on the
+//! hours, and none which would run past their top.
+//! The step is taken on the displayed value and any sub-second remainder put back afterwards, so
+//! the field stepped is the one the digits show and a paused stopwatch keeps its milliseconds.
 //! @param increment The amount to increment by, which also says which field is being set
 //! @param carry True to take the next place up where the field runs past its top or bottom,
 //!   rather than wrapping inside it. Worth asking for here rather than adding the next place
 //!   afterwards: the wrap goes through zero, and a stopwatch run stops being one there.
-//! @return True if the carry was made, so the caller can point the buttons at the new field
+//! @return True if the carry was made
 bool timer_increment(int64_t increment, bool carry);
 
 //! Toggle play pause state for timer

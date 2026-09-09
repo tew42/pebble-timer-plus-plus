@@ -185,16 +185,24 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
   bounds.size.h = CIRCLE_RADIUS - FOOTER_Y_OFFSET;
   // calculate text
   char buff[10];
-  // in timer mode, get time
-  time_t end_time = epoch() / MSEC_IN_SEC;
-  if (main_get_control_mode() != ControlModeCounting && !timer_is_chrono()) {
-    end_time += timer_get_display_ms() / MSEC_IN_SEC;
-  }
-  // format to readable time
-  struct tm end_tm = *localtime(&end_time);
-  strftime(buff, sizeof(buff), clock_is_24h_style() ? "%H:%M" : "%I:%M", &end_tm);
-  if (buff[0] == '0') { // Strip leading zero, terminator included and nothing past it
-    memmove(buff, buff + 1, strlen(buff));
+  // a stopwatch reading held still is the one place the millisecond the clock keeps underneath is
+  // worth reading, and the footer is where there is room for it: the clock time it usually gives
+  // is the least of what the screen says, and it comes back the moment the reading moves again
+  uint16_t fraction_ms;
+  if (timer_get_held_fraction_ms(&fraction_ms)) {
+    snprintf(buff, sizeof(buff), ".%03d", fraction_ms);
+  } else {
+    // in timer mode, get time
+    time_t end_time = epoch() / MSEC_IN_SEC;
+    if (main_get_control_mode() != ControlModeCounting && !timer_is_chrono()) {
+      end_time += timer_get_display_ms() / MSEC_IN_SEC;
+    }
+    // format to readable time
+    struct tm end_tm = *localtime(&end_time);
+    strftime(buff, sizeof(buff), clock_is_24h_style() ? "%H:%M" : "%I:%M", &end_tm);
+    if (buff[0] == '0') { // Strip leading zero, terminator included and nothing past it
+      memmove(buff, buff + 1, strlen(buff));
+    }
   }
   // draw text
   graphics_draw_text(ctx, buff, scl_get_font(ScalableFontTime), bounds, GTextOverflowModeFill,
@@ -204,16 +212,6 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Main Text
 //
-
-// Decompose the value the digits show into its fields
-// timer_get_time_parts() decomposes the exact value instead, which is what the editing controls
-// increment, so everything the user reads goes through here
-static void prv_display_parts(uint16_t *hr, uint16_t *min, uint16_t *sec) {
-  const int64_t value = timer_get_display_ms();
-  (*hr) = value / MSEC_IN_HR;
-  (*min) = value % MSEC_IN_HR / MSEC_IN_MIN;
-  (*sec) = value % MSEC_IN_MIN / MSEC_IN_SEC;
-}
 
 // Get how many trailing seconds digits the display is holding back
 // Editing, a split and a peek all show an exact time, so none of them masks anything.
@@ -229,7 +227,7 @@ static uint8_t prv_masked_second_digits(void) {
 static void prv_format_text_fields(char buff[TEXT_FIELD_COUNT][6]) {
   const bool edit_mode = main_get_control_mode() != ControlModeCounting;
   uint16_t hr, min, sec;
-  prv_display_parts(&hr, &min, &sec);
+  timer_get_time_parts(&hr, &min, &sec);
   if (hr) {
     snprintf(buff[0], sizeof(buff[0]), edit_mode ? "%02d" : "%d", hr);
   }
@@ -480,7 +478,7 @@ static bool prv_text_state_compare(DrawState text_state_1, DrawState text_state_
 static DrawState prv_draw_state_create(void) {
   // get states
   uint16_t hr, min, sec;
-  prv_display_parts(&hr, &min, &sec);
+  timer_get_time_parts(&hr, &min, &sec);
   return (DrawState){
       .control_mode = main_get_control_mode(),
       .hr_digits = (uint8_t)(hr > 0) + (uint8_t)(hr > 9) + (uint8_t)(hr > 99),
