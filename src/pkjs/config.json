@@ -8,11 +8,11 @@
     "items": [
       {
         "type": "heading",
-        "defaultValue": "Display Updates"
+        "defaultValue": "Battery Saving"
       },
       {
         "type": "text",
-        "defaultValue": "Redrawing every second is what uses the battery. These settings redraw less often while the time is a long way from zero; digits no longer being refreshed show as _ rather than a stale value. Up or down shows the exact time: for a second counting down, or held on a split counting up."
+        "defaultValue": "Redrawing the display less often while a long way from zero conserves battery and functionality. Up or down reveals the exact time (single-second Peek on timer, or Split for stopwatch)."
       },
       {
         "type": "select",
@@ -34,7 +34,7 @@
         "type": "select",
         "messageKey": "minuteUpdatesAbove",
         "label": "Minute updates above",
-        "description": "Redraw once a minute from this far out, showing 5:__. Set at or below the 10-second setting, this takes over and switches that one off.",
+        "description": "Redraw once a minute from this far out, showing 5:__.",
         "serializeValueAs": "integer",
         "defaultValue": "255",
         "options": [
@@ -55,16 +55,16 @@
     "items": [
       {
         "type": "heading",
-        "defaultValue": "Colours"
+        "defaultValue": "Colors"
       },
       {
         "type": "text",
-        "defaultValue": "Counting down and counting up each get their own colour, both green to start. Set them apart and a timer running past zero changes colour as it becomes a stopwatch. The middle and the interval band are shaded from your choice, so only colours that stay legible when shaded are offered."
+        "defaultValue": "You can assign separate color themes to Timer and Stopwatch functions."
       },
       {
         "type": "color",
         "messageKey": "timerColor",
-        "label": "Counting down",
+        "label": "Timer (counting down)",
         "defaultValue": "00ff00",
         "sunlight": false,
         "layout": [
@@ -78,7 +78,7 @@
       {
         "type": "color",
         "messageKey": "chronoColor",
-        "label": "Counting up",
+        "label": "Stopwatch (counting up)",
         "defaultValue": "00ff00",
         "sunlight": false,
         "layout": [
