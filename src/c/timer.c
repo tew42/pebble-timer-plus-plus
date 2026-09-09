@@ -170,22 +170,28 @@ bool timer_is_paused(void) { return !timer_data.running; }
 
 // Check if the timer is elapsed and vibrate if this is the first call after elapsing
 void timer_check_elapsed(void) {
-  if (timer_is_vibrating()) {
-    // Stop the alert at the end of its window without enqueuing one last burst past it: this runs
-    // on the display refresh, so once the coarse cadences begin the next call can be a whole
-    // minute later and the alert would buzz long after it visibly finished.
-    // A session which only started after the window closed has not sounded the alert at all,
-    // though, which is what happens when the wakeup could only be scheduled late. It gets one.
-    if (timer_get_value_ms() > VIBRATION_LENGTH_MS) {
-      timer_data.can_vibrate = false;
-      if (has_vibrated) {
-        return;
-      }
-    }
-    // vibrate
-    has_vibrated = true;
-    vibes_enqueue_custom_pattern(vibe_pattern);
+  if (!timer_is_alerting()) {
+    return;
   }
+  // The window closes on time whether or not the noise was called off early, or the alert would
+  // stand for as long as the app stayed open: select would go on offering the set time back and
+  // the header would go on saying so.
+  // Closing it does not enqueue one last burst past the end either: this runs on the display
+  // refresh, so once the coarse cadences begin the next call can be a whole minute later and the
+  // alert would buzz long after it visibly finished.
+  const bool past_window = timer_get_value_ms() > VIBRATION_LENGTH_MS;
+  if (past_window) {
+    timer_data.can_vibrate = false;
+  }
+  // A session which only started after the window closed has not sounded the alert at all,
+  // though, which is what happens when the wakeup could only be scheduled late. It gets one,
+  // unless a button has already said no.
+  if (silenced || (past_window && has_vibrated)) {
+    return;
+  }
+  // vibrate
+  has_vibrated = true;
+  vibes_enqueue_custom_pattern(vibe_pattern);
 }
 
 // Increment timer value currently being edited
