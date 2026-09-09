@@ -12,6 +12,8 @@ A fork of [Timer+](https://github.com/YclepticStudios/pebble-timer-plus) by way 
 | :-------------------------------------------------------------: | :-----------------------------------------------: | :---------------------------------------------: | :--------------------------------------------------------------: | :---------------------------------------------: | :------------------------------------------------------------: | :-----------------------------------------------: |
 | ![Aplite](assets/screenshots/aplite_diorite_flint_animated.gif) | ![Basalt](assets/screenshots/basalt_animated.gif) | ![Chalk](assets/screenshots/chalk_animated.gif) | ![Diorite](assets/screenshots/aplite_diorite_flint_animated.gif) | ![Emery](assets/screenshots/emery_animated.gif) | ![Flint](assets/screenshots/aplite_diorite_flint_animated.gif) | ![Gabbro](assets/screenshots/gabbro_animated.gif) |
 
+Those loops are composited rather than recorded: every pixel of the chrome comes out of the upstream captures, but the app never rendered this sequence in one take. `tools/screensim` builds them and says how.
+
 ## Controls
 
 | Button       | Setting a timer           | Counting down                     | Counting up                                     |
