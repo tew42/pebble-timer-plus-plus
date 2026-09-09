@@ -13,7 +13,7 @@
 #include "settings.h"
 #include "utility.h"
 
-#define PERSIST_VERSION 3
+#define PERSIST_VERSION 4
 #define PERSIST_VERSION_KEY 4342896
 #define PERSIST_TIMER_KEY 58734
 #define VIBRATION_LENGTH_MS 20000
@@ -36,9 +36,13 @@ static const VibePattern vibe_pattern = {
 };
 
 // Main data structure
+// Two quantities and a flag say everything: what the timer was set to, how much of it has run,
+// and whether the clock is still moving. Everything the app shows is one subtraction away, and
+// the sign of that subtraction is which way the display reads.
 typedef struct {
-  int64_t length_ms; //< Length of timer in milliseconds
-  int64_t start_ms;  //< The start epoch of the timer in milliseconds
+  int64_t target_ms; //< Length the timer was set to; zero means it was never a timer
+  int64_t anchor_ms; //< Running: the epoch the run started at. Held: the run itself
+  bool running;      //< Which of the two anchor_ms holds
   bool can_vibrate;  //< Flag used to tell when the timer has completed
 } Timer;
 static Timer timer_data;
@@ -57,16 +61,39 @@ static bool has_vibrated;
 // API Functions
 //
 
+// How much of the timer has run
+static int64_t prv_elapsed_ms(void) {
+  return timer_data.running ? (int64_t)epoch() - timer_data.anchor_ms : timer_data.anchor_ms;
+}
+
+// Put the run at a given length, in whichever form the anchor currently takes
+static void prv_set_elapsed_ms(int64_t elapsed_ms) {
+  timer_data.anchor_ms = timer_data.running ? (int64_t)epoch() - elapsed_ms : elapsed_ms;
+}
+
 // Get the signed timer value from a single reading of the clock
 // Positive is time remaining, zero or below is time elapsed past zero. One reading matters: the
 // value and its sign have to come from the same instant.
-static int64_t prv_signed_value_ms(void) {
-  if (timer_is_paused()) {
-    // start_ms is the negative of how long the timer ran before it was paused
-    return timer_data.length_ms + timer_data.start_ms;
+static int64_t prv_signed_value_ms(void) { return timer_data.target_ms - prv_elapsed_ms(); }
+
+// Set the time the digits show, keeping which way they read
+// A stopwatch reading is the run itself, so it moves the run. A timer reading is time remaining:
+// the length is what the user set, so an edit moves within the run first and only changes the
+// length once there is no run left to give back.
+static void prv_set_display_value_ms(int64_t value_ms) {
+  if (timer_shows_run()) {
+    timer_data.target_ms = 0;
+    prv_set_elapsed_ms(value_ms);
+    return;
   }
-  // start_ms is the epoch the timer was started at
-  return timer_data.length_ms - ((int64_t)epoch() - timer_data.start_ms);
+  const int64_t step_ms = value_ms - prv_signed_value_ms();
+  const int64_t elapsed_ms = prv_elapsed_ms();
+  if (elapsed_ms > 0 && step_ms <= elapsed_ms) {
+    prv_set_elapsed_ms(elapsed_ms - step_ms);
+  } else {
+    timer_data.target_ms = value_ms;
+    prv_set_elapsed_ms(0);
+  }
 }
 
 // Get the timer value as the digits show it
@@ -99,7 +126,7 @@ int64_t timer_get_value_ms(void) {
 }
 
 // Get the total timer time in milliseconds
-int64_t timer_get_length_ms(void) { return timer_data.length_ms; }
+int64_t timer_get_length_ms(void) { return timer_data.target_ms; }
 
 // Check if the timer is vibrating
 bool timer_is_vibrating(void) {
@@ -108,6 +135,11 @@ bool timer_is_vibrating(void) {
 
 // Check if timer is in stopwatch mode
 bool timer_is_chrono(void) { return prv_signed_value_ms() <= 0; }
+
+// Check whether the time shown is a stopwatch run rather than a timer
+// Zero is both and neither: it is where a timer is set from and where a stopwatch starts, so it
+// counts as a timer, which is what makes dialling up from zero set a length.
+bool timer_shows_run(void) { return timer_is_chrono() && timer_get_value_ms() > 0; }
 
 // Hold the shown time where it is
 void timer_split_hold(void) {
@@ -122,7 +154,7 @@ void timer_split_release(void) { split_active = false; }
 bool timer_is_split(void) { return split_active; }
 
 // Check if timer or stopwatch is paused
-bool timer_is_paused(void) { return timer_data.start_ms <= 0; }
+bool timer_is_paused(void) { return !timer_data.running; }
 
 // Check if the timer is elapsed and vibrate if this is the first call after elapsing
 void timer_check_elapsed(void) {
@@ -144,19 +176,10 @@ void timer_check_elapsed(void) {
   }
 }
 
-// Whether incrementing would discard a run rather than set the time
-// A stopwatch which has been started has a run behind it, and up or down throws that away instead
-// of changing a length there is none of. The ring moves a long way when it happens, so main.c
-// animates that press and not an ordinary one; both read this so the two cannot drift.
-bool timer_increment_rewinds(void) { return timer_is_chrono() && timer_data.start_ms; }
-
 // Increment timer value currently being edited
+// The edit is on the time the digits show, so it reads the same in either direction: a stopwatch
+// reading and a timer reading are both just the number on the screen.
 void timer_increment(int64_t increment) {
-  // if in paused stopwatch mode, rewind to previous time
-  if (timer_increment_rewinds()) {
-    timer_rewind();
-    return;
-  }
   // identify increment class
   int64_t interval;
   if (llabs(increment) < MSEC_IN_MIN) {
@@ -166,43 +189,38 @@ void timer_increment(int64_t increment) {
   } else {
     interval = MSEC_IN_HR * 100;
   }
-  // calculate new time by incrementing with wrapping
-  int64_t ls_bit = (timer_data.length_ms + timer_data.start_ms) % interval;
-  int64_t step = (ls_bit + interval + increment) % interval - ls_bit;
-  if (timer_data.start_ms) {
-    timer_data.start_ms += step;
-    if (timer_data.start_ms > 0) {
-      timer_data.length_ms += timer_data.start_ms;
-      timer_data.start_ms = 0;
-    }
-  } else {
-    timer_data.length_ms += step;
-  }
+  // each field wraps inside its own place rather than carrying, so seconds roll over at a minute
+  // and main.c decides whether a carry is what the user meant
+  const int64_t value_ms = timer_get_value_ms();
+  const int64_t place_ms = value_ms % interval;
+  const int64_t step_ms = (place_ms + interval + increment) % interval - place_ms;
+  prv_set_display_value_ms(value_ms + step_ms);
   // if at zero, remove any leftover milliseconds
   if (timer_get_value_ms() < MSEC_IN_SEC) {
     timer_reset();
   }
   // enable vibration
-  if (timer_data.length_ms) {
+  if (timer_data.target_ms) {
     timer_data.can_vibrate = true;
   }
 }
 
 // Toggle play pause state for timer
+// The run carries across the change, in whichever form the anchor then takes
 void timer_toggle_play_pause(void) {
-  if (timer_data.start_ms > 0) {
-    timer_data.start_ms -= epoch();
-  } else {
-    timer_data.start_ms += epoch();
-  }
+  const int64_t elapsed_ms = prv_elapsed_ms();
+  timer_data.running = !timer_data.running;
+  prv_set_elapsed_ms(elapsed_ms);
 }
 
 //! Rewind the timer back to its original value
+// The run is given back and the clock stops, so this lands where a timer waiting to be started is
 void timer_rewind(void) {
   timer_split_release();
-  timer_data.start_ms = 0;
+  timer_data.running = false;
+  prv_set_elapsed_ms(0);
   // enable vibration
-  if (timer_data.length_ms) {
+  if (timer_data.target_ms) {
     timer_data.can_vibrate = true;
   }
 }
@@ -210,8 +228,9 @@ void timer_rewind(void) {
 // Reset the timer to zero
 void timer_reset(void) {
   timer_split_release();
-  timer_data.length_ms = 0;
-  timer_data.start_ms = 0;
+  timer_data.target_ms = 0;
+  timer_data.running = false;
+  prv_set_elapsed_ms(0);
   // disable vibration
   timer_data.can_vibrate = false;
 }

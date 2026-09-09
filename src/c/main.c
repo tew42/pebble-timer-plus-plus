@@ -107,37 +107,27 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   } else {
     increment = MSEC_IN_SEC;
   }
-  // a press on a started stopwatch throws the run away instead of setting the time
-  const bool rewinding = timer_increment_rewinds();
   // get starting time components
   uint16_t o_hr, o_min, o_sec;
   timer_get_time_parts(&o_hr, &o_min, &o_sec);
   // increment timer
   timer_increment(increment);
   // compare final time parts and switch into edit hr mode
-  // only where the press set the time: the check reads a smaller minute as a rollover, and a
-  // rewind leaves a smaller one for its own reason, which used to carry an unasked-for hour
-  if (!rewinding) {
-    uint16_t n_hr, n_min, n_sec;
-    timer_get_time_parts(&n_hr, &n_min, &n_sec);
-    if (o_min > n_min && !o_hr) {
-      timer_increment(MSEC_IN_HR);
-      main_data.control_mode = ControlModeEditHr;
-    }
+  uint16_t n_hr, n_min, n_sec;
+  timer_get_time_parts(&n_hr, &n_min, &n_sec);
+  if (o_min > n_min && !o_hr) {
+    timer_increment(MSEC_IN_HR);
+    main_data.control_mode = ControlModeEditHr;
   }
   // check if switched out of ControlModeEditHr
   if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.control_mode == ControlModeEditHr) {
     main_data.control_mode = ControlModeEditMin;
   }
-  // animate and refresh; setting the time snaps, as the counting does, but a rewind travels
+  // animate and refresh
   if (!click_recognizer_is_repeating(recognizer)) {
     drawing_start_bounce_animation(true);
   }
-  if (rewinding) {
-    drawing_update_animated();
-  } else {
-    drawing_update();
-  }
+  drawing_update();
   layer_mark_dirty(main_data.layer);
 }
 
@@ -229,22 +219,16 @@ static void prv_down_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   } else {
     increment = -MSEC_IN_SEC;
   }
-  // a press on a started stopwatch throws the run away instead of setting the time
-  const bool rewinding = timer_increment_rewinds();
   timer_increment(increment);
   // check if switched out of ControlModeEditHr
   if (timer_get_value_ms() / MSEC_IN_HR == 0 && main_data.control_mode == ControlModeEditHr) {
     main_data.control_mode = ControlModeEditMin;
   }
-  // animate and refresh; setting the time snaps, as the counting does, but a rewind travels
+  // animate and refresh
   if (!click_recognizer_is_repeating(recognizer)) {
     drawing_start_bounce_animation(false);
   }
-  if (rewinding) {
-    drawing_update_animated();
-  } else {
-    drawing_update();
-  }
+  drawing_update();
   layer_mark_dirty(main_data.layer);
 }
 
@@ -317,15 +301,12 @@ static void on_click(int direction, int click_num, void *context) {
   } else {
     increment = (int64_t)direction * MSEC_IN_SEC;
   }
-  // a detent on a started stopwatch throws the run away instead of setting the time
-  const bool rewinding = timer_increment_rewinds();
   // capture pre-increment components to detect minute→hour rollover
   uint16_t o_hr, o_min, o_sec;
   timer_get_time_parts(&o_hr, &o_min, &o_sec);
   timer_increment(increment);
-  // if incrementing, check for minute rollover into hours; a rewind leaves a smaller minute for
-  // its own reason and must not be read as one
-  if (direction > 0 && !rewinding) {
+  // if incrementing, check for minute rollover into hours
+  if (direction > 0) {
     uint16_t n_hr, n_min, n_sec;
     timer_get_time_parts(&n_hr, &n_min, &n_sec);
     if (o_min > n_min && !o_hr) {
@@ -341,12 +322,7 @@ static void on_click(int direction, int click_num, void *context) {
   if (click_num == 1) {
     drawing_start_bounce_animation(direction > 0);
   }
-  // setting the time snaps, as the counting does, but a rewind travels
-  if (rewinding) {
-    drawing_update_animated();
-  } else {
-    drawing_update();
-  }
+  drawing_update();
   layer_mark_dirty(main_data.layer);
 }
 

@@ -39,6 +39,11 @@ bool timer_is_vibrating(void);
 //! @return True if it is counting up as a stopwatch
 bool timer_is_chrono(void);
 
+//! Check whether the time shown is a stopwatch run rather than a timer
+//! Zero counts as a timer: it is where a length is dialled from, and where a stopwatch starts
+//! @return True if the shown time is a run which has got somewhere
+bool timer_shows_run(void);
+
 //! Hold the shown time where it is while the clock underneath keeps running
 //! A split is a display hold, not a pause: nothing stops, so releasing it reveals the time that
 //! passed meanwhile. Only ever taken while counting up, where losing real time to a pause would
@@ -62,10 +67,6 @@ void timer_check_elapsed(void);
 //! Increment timer value currently being edited
 //! @param increment The amount to increment by
 void timer_increment(int64_t increment);
-
-//! Check whether incrementing would discard a run rather than set the time
-//! @return True if the timer is a stopwatch which has been started
-bool timer_increment_rewinds(void);
 
 //! Toggle play pause state for timer
 void timer_toggle_play_pause(void);
