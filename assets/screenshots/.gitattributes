@@ -1,4 +1,6 @@
-# The animations here are built by tools/screensim, which has to be able to read its own output
-# back: keep them out of Git LFS, the same exemption resources/images/ uses for the build icons.
-# They are small -- tens of kilobytes -- because every frame is a handful of GColor8 levels.
-*_animated.gif  !filter !diff !merge -text
+# Everything here is built by tools/screensim, which has to be able to read its own output back:
+# keep it out of Git LFS, the same exemption resources/images/ uses for the build icons. It is all
+# small -- a couple of kilobytes a still, tens for an animation -- because every frame is a handful
+# of GColor8 levels.
+*.png  !filter !diff !merge -text
+*.gif  !filter !diff !merge -text
