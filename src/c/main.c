@@ -31,10 +31,12 @@
 
 // Main data structure
 static struct {
-  Window *window;      //< The base window for the application
-  Layer *layer;        //< The base layer on which everything will be drawn
-  Field field;         //< Which field the buttons are pointed at
-  AppTimer *app_timer; //< The AppTimer to keep the screen refreshing
+  Window *window;       //< The base window for the application
+  Layer *layer;         //< The base layer on which everything will be drawn
+  Field field;          //< Which field the buttons are pointed at
+  AppTimer *app_timer;  //< The AppTimer to keep the screen refreshing
+  AppTimer *peek_timer; //< The AppTimer which ends a peek at the exact time
+  bool peeking;         //< Whether the exact time is being shown at the user's asking
 } main_data;
 
 // Function declarations
@@ -42,6 +44,7 @@ static void prv_app_timer_callback(void *data);
 static void prv_peek_end(void *data);
 static void prv_refresh_stop(void);
 static void prv_refresh_restart(void);
+static void prv_reveal_exact_time(void);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Private Functions
