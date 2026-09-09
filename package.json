@@ -65,7 +65,7 @@
           "type": "font",
           "name": "BEBAS_FONT_35",
           "file": "fonts/bebas_neue_regular.ttf",
-          "characterRegex": "[0-9: ]"
+          "characterRegex": "[0-9:. ]"
         }
       ]
     }
