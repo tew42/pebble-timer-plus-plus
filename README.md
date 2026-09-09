@@ -18,18 +18,23 @@ A fork of [Timer+](https://github.com/YclepticStudios/pebble-timer-plus) by way 
 
 ## Controls
 
-| Button       | Setting a timer           | Counting down                   | Counting up                                              |
-| ------------ | ------------------------- | ------------------------------- | -------------------------------------------------------- |
-| Select       | Next field, then start    | Pause, back to setting the time | Take a split: the time holds while the stopwatch runs on |
-| Up / Down    | Change the selected field | --                              | --                                                       |
-| Select, held | Reset to zero             | Reset to zero                   | Reset to zero                                            |
-| Back         | Back a field, or leave    | Leave                           | Leave                                                    |
+| Button       | Setting a timer           | Counting down                     | Counting up                                     |
+| ------------ | ------------------------- | --------------------------------- | ----------------------------------------------- |
+| Select       | Next field, then start    | Pause                             | Pause                                           |
+| Up / Down    | Change the selected field | Peek: the exact time for a second | Split: hold the reading while the clock runs on |
+| Select, held | Reset to zero             | Reset to zero                     | Reset to zero                                   |
+| Back         | Back a field, or leave    | Leave                             | Leave                                           |
+
+Select is always the state change and a held select is always the reset; up and down set the time
+while it is stopped and ask for the exact one while it runs. Pausing keeps the time, including a
+stopwatch's, so it can be read, adjusted and started again.
 
 The header says which of the two the watch is doing, and reads `Split` while a time is held. While
-a timer is going off, any button silences it and rewinds to the time it was set to.
+a timer is going off, any button stops the buzzing and does nothing else by it — except select,
+which also hands back the time the timer was set to, and select held, which resets.
 
-On touch watches the click wheel turns to change the selected field, a tap in the centre acts as
-select, and a swipe left acts as back.
+On touch watches the click wheel turns for up and down, a tap in the centre acts as select, and a
+swipe left acts as back.
 
 ## Settings
 
@@ -49,14 +54,16 @@ Both default to *Never*, the original once-a-second behaviour. Where they overla
 takes over, and the settings page switches the 10-second setting to *Never* to say so.
 
 Live seconds always show while setting a timer, while paused, on a split, and for the twenty
-seconds an elapsed timer vibrates. So the exact time is always one press away: select pauses a
-countdown, and splits the stopwatch. On colour watches the progress ring shades the stretch the
-masked digits could mean, so it never claims to know more than they do.
+seconds an elapsed timer vibrates. Up or down asks for the exact time at any other point: counting
+down it shows for a second, counting up it holds until you let it go. On colour watches the
+progress ring shades the stretch the masked digits could mean, so it never claims to know more than
+they do.
 
 ### Colours
 
 Counting down and counting up each get their own accent, both green to start. Set them apart and a
-timer running past zero changes colour as it becomes a stopwatch. Only the ring colour is chosen;
+timer running past zero changes colour as it becomes a stopwatch, and a stopwatch keeps its colour
+while it is paused. Only the ring colour is chosen;
 the middle and the interval band are shaded from it, so only colours that stay legible when shaded
 are offered. Colour watches only.
 

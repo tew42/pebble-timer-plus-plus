@@ -12,7 +12,7 @@
       },
       {
         "type": "text",
-        "defaultValue": "Redrawing every second is what uses the battery. These settings redraw less often while the time is a long way from zero; digits no longer being refreshed show as _ rather than a stale value. Select brings the exact time back: it pauses a countdown, and splits the stopwatch."
+        "defaultValue": "Redrawing every second is what uses the battery. These settings redraw less often while the time is a long way from zero; digits no longer being refreshed show as _ rather than a stale value. Up or down shows the exact time: for a second counting down, or held on a split counting up."
       },
       {
         "type": "select",
