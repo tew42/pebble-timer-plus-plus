@@ -1,10 +1,10 @@
 # Pebble Timer++
 
-A beautiful, simple timer/stopwatch for the Pebble smartwatch, now optimized battery life and more! 
+A beautiful, simple timer/stopwatch for the Pebble smartwatch, now with optimized battery life and more! 
 
 Tell it how coarsely to show the time while it is a long way from zero, and it stops redrawing every second - but if you want to take a peek at the exact time, you can. It also runs in the background using the WakeUp API, so there is no need to keep the app open
 
-Also here: touch controls, updated button controls including stopwatch split & edit, independent timer & stopwatch color configuration, and an optional instant start so the seconds spent setting the timer are not seconds it is wrong by.
+Also here: touch controls, updated button controls including stopwatch split & edit, independent timer & stopwatch color configuration, an optional instant-start mode, and some bug fixes.
 
 A fork of [Timer+](https://github.com/YclepticStudios/pebble-timer-plus) by way of [BrianEnders's touch fork](https://github.com/BrianEnders/pebble-timer-plus-touch).
 
@@ -47,21 +47,9 @@ The progress ring shades the stretch the masked digits could mean, so it never c
 
 ### Instant start
 
-Off by default. Switched on, it picks a window of 5, 10 or 15 seconds and the app counts from the
-moment it settled at zero rather than the moment you told it to go:
+Off by default. Switched on, timers and stopwatches both start from when you opened the app (with no timer or stopwatch to resume) or from when you reset by long-pressing select.
 
-- If nothing is pressed for the length of the window, the stopwatch starts by itself and reads the
-  window straight away.
-- The first press calls that off, so nothing starts under your finger. What it does not call off
-  is the credit: dial a length at your own pace and the start you eventually ask for is still
-  back-dated by the time since the app settled, up to the window.
-
-So the window itself only ever starts a stopwatch — a timer you dialled is one you also pressed
-select to start, and that start is the credited one. A credit longer than the length you dialled
-needs no special case: the timer is simply already past zero, and it alarms.
-
-The window opens when the app has come to rest at zero on its own account — opening it with
-nothing to resume, or a held select — and never when there is a time on the clock to look at.
+There is a configurable time window of 5s or 10s; if nothing is pressed within that window after app opening, the stopwatch starts itself. If you do press up, down, or select to begin editing the timer, then you've committed to timer mode. The time you spent editing (or waiting) will automatically be accounted for after the stopwatch or timer starts.
 
 ### Colors
 
@@ -89,19 +77,10 @@ the build configuration changes:
 
 This app is other people's work with some of mine on top.
 
-- **[Timer+](https://github.com/YclepticStudios/pebble-timer-plus)** by
-  [Ycleptic Studios](https://github.com/YclepticStudios) — the original, and everything that makes
-  it worth using: the progress ring, the scalable digits, the whole design.
-- **[pebble-timer-plus-touch](https://github.com/BrianEnders/pebble-timer-plus-touch)** by
-  [BrianEnders](https://github.com/BrianEnders) — the touch controls, built on his
-  [RotaryKit](https://github.com/BrianEnders/pebble-rotary-kit) library, vendored here.
-- **[pebble-instant-timer](https://github.com/howeaj/pebble-instant-timer)** by
-  [howeaj](https://github.com/howeaj) — the idea of saving battery by refreshing the display less
-  often than once a second, which the display update settings came from.
-- **[pebble-timer-quick](https://github.com/jazzabeanie/pebble-timer-quick)** by
-  [jazzabeanie](https://github.com/jazzabeanie) — the observation that the seconds spent setting a
-  timer are seconds the timer is wrong by, and the answer of running the clock from launch, which
-  the instant start setting came from.
+- **[Timer+](https://github.com/YclepticStudios/pebble-timer-plus)** by [Ycleptic Studios](https://github.com/YclepticStudios) — the original, and everything that makes it worth using: the progress ring, the scalable digits, the whole design.
+- **[pebble-timer-plus-touch](https://github.com/BrianEnders/pebble-timer-plus-touch)** by [BrianEnders](https://github.com/BrianEnders) — the fork that originally introduced touch controls, built on his [RotaryKit](https://github.com/BrianEnders/pebble-rotary-kit) library, vendored here.
+- **[pebble-timer-quick](https://github.com/jazzabeanie/pebble-timer-quick)** by [jazzabeanie](https://github.com/jazzabeanie) — the fork that originally introduced quick/instant timer or stopwatch counts from app start, which inspired the optional (and differently coded) mode here.
+- **[pebble-instant-timer](https://github.com/howeaj/pebble-instant-timer)** by [howeaj](https://github.com/howeaj) — an entirely different timer that features saving battery by refreshing the display less often than once a second, which inspired the display update settings.
 
 Work on this fork was assisted by [Claude Code](https://claude.com/claude-code).
 
