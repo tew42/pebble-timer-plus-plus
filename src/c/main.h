@@ -12,6 +12,21 @@
 
 #define BUTTON_HOLD_RESET_MS 750
 
+//! Whether this build carries the touch control scheme at all.
+//! RotaryKit already self-disables at runtime, through touch_service_is_enabled(), so this is
+//! about not shipping the code rather than about not running it: the five platforms below the cut
+//! are 2013-2016 hardware with no touch surface, and they were paying for a click wheel they can
+//! never use.
+//! The list is deliberately inclusive at the uncertain end. Excluding a platform which turns out
+//! to have a touch surface would silently remove a whole input method, where including one which
+//! does not costs only the code size that was being wasted before.
+//! src/wscript mirrors this list to drop rotary_kit.c from those builds; keep the two in step.
+#if defined(PBL_PLATFORM_FLINT) || defined(PBL_PLATFORM_GABBRO)
+#define APP_TOUCH_CONTROLS 1
+#else
+#define APP_TOUCH_CONTROLS 0
+#endif
+
 // Which field the buttons are pointed at while the time is being set
 typedef enum { FieldHr, FieldMin, FieldSec } Field;
 

@@ -22,6 +22,14 @@ def configure(ctx):
     ctx.load('pebble_sdk')
 
 
+# Platforms which get the touch control scheme, mirroring APP_TOUCH_CONTROLS in src/c/main.h.
+# main.c compiles out every reference to RotaryKit on the others, so dropping the file here is
+# what makes the code actually absent rather than merely unreferenced. Keep the two lists in step:
+# a platform named here but not there links an object nothing calls, and one named there but not
+# here fails to link.
+TOUCH_PLATFORMS = ('flint', 'gabbro')
+
+
 def build(ctx):
     ctx.load('pebble_sdk')
 
@@ -33,7 +41,10 @@ def build(ctx):
         ctx.env = ctx.all_envs[platform]
         ctx.set_group(ctx.env.PLATFORM_NAME)
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)
-        ctx.pbl_build(source=ctx.path.ant_glob('src/c/**/*.c'), target=app_elf, bin_type='app')
+        sources = ctx.path.ant_glob('src/c/**/*.c')
+        if platform not in TOUCH_PLATFORMS:
+            sources = [s for s in sources if s.name != 'rotary_kit.c']
+        ctx.pbl_build(source=sources, target=app_elf, bin_type='app')
 
         if build_worker:
             worker_elf = '{}/pebble-worker.elf'.format(ctx.env.BUILD_DIR)

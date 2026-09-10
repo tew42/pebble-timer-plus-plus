@@ -11,14 +11,20 @@
 
 #include "main.h"
 #include "drawing.h"
-#include "rotary_kit.h"
 #include "settings.h"
 #include "timer.h"
 #include "utility.h"
 #include <pebble.h>
+#if APP_TOUCH_CONTROLS
+#include "rotary_kit.h"
+#endif
 
 // Main constants
 #define BUTTON_HOLD_REPEAT_MS 100
+// A swipe has no travel or click to feel, so it gets the one pulse the buttons do not need. It is
+// fired from the handler rather than by RotaryKit's swipe_vibe_ms, which cannot know that this app
+// acts on one direction out of the four and would buzz for the three it ignores.
+#define SWIPE_VIBE_MS 40
 #define PEEK_DURATION_MS 1000
 #define SYSTEM_ENTRANCE_ANIMATION_MS 400
 // Wakeup scheduling
@@ -474,6 +480,8 @@ static void prv_settings_updated(void) {
   prv_refresh_restart();
 }
 
+#if APP_TOUCH_CONTROLS
+
 static void on_click(int direction, int click_num, void *context) {
   // the detent which stops the buzzing does nothing else
   if (prv_silence_alert()) {
@@ -481,9 +489,11 @@ static void on_click(int direction, int click_num, void *context) {
     return;
   }
   if (!timer_is_paused()) {
-    prv_reveal_exact_time();
-    drawing_update();
-    layer_mark_dirty(main_data.layer);
+    // The wheel sets the time and nothing else. Up and down ask to see the exact time while the
+    // clock runs, and that reading is a toggle counting up -- a split is held, then let go -- so
+    // firing it per detent made a single flick toggle it many times and left the outcome to the
+    // parity of the detent count. A gesture whose result depends on how far the thumb happened to
+    // travel is worse than one that does nothing, so this one does nothing.
     return;
   }
   // CW (+1) steps like up, CCW (-1) like down
@@ -498,13 +508,16 @@ static void on_click(int direction, int click_num, void *context) {
 
 static void on_swipe(RotarySwipeDirection direction, void *context) {
   if (direction != RotarySwipeDirection_Left) {
-    return;
+    return; // the other three are not bound, so they are silent as well as inert
   }
   // mirrors prv_back_click_handler
   if (prv_silence_alert()) {
     layer_mark_dirty(main_data.layer);
-    return;
+    return; // the swipe which stops the buzzing does nothing else, and does not pulse for it
   }
+  const uint32_t vibe_ms = SWIPE_VIBE_MS;
+  const VibePattern swipe_vibe = {.durations = &vibe_ms, .num_segments = 1};
+  vibes_enqueue_custom_pattern(swipe_vibe);
   prv_instant_stand_down();
   uint16_t hr, min, sec;
   timer_get_time_parts(&hr, &min, &sec);
@@ -527,6 +540,22 @@ static void on_center_tap(void *context) {
   drawing_update();
   layer_mark_dirty(main_data.layer);
 }
+
+// Register the click wheel on the app's window
+static void prv_rotary_register(Window *window) {
+  RotaryConfig cfg = rotary_kit_default_config();
+  cfg.center_x = PBL_DISPLAY_WIDTH / 2;
+  cfg.center_y = PBL_DISPLAY_HEIGHT / 2;
+  cfg.degrees_per_click = 45;
+  cfg.click_vibe_ms = 0; //< detents are silent; a spin would otherwise buzz continuously
+  cfg.swipe_vibe_ms = 0; //< on_swipe pulses for itself, for the one direction it acts on
+  cfg.on_click = on_click;
+  cfg.on_center_tap = on_center_tap;
+  cfg.on_swipe = on_swipe;
+  rotary_kit_set_window_config(window, &cfg);
+}
+
+#endif // APP_TOUCH_CONTROLS
 
 // TickTimerService callback
 static void prv_tick_timer_service_callback(struct tm *tick_time, TimeUnits units_changed) {
@@ -558,16 +587,10 @@ static void prv_initialize(void) {
   Layer *window_root = window_get_root_layer(main_data.window);
   GRect window_bounds = layer_get_bounds(window_root);
   window_stack_push(main_data.window, true);
-  // register rotary gestures (no-op on hardware without a touch surface)
-  RotaryConfig rotary_cfg = rotary_kit_default_config();
-  rotary_cfg.center_x = PBL_DISPLAY_WIDTH / 2;
-  rotary_cfg.center_y = PBL_DISPLAY_HEIGHT / 2;
-  rotary_cfg.degrees_per_click = 45;
-  rotary_cfg.click_vibe_ms = 0;
-  rotary_cfg.on_click = on_click;
-  rotary_cfg.on_center_tap = on_center_tap;
-  rotary_cfg.on_swipe = on_swipe;
-  rotary_kit_set_window_config(main_data.window, &rotary_cfg);
+#if APP_TOUCH_CONTROLS
+  // register the click wheel; RotaryKit still no-ops if the hardware reports no touch surface
+  prv_rotary_register(main_data.window);
+#endif
   // initialize main layer
   main_data.layer = layer_create(window_bounds);
   ASSERT(main_data.layer);
@@ -635,7 +658,9 @@ static void prv_terminate(void) {
   }
   // destroy
   timer_persist_store();
+#if APP_TOUCH_CONTROLS
   rotary_kit_clear_window_config(main_data.window);
+#endif
   drawing_terminate();
   utility_terminate();
   layer_destroy(main_data.layer);
