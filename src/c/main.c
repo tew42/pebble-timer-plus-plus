@@ -232,13 +232,12 @@ static void prv_layer_update_proc_handler(Layer *layer, GContext *ctx) {
   drawing_render(layer, ctx);
 }
 
-// Back click handler
-static void prv_back_click_handler(ClickRecognizerRef recognizer, void *ctx) {
-  // the press which stops the buzzing does nothing else
-  if (prv_silence_alert()) {
-    layer_mark_dirty(main_data.layer);
-    return;
-  }
+// Retreat one step, shared by the back button and the left swipe
+// Back a field while there is a coarser one to go back to, and out of the app from the last of
+// them. Written once for the same reason prv_select_advance is: the two inputs mean the same
+// thing, and a second copy of this is a second place for the next rule to be forgotten -- as the
+// instant start stand-down below already had to be written twice.
+static void prv_back_retreat(void) {
   // as for every other press, and here it matters most: back is the press which leaves, and the
   // pop below is animated, so the event loop runs on for the length of it. A wait still standing
   // could fire behind the closing door and leave a stopwatch running in what gets stored.
@@ -252,6 +251,16 @@ static void prv_back_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   } else {
     window_stack_pop(true);
   }
+}
+
+// Back click handler
+static void prv_back_click_handler(ClickRecognizerRef recognizer, void *ctx) {
+  // the press which stops the buzzing does nothing else
+  if (prv_silence_alert()) {
+    layer_mark_dirty(main_data.layer);
+    return;
+  }
+  prv_back_retreat();
   // the ring does not move for this: the alert's rewind is select's now
   drawing_update();
   layer_mark_dirty(main_data.layer);
@@ -510,22 +519,15 @@ static void on_swipe(RotarySwipeDirection direction, void *context) {
   if (direction != RotarySwipeDirection_Left) {
     return; // the other three are not bound, so they are silent as well as inert
   }
-  // mirrors prv_back_click_handler
+  // the swipe which stops the buzzing does nothing else, and does not pulse for it
   if (prv_silence_alert()) {
     layer_mark_dirty(main_data.layer);
-    return; // the swipe which stops the buzzing does nothing else, and does not pulse for it
+    return;
   }
   const uint32_t vibe_ms = SWIPE_VIBE_MS;
   const VibePattern swipe_vibe = {.durations = &vibe_ms, .num_segments = 1};
   vibes_enqueue_custom_pattern(swipe_vibe);
-  prv_instant_stand_down();
-  uint16_t hr, min, sec;
-  timer_get_time_parts(&hr, &min, &sec);
-  if (timer_is_paused() && ((hr && main_data.field == FieldMin) || main_data.field == FieldSec)) {
-    main_data.field--;
-  } else {
-    window_stack_pop(true);
-  }
+  prv_back_retreat();
   drawing_update();
   layer_mark_dirty(main_data.layer);
 }

@@ -22,12 +22,12 @@ def configure(ctx):
     ctx.load('pebble_sdk')
 
 
-# Platforms which get the touch control scheme, mirroring APP_TOUCH_CONTROLS in src/c/main.h.
-# main.c compiles out every reference to RotaryKit on the others, so dropping the file here is
-# what makes the code actually absent rather than merely unreferenced. Keep the two lists in step:
-# a platform named here but not there links an object nothing calls, and one named there but not
-# here fails to link.
-TOUCH_PLATFORMS = ('flint', 'gabbro')
+# Platforms with a touch surface: the three Core Devices watches, which is what the SDK's own
+# PBL_TOUCH define marks. main.c keys APP_TOUCH_CONTROLS off PBL_TOUCH and compiles out every
+# reference to RotaryKit without it, so dropping the file here is what makes the code absent
+# rather than merely unreferenced -- worth doing where an app gets 24k, as it does on aplite.
+# If this list ever disagrees with PBL_TOUCH the build fails to link, which is the loud way round.
+TOUCH_PLATFORMS = ('flint', 'emery', 'gabbro')
 
 
 def build(ctx):

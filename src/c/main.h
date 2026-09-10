@@ -14,14 +14,16 @@
 
 //! Whether this build carries the touch control scheme at all.
 //! RotaryKit already self-disables at runtime, through touch_service_is_enabled(), so this is
-//! about not shipping the code rather than about not running it: the five platforms below the cut
-//! are 2013-2016 hardware with no touch surface, and they were paying for a click wheel they can
-//! never use.
-//! The list is deliberately inclusive at the uncertain end. Excluding a platform which turns out
-//! to have a touch surface would silently remove a whole input method, where including one which
-//! does not costs only the code size that was being wasted before.
-//! src/wscript mirrors this list to drop rotary_kit.c from those builds; keep the two in step.
-#if defined(PBL_PLATFORM_FLINT) || defined(PBL_PLATFORM_GABBRO)
+//! about not shipping the code rather than about not running it. It matters most where it is
+//! tightest: aplite allows 24k of code and heap, so a click wheel it can never use is worth
+//! leaving out.
+//! PBL_TOUCH is the SDK's own capability define, so the answer comes from the platform rather
+//! than from a list here which could drift from it. The touch surface arrived with the Core
+//! Devices watches -- Pebble 2 Duo, Pebble Time 2 and Pebble Round 2 -- and none of the four
+//! Pebble Technology platforms has one.
+//! wscript names those three to drop rotary_kit.c from every other build. A disagreement between
+//! the two shows up as a link error rather than as a silent loss of the controls.
+#ifdef PBL_TOUCH
 #define APP_TOUCH_CONTROLS 1
 #else
 #define APP_TOUCH_CONTROLS 0
