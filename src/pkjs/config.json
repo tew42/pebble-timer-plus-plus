@@ -103,7 +103,6 @@
         "type": "select",
         "messageKey": "instantStart",
         "label": "Instant start",
-        "description": ".",
         "serializeValueAs": "integer",
         "defaultValue": "255",
         "options": [
