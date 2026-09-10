@@ -1,2 +1,6 @@
 /build/
 /node_modules/
+# vendored verbatim from BrianEnders/pebble-rotary-kit; reformatting it would bury the two
+# local fixes in 300 lines of whitespace and make the patch unsendable upstream
+src/c/rotary_kit.c
+src/c/rotary_kit.h

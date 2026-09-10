@@ -26,6 +26,12 @@ static bool s_active = false;
 // accel_reset_ms.  Set accel_degrees_per_level = 0 to disable.
 // ---------------------------------------------------------------------------
 
+// Largest shift the multiplier may be built from. accel_max_level is caller supplied, and
+// "1 << level" is undefined for a count outside [0, 31]: ARM's LSL yields 0 for any count of 32
+// or more, which would leave the multiplier at zero for the division just below it to fall over
+// on. Clamping here keeps a nonsense config merely useless rather than fatal.
+#define ACCEL_MAX_SHIFT 15
+
 static int32_t   s_accel_total_hd   = 0;
 static int       s_accel_multiplier = 1;
 static AppTimer *s_accel_timer      = NULL;
@@ -290,6 +296,8 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
                     s_accel_total_hd += abs_delta;
                     int level = (int)(s_accel_total_hd / (s_cfg.accel_degrees_per_level * 2));
                     if (level > s_cfg.accel_max_level) level = s_cfg.accel_max_level;
+                    if (level < 0)                     level = 0;
+                    if (level > ACCEL_MAX_SHIFT)       level = ACCEL_MAX_SHIFT;
                     s_accel_multiplier = 1 << level;
                 }
 
@@ -331,8 +339,11 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
                 // Direction = the side the finger moved toward.
                 RotarySwipeDirection dir = (RotarySwipeDirection)s_last_region;
 
-                prv_vibe(s_cfg.swipe_vibe_ms);
+                // The haptic belongs to the callback, not to the recognition: on_swipe is
+                // documented optional, so an app which passed NULL has opted out of swipes and
+                // must not be buzzed for a gesture that does nothing.
                 if (s_cfg.on_swipe) {
+                    prv_vibe(s_cfg.swipe_vibe_ms);
                     s_cfg.on_swipe(dir, s_cfg.context);
                 }
             } else {
