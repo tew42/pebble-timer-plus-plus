@@ -233,6 +233,10 @@ static void prv_back_click_handler(ClickRecognizerRef recognizer, void *ctx) {
     layer_mark_dirty(main_data.layer);
     return;
   }
+  // as for every other press, and here it matters most: back is the press which leaves, and the
+  // pop below is animated, so the event loop runs on for the length of it. A wait still standing
+  // could fire behind the closing door and leave a stopwatch running in what gets stored.
+  prv_instant_stand_down();
   // get time parts
   uint16_t hr, min, sec;
   timer_get_time_parts(&hr, &min, &sec);
@@ -501,6 +505,7 @@ static void on_swipe(RotarySwipeDirection direction, void *context) {
     layer_mark_dirty(main_data.layer);
     return;
   }
+  prv_instant_stand_down();
   uint16_t hr, min, sec;
   timer_get_time_parts(&hr, &min, &sec);
   if (timer_is_paused() && ((hr && main_data.field == FieldMin) || main_data.field == FieldSec)) {
