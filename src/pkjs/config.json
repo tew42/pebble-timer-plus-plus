@@ -97,13 +97,13 @@
       },
       {
         "type": "text",
-        "defaultValue": "Inspired by QuickTimer by jazzabeanie. The seconds spent setting a timer are seconds the timer is out by, so the clock can be made to run from the moment you opened the app. The first press of select, up or down calls off the automatic start but keeps the credit, which is capped at the interval chosen below."
+        "defaultValue": "Optionally, start timing the moment the app opens or is reset, rather than when you finish editing/confirming. You enable it by configuring the time window allowed to begin setting a timer after app opening/reset (otherwise stopwatch auto-starts)."
       },
       {
         "type": "select",
         "messageKey": "instantStart",
         "label": "Instant start",
-        "description": "Start the clock the moment the app opens, or is reset, rather than when you press select. With nothing pressed by then, the stopwatch starts on its own.",
+        "description": ".",
         "serializeValueAs": "integer",
         "defaultValue": "255",
         "options": [
@@ -118,10 +118,6 @@
           {
             "label": "10 seconds",
             "value": "10"
-          },
-          {
-            "label": "15 seconds",
-            "value": "15"
           }
         ]
       }

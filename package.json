@@ -1,75 +1,75 @@
 {
-  "name": "timer-plus-plus",
-  "author": "Thomas Winkler",
-  "version": "1.0.0",
-  "keywords": [
-    "pebble-app"
-  ],
-  "private": true,
-  "dependencies": {
-    "@rebble/clay": "^1.1.0",
-    "pebble-scalable": "^2.2.0"
-  },
-  "pebble": {
-    "displayName": "Timer++",
-    "uuid": "c1a8292f-bf99-44ee-888c-517a7f2a48f1",
-    "sdkVersion": "3",
-    "enableMultiJS": true,
-    "targetPlatforms": [
-      "aplite",
-      "basalt",
-      "chalk",
-      "diorite",
-      "emery",
-      "flint",
-      "gabbro"
-    ],
-    "watchapp": {
-      "watchface": false
+    "author": "Thomas Winkler",
+    "dependencies": {
+        "@rebble/clay": "^1.1.0",
+        "pebble-scalable": "^2.2.0"
     },
-    "capabilities": [
-      "configurable"
+    "keywords": [
+        "pebble-app"
     ],
-    "messageKeys": [
-      "tenSecondUpdatesAbove",
-      "minuteUpdatesAbove",
-      "timerColor",
-      "chronoColor",
-      "settingsRequest",
-      "instantStart"
-    ],
-    "resources": {
-      "media": [
-        {
-          "file": "images/icon_bw.png",
-          "type": "bitmap",
-          "name": "MENU_ICON",
-          "memoryFormat": "1Bit",
-          "menuIcon": true,
-          "targetPlatforms": [
-            "aplite",
-            "diorite",
-            "flint"
-          ]
+    "name": "timer-plus-plus",
+    "pebble": {
+        "capabilities": [
+            "configurable"
+        ],
+        "displayName": "Timer++",
+        "enableMultiJS": true,
+        "messageKeys": [
+            "tenSecondUpdatesAbove",
+            "minuteUpdatesAbove",
+            "timerColor",
+            "chronoColor",
+            "settingsRequest",
+            "instantStart"
+        ],
+        "projectType": "native",
+        "resources": {
+            "media": [
+                {
+                    "file": "images/icon_bw.png",
+                    "memoryFormat": "1Bit",
+                    "menuIcon": true,
+                    "name": "MENU_ICON",
+                    "targetPlatforms": [
+                        "aplite",
+                        "diorite",
+                        "flint"
+                    ],
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/icon_color.png",
+                    "name": "MENU_ICON",
+                    "targetPlatforms": [
+                        "basalt",
+                        "chalk",
+                        "emery",
+                        "gabbro"
+                    ],
+                    "type": "bitmap"
+                },
+                {
+                    "characterRegex": "[0-9:. ]",
+                    "file": "fonts/bebas_neue_regular.ttf",
+                    "name": "BEBAS_FONT_35",
+                    "type": "font"
+                }
+            ]
         },
-        {
-          "file": "images/icon_color.png",
-          "type": "bitmap",
-          "name": "MENU_ICON",
-          "targetPlatforms": [
+        "sdkVersion": "3",
+        "targetPlatforms": [
+            "aplite",
             "basalt",
             "chalk",
+            "diorite",
             "emery",
+            "flint",
             "gabbro"
-          ]
-        },
-        {
-          "type": "font",
-          "name": "BEBAS_FONT_35",
-          "file": "fonts/bebas_neue_regular.ttf",
-          "characterRegex": "[0-9:. ]"
+        ],
+        "uuid": "c1a8292f-bf99-44ee-888c-517a7f2a48f1",
+        "watchapp": {
+            "watchface": false
         }
-      ]
-    }
-  }
+    },
+    "version": "1.0.0"
 }
