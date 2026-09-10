@@ -29,6 +29,13 @@ typedef enum {
 //! @return The current ControlMode
 ControlMode main_get_control_mode(void);
 
+//! Get the credit an instant start would give the clock if it started this instant
+//! Zero unless the instant start window is open, which it is while the app sits at zero having
+//! put itself there. Anything projecting forwards from the shown time has to take it off: the
+//! clock is going to begin this much further on than the digits say.
+//! @return The pending credit in milliseconds, never more than the window length
+int64_t main_instant_credit_ms(void);
+
 //! Check whether the exact time is being shown for a moment at the user's asking
 //! Up or down while counting down asks for it: nothing is masked while a peek lasts
 //! @return True if a peek is in progress

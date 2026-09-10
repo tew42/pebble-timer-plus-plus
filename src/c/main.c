@@ -31,16 +31,22 @@
 
 // Main data structure
 static struct {
-  Window *window;       //< The base window for the application
-  Layer *layer;         //< The base layer on which everything will be drawn
-  Field field;          //< Which field the buttons are pointed at
-  AppTimer *app_timer;  //< The AppTimer to keep the screen refreshing
-  AppTimer *peek_timer; //< The AppTimer which ends a peek at the exact time
-  bool peeking;         //< Whether the exact time is being shown at the user's asking
+  Window *window;          //< The base window for the application
+  Layer *layer;            //< The base layer on which everything will be drawn
+  Field field;             //< Which field the buttons are pointed at
+  AppTimer *app_timer;     //< The AppTimer to keep the screen refreshing
+  AppTimer *peek_timer;    //< The AppTimer which ends a peek at the exact time
+  bool peeking;            //< Whether the exact time is being shown at the user's asking
+  AppTimer *instant_timer; //< The AppTimer which starts the stopwatch if nothing is pressed
+  int64_t instant_ms;      //< The epoch the instant start window opened at, zero when closed
 } main_data;
 
 // Function declarations
 static void prv_app_timer_callback(void *data);
+static void prv_instant_arm(void);
+static void prv_instant_close(void);
+static void prv_instant_spend(void);
+static void prv_instant_stand_down(void);
 static void prv_peek_end(void *data);
 static void prv_refresh_stop(void);
 static void prv_refresh_restart(void);
@@ -106,6 +112,97 @@ static void prv_peek_end(void *data) {
   layer_mark_dirty(main_data.layer);
 }
 
+// Instant start, after the idea in jazzabeanie/pebble-timer-quick: the seconds spent setting a
+// timer are seconds the timer is wrong by, so the clock is counted from the moment the app came
+// to rest at zero rather than from the moment it was told to go.
+//
+// The window is two things at once, and both are measured by the same setting. It is how long the
+// app waits at zero before starting the stopwatch by itself, and it is the most it will ever
+// back-date a start by. The first press stands the wait down but keeps the credit, which is what
+// makes a five second window usable: once anything has been touched nothing starts by itself, the
+// length can be dialled at leisure, and the start it is eventually given is still credited.
+//
+// A consequence worth being explicit about: because the first press ends the wait, the window can
+// only ever start a stopwatch by itself. A dialled timer is one select also starts, and that
+// start is credited, which is the half of it that matters.
+
+// Close the window, forgetting both the wait and the credit
+static void prv_instant_close(void) {
+  if (main_data.instant_timer) {
+    app_timer_cancel(main_data.instant_timer);
+    main_data.instant_timer = NULL;
+  }
+  main_data.instant_ms = 0;
+}
+
+// Get the credit a start would be given now, which is the wait so far, capped at the window
+// Capped because the first press keeps the credit alive with nothing left to end it: without a
+// cap, pressing up and coming back ten minutes later would credit ten minutes.
+int64_t main_instant_credit_ms(void) {
+  uint32_t window_ms;
+  if (!main_data.instant_ms || !settings_instant_start_ms(&window_ms)) {
+    return 0;
+  }
+  const int64_t credit_ms = (int64_t)epoch() - main_data.instant_ms;
+  if (credit_ms <= 0) {
+    return 0;
+  }
+  return (credit_ms < (int64_t)window_ms) ? credit_ms : (int64_t)window_ms;
+}
+
+// Hand the credit to the clock which has just been started, and close the window behind it
+// Nothing special is needed for a credit larger than the length that was dialled: the value
+// crosses zero, which already means an elapsed timer, and the alert sounds on the next refresh.
+static void prv_instant_spend(void) {
+  const int64_t credit_ms = main_instant_credit_ms();
+  prv_instant_close();
+  if (credit_ms > 0) {
+    timer_add_elapsed(credit_ms);
+  }
+}
+
+// Stand the wait down, keeping the credit, because something has been pressed
+static void prv_instant_stand_down(void) {
+  if (main_data.instant_timer) {
+    app_timer_cancel(main_data.instant_timer);
+    main_data.instant_timer = NULL;
+  }
+}
+
+// Nothing was pressed for the length of the window, so start the stopwatch
+// The same start select makes from the seconds field, credited, so the digits read the window the
+// instant they appear. The ring snaps there as it does for select: the refresh loop's first pass
+// draws the credited position, and travelling to it would be an animation nobody is watching.
+static void prv_instant_expire(void *data) {
+  main_data.instant_timer = NULL;
+  main_data.field = FieldSec;
+  timer_toggle_play_pause();
+  prv_instant_spend();
+  prv_refresh_restart();
+  drawing_update();
+  layer_mark_dirty(main_data.layer);
+}
+
+// Open the window, if the app has come to rest at zero with the feature switched on
+// Two events reach here and they are the same event: launching with nothing to resume, and a
+// reset. A reset does not drop the app into ordinary working, it puts it back at the start.
+// Dialling down through zero is deliberately not one of them. timer_increment() resets the timer
+// itself when the value would reach zero, but that is inside the timer and invisible here, which
+// is the wanted answer: dial down to nothing, pause to think, and a stopwatch starting underneath
+// would turn the next two presses from edits into a split and a peek.
+static void prv_instant_arm(void) {
+  uint32_t window_ms;
+  prv_instant_close();
+  if (!settings_instant_start_ms(&window_ms)) {
+    return;
+  }
+  if (!timer_is_paused() || timer_get_value_ms() != 0) {
+    return; // there is something to resume, and opening the app to look at it must not start it
+  }
+  main_data.instant_ms = (int64_t)epoch();
+  main_data.instant_timer = app_timer_register(window_ms, prv_instant_expire, NULL);
+}
+
 // Get the current control mode of the timer
 // Not stored: the timer knows whether the clock is moving and this file knows where the buttons
 // are pointed, and keeping a third copy of the answer only let the three disagree
@@ -155,6 +252,8 @@ static void prv_back_click_handler(ClickRecognizerRef recognizer, void *ctx) {
 // carry into the next place is the timer's to make so that the value never passes through zero on
 // the way: a stopwatch run dialled from 59 minutes up to an hour stays a run.
 static void prv_step_selected_field(int direction) {
+  // the first press ends the wait for the app to start something by itself, and keeps the credit
+  prv_instant_stand_down();
   int64_t place_ms;
   if (main_data.field == FieldHr) {
     place_ms = MSEC_IN_HR;
@@ -206,6 +305,8 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *ctx) {
 // edit mode, where the length can be changed; counting up it takes a split, holding the shown
 // time while the stopwatch runs on, because pausing a stopwatch would throw away real time.
 static void prv_select_advance(void) {
+  // as for up and down: the press ends the wait, and the start it leads to is still credited
+  prv_instant_stand_down();
   if (timer_is_paused()) {
     // through the fields, and from the last of them the clock starts
     if (main_data.field == FieldHr) {
@@ -214,6 +315,7 @@ static void prv_select_advance(void) {
       main_data.field = FieldSec;
     } else {
       timer_toggle_play_pause();
+      prv_instant_spend();
       prv_refresh_restart();
     }
     return;
@@ -275,6 +377,8 @@ static void prv_select_long_click_handler(ClickRecognizerRef recognizer, void *c
   main_data.field = FieldMin;
   timer_reset();
   prv_refresh_stop();
+  // back at the start, so the window opens again on a fresh budget
+  prv_instant_arm();
   // the hold has done what it was hinting at, so the focus layer returns to full size now
   drawing_stop_reset_animation();
   // animate and refresh
@@ -355,6 +459,13 @@ static void prv_refresh_restart(void) {
 
 // New settings received from the phone
 static void prv_settings_updated(void) {
+  // a window which has been switched off closes at once, credit and all. A window whose length
+  // changed is left alone: re-opening it would throw away the credit already standing, and the
+  // cap is read at the moment it is spent, so the new length applies to that much straight away.
+  uint32_t window_ms;
+  if (!settings_instant_start_ms(&window_ms)) {
+    prv_instant_close();
+  }
   // adopt the new cadence immediately rather than after the pending sleep; the callback redraws
   prv_refresh_restart();
 }
@@ -474,6 +585,11 @@ static void prv_initialize(void) {
     main_data.app_timer =
         app_timer_register(SYSTEM_ENTRANCE_ANIMATION_MS, prv_app_timer_callback, NULL);
   }
+  // instant start, if the app has opened onto nothing to resume. A wakeup never has: it is the
+  // timer it stored coming back to say it has elapsed.
+  if (reason != APP_LAUNCH_WAKEUP) {
+    prv_instant_arm();
+  }
 }
 
 // Schedule the wakeup which reopens the app when the timer elapses
@@ -504,6 +620,9 @@ static void prv_terminate(void) {
   // unsubscribe from timer and settings services
   tick_timer_service_unsubscribe();
   settings_terminate();
+  // an unspent window goes no further than the app: nothing about it is stored, and the wakeup
+  // below is only ever scheduled for a running countdown, which is a window already spent
+  prv_instant_close();
   // schedule wakeup on the second the digits count down to, rather than truncating to just
   // before it
   if (!timer_is_chrono() && !timer_is_paused()) {

@@ -98,6 +98,12 @@ void timer_check_elapsed(void);
 //! @return True if the carry was made
 bool timer_increment(int64_t increment, bool carry);
 
+//! Tell the timer that the clock has already run this much
+//! Back-dating a start, which is what instant start spends its budget on. Both directions fall
+//! out of the one operation: the run is what the value is measured against either way.
+//! @param ms The milliseconds to add to the run, which may carry a countdown past zero
+void timer_add_elapsed(int64_t ms);
+
 //! Toggle play pause state for timer
 void timer_toggle_play_pause(void);
 

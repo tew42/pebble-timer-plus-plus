@@ -210,7 +210,9 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
     // in timer mode, get time
     time_t end_time = epoch() / MSEC_IN_SEC;
     if (main_get_control_mode() != ControlModeCounting && !timer_is_chrono()) {
-      end_time += timer_get_display_ms() / MSEC_IN_SEC;
+      // a length which has been dialled inside an open instant start window will begin credited,
+      // so it finishes that much sooner than the digits on their own would say
+      end_time += (timer_get_display_ms() - main_instant_credit_ms()) / MSEC_IN_SEC;
     }
     // format to readable time
     struct tm end_tm = *localtime(&end_time);

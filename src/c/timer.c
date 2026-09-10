@@ -255,6 +255,12 @@ bool timer_increment(int64_t increment, bool carry) {
   return carried;
 }
 
+// Tell the timer that the clock has already run this much
+// Correct in both directions by construction, because the run is the only thing it touches: a
+// countdown given a head start has that much less remaining, and a stopwatch given one starts
+// already reading it. The caller does not have to know which of the two it is holding.
+void timer_add_elapsed(int64_t ms) { prv_set_elapsed_ms(prv_elapsed_ms() + ms); }
+
 // Toggle play pause state for timer
 // The run carries across the change, in whichever form the anchor then takes
 void timer_toggle_play_pause(void) {
