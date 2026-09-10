@@ -34,7 +34,8 @@
       "tenSecondUpdatesAbove",
       "minuteUpdatesAbove",
       "timerColor",
-      "chronoColor"
+      "chronoColor",
+      "settingsRequest"
     ],
     "resources": {
       "media": [

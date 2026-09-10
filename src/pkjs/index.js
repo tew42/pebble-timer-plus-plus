@@ -1,7 +1,8 @@
 // @file index.js
 // @brief Configuration page glue
 //
-// Builds the Clay page from config.json and keeps the two update thresholds meaningful.
+// Builds the Clay page from config.json, keeps the two update thresholds meaningful, and answers
+// the watch when it asks what the settings are.
 //
 // @author Thomas Winkler (tew42)
 // @date September 3, 2026
@@ -9,6 +10,30 @@
 
 var Clay = require('@rebble/clay');
 var clayConfig = require('./config.json');
+
+// Answer the watch when it asks for the settings, which it does every time it starts.
+//
+// Clay sends them once, when the configuration page closes, and that send is dropped if the watch
+// app is not running at that moment -- which it usually is not, since the page is opened from the
+// phone. The watch would then go on using whatever it had stored until the page next happened to
+// be opened while the app was running. The phone is the side which always holds the last save, so
+// it is the side that can close the gap.
+Pebble.addEventListener('appmessage', function() {
+    var stored = null;
+    try {
+        stored = JSON.parse(localStorage.getItem('clay-settings'));
+    } catch (e) {
+        console.log('Timer++: the saved settings could not be read: ' + e);
+    }
+    if (!stored) {
+        return;  // nothing has ever been saved, so what the watch already has is the truth
+    }
+    Pebble.sendAppMessage(Clay.prepareSettingsForAppMessage(stored), function() {
+        console.log('Timer++: answered the watch with the saved settings');
+    }, function(e) {
+        console.log('Timer++: could not answer the watch: ' + JSON.stringify(e));
+    });
+});
 
 var clay = new Clay(clayConfig, function() {
     var clayConfig = this;

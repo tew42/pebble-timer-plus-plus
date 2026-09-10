@@ -12,6 +12,11 @@
 #include "utility.h"
 #include <pebble.h>
 
+// AppMessage buffers: four tuples in, one out. A tuple costs seven bytes of header and its
+// payload, so the page's four integers need about forty-five and the request nine.
+#define SETTINGS_INBOX_SIZE 64
+#define SETTINGS_OUTBOX_SIZE 32
+
 // Persistent storage
 #define PERSIST_SETTINGS_VERSION 2
 #define PERSIST_SETTINGS_VERSION_KEY 91742
@@ -44,9 +49,51 @@ static Settings settings_data = {
 // Called when new settings arrive from the phone
 static void (*settings_on_change)(void) = NULL;
 
+// Asking the phone for the settings on every launch, and how many goes to give it
+// The configuration page pushes what it saved when it closes, and that push is dropped when the
+// watch app is not running -- so a change made with the app closed would never arrive, and the
+// watch would go on using what it had until the page next happened to be opened while it was
+// running. The phone is the side which always holds the last save, so the watch asks it.
+#define SETTINGS_REQUEST_RETRIES 3
+#define SETTINGS_REQUEST_RETRY_MS 1000
+static AppTimer *request_timer = NULL;
+static uint8_t requests_left = 0;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Private Functions
 //
+
+static void prv_request_settings(void);
+
+// Retry a request the phone was not there for
+static void prv_retry_request(void *data) {
+  request_timer = NULL;
+  prv_request_settings();
+}
+
+// The phone can easily be out of reach in the moment the app starts, and often is: a launch from
+// a wakeup happens whether or not anything is listening. A few more goes covers a phone which is
+// merely slow to answer, and giving up after that leaves the stored settings in force, which is
+// the right answer when there is no phone to ask.
+static void prv_outbox_failed_handler(DictionaryIterator *iter, AppMessageResult reason,
+                                      void *context) {
+  if (request_timer || requests_left == 0) {
+    return;
+  }
+  requests_left--;
+  request_timer = app_timer_register(SETTINGS_REQUEST_RETRY_MS, prv_retry_request, NULL);
+}
+
+// Ask the phone to send the settings it has
+// What is in the message does not matter; that one arrived is the whole signal.
+static void prv_request_settings(void) {
+  DictionaryIterator *iter;
+  if (app_message_outbox_begin(&iter) != APP_MSG_OK) {
+    return;
+  }
+  dict_write_uint8(iter, MESSAGE_KEY_settingsRequest, 1);
+  app_message_outbox_send();
+}
 
 // Convert a threshold into milliseconds, SETTINGS_NEVER becoming a value nothing can exceed
 static int64_t prv_threshold_ms(uint8_t threshold, int64_t unit_ms) {
@@ -221,9 +268,19 @@ void settings_initialize(void (*on_change)(void)) {
   settings_on_change = on_change;
   prv_persist_read();
   app_message_register_inbox_received(prv_inbox_received_handler);
-  // two integers in, nothing ever sent out
-  app_message_open(64, 0);
+  app_message_register_outbox_failed(prv_outbox_failed_handler);
+  // four integers in from the configuration page, one byte out to ask for them
+  app_message_open(SETTINGS_INBOX_SIZE, SETTINGS_OUTBOX_SIZE);
+  requests_left = SETTINGS_REQUEST_RETRIES;
+  prv_request_settings();
 }
 
 // Stop receiving settings updates
-void settings_terminate(void) { app_message_deregister_callbacks(); }
+void settings_terminate(void) {
+  // a retry left running would call back into a module which has stopped listening
+  if (request_timer) {
+    app_timer_cancel(request_timer);
+    request_timer = NULL;
+  }
+  app_message_deregister_callbacks();
+}
