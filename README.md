@@ -49,7 +49,7 @@ The progress ring shades the stretch the masked digits could mean, so it never c
 
 Off by default. Switched on, timers and stopwatches both start from when you opened the app (with no timer or stopwatch to resume) or from when you reset by long-pressing select.
 
-There is a configurable time window of 5s or 10s; if nothing is pressed within that window after app opening, the stopwatch starts itself. If you do press up, down, or select to begin editing the timer, then you've committed to timer mode. The time you spent editing (or waiting) will automatically be accounted for after the stopwatch or timer starts.
+There is a configurable time window of 5s, 10s or 15s; if nothing is pressed within that window after app opening, the stopwatch starts itself. Any press of up, down or select calls that off, so nothing starts under your finger while you are still deciding — dial a length and start a timer, or press through to a stopwatch, either way at your own pace. The time you spent editing (or waiting) is accounted for once the timer or stopwatch starts, up to the length of the window.
 
 ### Colors
 
