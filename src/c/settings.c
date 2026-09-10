@@ -18,7 +18,9 @@
 #define SETTINGS_OUTBOX_SIZE 32
 
 // Persistent storage
-#define PERSIST_SETTINGS_VERSION 2
+// Version 3 added the instant start window; a mismatch discards what is stored, so the settings
+// come back from the phone on the next launch rather than being read as the wrong shape
+#define PERSIST_SETTINGS_VERSION 3
 #define PERSIST_SETTINGS_VERSION_KEY 91742
 #define PERSIST_SETTINGS_KEY 91743
 
@@ -34,6 +36,7 @@ typedef struct {
 typedef struct {
   uint8_t ten_second_above_sec; //< Update every ten seconds above this many seconds, or NEVER
   uint8_t minute_above_min;     //< Update every minute above this many minutes, or NEVER
+  uint8_t instant_start_sec;    //< Instant start window in seconds, or NEVER for off
   uint32_t timer_rgb;           //< Accent colour while counting down
   uint32_t chrono_rgb;          //< Accent colour while counting up
 } Settings;
@@ -42,6 +45,7 @@ typedef struct {
 static Settings settings_data = {
     .ten_second_above_sec = SETTINGS_NEVER,
     .minute_above_min = SETTINGS_NEVER,
+    .instant_start_sec = SETTINGS_NEVER,
     .timer_rgb = SETTINGS_TIMER_RGB_DEFAULT,
     .chrono_rgb = SETTINGS_CHRONO_RGB_DEFAULT,
 };
@@ -145,6 +149,9 @@ static void prv_persist_read(void) {
   settings_data.minute_above_min =
       prv_validate(stored.minute_above_min, SETTINGS_MINUTE_MIN_MIN, SETTINGS_MINUTE_MAX_MIN,
                    settings_data.minute_above_min);
+  settings_data.instant_start_sec =
+      prv_validate(stored.instant_start_sec, SETTINGS_INSTANT_START_MIN_SEC,
+                   SETTINGS_INSTANT_START_MAX_SEC, settings_data.instant_start_sec);
   // any 24 bit value names a colour; GColorFromHEX quantises whatever it is handed
   settings_data.timer_rgb = stored.timer_rgb & 0xFFFFFF;
   settings_data.chrono_rgb = stored.chrono_rgb & 0xFFFFFF;
@@ -195,6 +202,12 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context) 
         prv_validate(prv_tuple_int(tuple), SETTINGS_MINUTE_MIN_MIN, SETTINGS_MINUTE_MAX_MIN,
                      settings_data.minute_above_min);
   }
+  tuple = dict_find(iter, MESSAGE_KEY_instantStart);
+  if (tuple) {
+    settings_data.instant_start_sec =
+        prv_validate(prv_tuple_int(tuple), SETTINGS_INSTANT_START_MIN_SEC,
+                     SETTINGS_INSTANT_START_MAX_SEC, settings_data.instant_start_sec);
+  }
   // the colour pickers are only offered on colour hardware, so a watch which cannot use them
   // never sends them and keeps whatever is stored
   tuple = dict_find(iter, MESSAGE_KEY_timerColor);
@@ -228,6 +241,15 @@ uint8_t settings_masked_second_digits(int64_t value_ms) {
 }
 
 // Get the accent colour for one of the two counting directions
+// Get the instant start window, which is also the largest credit a start will be given
+bool settings_instant_start_ms(uint32_t *window_ms) {
+  if (settings_data.instant_start_sec == SETTINGS_NEVER) {
+    return false;
+  }
+  (*window_ms) = (uint32_t)settings_data.instant_start_sec * MSEC_IN_SEC;
+  return true;
+}
+
 uint32_t settings_accent_rgb(bool chrono) {
   return chrono ? settings_data.chrono_rgb : settings_data.timer_rgb;
 }

@@ -31,6 +31,13 @@
 //! Largest thresholds the configuration page may select
 #define SETTINGS_TEN_SECOND_MAX_SEC 120
 #define SETTINGS_MINUTE_MAX_MIN 10
+//! Bounds on the instant start window, in seconds, SETTINGS_NEVER meaning the feature is off.
+//! The window is two things at once: how long the app waits at zero before starting the stopwatch
+//! by itself, and the most it will ever back-date a start by. Keeping them one number keeps the
+//! credit bounded, which matters because the first press calls off the wait but keeps the credit.
+//! These must match the options in src/pkjs/config.json.
+#define SETTINGS_INSTANT_START_MIN_SEC 5
+#define SETTINGS_INSTANT_START_MAX_SEC 15
 
 //! Accent colours, as 0xRRGGBB, one for each counting direction. Both default to the green this
 //! app has always used, so out of the box nothing looks any different: drawing.c derives the
@@ -57,6 +64,11 @@ uint8_t settings_masked_second_digits(int64_t value_ms);
 //! @param value_ms The shown time in milliseconds, from timer_get_display_ms()
 //! @return The refresh interval in milliseconds, MSEC_IN_SEC while the seconds are live
 uint32_t settings_refresh_step_ms(int64_t value_ms);
+
+//! Get the instant start window, which is also the largest credit a start will be given
+//! @param window_ms A pointer to where to store the window in milliseconds
+//! @return True if instant start is on, in which case window_ms was written
+bool settings_instant_start_ms(uint32_t *window_ms);
 
 //! Get the accent colour for one of the two counting directions
 //! @param chrono True when counting up, which has its own colour
