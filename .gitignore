@@ -4,3 +4,7 @@ build
 .DS_Store
 node_modules
 scratch
+
+# Build output from the QuickTimer test suite carried on base/quick. It survives a switch back
+# to this line, where nothing else claims the path, so "git add -A" would sweep it into a commit.
+test/run_test*
