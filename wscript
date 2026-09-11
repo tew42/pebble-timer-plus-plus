@@ -22,12 +22,16 @@ def configure(ctx):
     ctx.load('pebble_sdk')
 
 
-# Platforms with a touch surface: the three Core Devices watches, which is what the SDK's own
-# PBL_TOUCH define marks. main.c keys APP_TOUCH_CONTROLS off PBL_TOUCH and compiles out every
-# reference to RotaryKit without it, so dropping the file here is what makes the code absent
-# rather than merely unreferenced -- worth doing where an app gets 24k, as it does on aplite.
-# If this list ever disagrees with PBL_TOUCH the build fails to link, which is the loud way round.
-TOUCH_PLATFORMS = ('flint', 'emery', 'gabbro')
+# Platforms with a touch surface, which is what the SDK's own PBL_TOUCH define marks. The
+# hardware table's touch row is colspan 5 then 2: the five Pebble Technology platforms have none,
+# and only Pebble Time 2 and Pebble Round 2 do. Pebble 2 Duo (flint) is a Core Devices watch but
+# has no touchscreen, and was wrongly listed here until the raw table was read rather than
+# inferred from the neighbouring rows.
+# main.c keys APP_TOUCH_CONTROLS off PBL_TOUCH and compiles out every reference without it, so
+# dropping the file here is what makes the code absent rather than merely unreferenced -- worth
+# doing where an app gets 24k, as it does on aplite. If this list ever disagrees with PBL_TOUCH
+# the build fails to link, which is the loud way round.
+TOUCH_PLATFORMS = ('emery', 'gabbro')
 
 
 def build(ctx):
@@ -43,7 +47,7 @@ def build(ctx):
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)
         sources = ctx.path.ant_glob('src/c/**/*.c')
         if platform not in TOUCH_PLATFORMS:
-            sources = [s for s in sources if s.name != 'rotary_kit.c']
+            sources = [s for s in sources if s.name != 'touch_input.c']
         ctx.pbl_build(source=sources, target=app_elf, bin_type='app')
 
         if build_worker:

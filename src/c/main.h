@@ -18,10 +18,10 @@
 //! tightest: aplite allows 24k of code and heap, so a click wheel it can never use is worth
 //! leaving out.
 //! PBL_TOUCH is the SDK's own capability define, so the answer comes from the platform rather
-//! than from a list here which could drift from it. The touch surface arrived with the Core
-//! Devices watches -- Pebble 2 Duo, Pebble Time 2 and Pebble Round 2 -- and none of the four
-//! Pebble Technology platforms has one.
-//! wscript names those three to drop rotary_kit.c from every other build. A disagreement between
+//! than from a list here which could drift from it. Only two watches have a touch surface --
+//! Pebble Time 2 and Pebble Round 2. Pebble 2 Duo is a Core Devices watch but has none, and
+//! neither does any of the four Pebble Technology platforms.
+//! wscript names those two to drop touch_input.c from every other build. A disagreement between
 //! the two shows up as a link error rather than as a silent loss of the controls.
 #ifdef PBL_TOUCH
 #define APP_TOUCH_CONTROLS 1

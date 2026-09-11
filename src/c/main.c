@@ -16,7 +16,7 @@
 #include "utility.h"
 #include <pebble.h>
 #if APP_TOUCH_CONTROLS
-#include "rotary_kit.h"
+#include "touch_input.h"
 #endif
 
 // Main constants
@@ -491,7 +491,7 @@ static void prv_settings_updated(void) {
 
 #if APP_TOUCH_CONTROLS
 
-static void on_click(int direction, int click_num, void *context) {
+static void on_step(int direction, int step_num) {
   // the detent which stops the buzzing does nothing else
   if (prv_silence_alert()) {
     layer_mark_dirty(main_data.layer);
@@ -509,16 +509,15 @@ static void on_click(int direction, int click_num, void *context) {
   prv_step_selected_field(direction);
   // as prv_up_click_handler, and only on the first detent of a gesture
   drawing_update();
-  if (click_num == 1) {
+  if (step_num == 1) {
     drawing_start_bounce_animation(direction > 0);
   }
   layer_mark_dirty(main_data.layer);
 }
 
-static void on_swipe(RotarySwipeDirection direction, void *context) {
-  if (direction != RotarySwipeDirection_Left) {
-    return; // the other three are not bound, so they are silent as well as inert
-  }
+// The back gesture. Which swipe counts is now the recognizer's business -- it is created with a
+// leftward mask -- so by the time this is called the direction has already been agreed.
+static void on_back(void) {
   // the swipe which stops the buzzing does nothing else, and does not pulse for it
   if (prv_silence_alert()) {
     layer_mark_dirty(main_data.layer);
@@ -532,7 +531,7 @@ static void on_swipe(RotarySwipeDirection direction, void *context) {
   layer_mark_dirty(main_data.layer);
 }
 
-static void on_center_tap(void *context) {
+static void on_tap(void) {
   // mirrors prv_select_click_handler
   if (prv_rewind_alert()) {
     layer_mark_dirty(main_data.layer);
@@ -543,18 +542,13 @@ static void on_center_tap(void *context) {
   layer_mark_dirty(main_data.layer);
 }
 
-// Register the click wheel on the app's window
-static void prv_rotary_register(Window *window) {
-  RotaryConfig cfg = rotary_kit_default_config();
-  cfg.center_x = PBL_DISPLAY_WIDTH / 2;
-  cfg.center_y = PBL_DISPLAY_HEIGHT / 2;
-  cfg.degrees_per_click = 45;
-  cfg.click_vibe_ms = 0; //< detents are silent; a spin would otherwise buzz continuously
-  cfg.swipe_vibe_ms = 0; //< on_swipe pulses for itself, for the one direction it acts on
-  cfg.on_click = on_click;
-  cfg.on_center_tap = on_center_tap;
-  cfg.on_swipe = on_swipe;
-  rotary_kit_set_window_config(window, &cfg);
+// Register the touch controls on the app's window
+static void prv_touch_register(Window *window) {
+  TouchInputConfig cfg = touch_input_default_config();
+  cfg.on_step = on_step;
+  cfg.on_tap = on_tap;
+  cfg.on_back = on_back;
+  touch_input_attach(window, &cfg);
 }
 
 #endif // APP_TOUCH_CONTROLS
@@ -590,8 +584,9 @@ static void prv_initialize(void) {
   GRect window_bounds = layer_get_bounds(window_root);
   window_stack_push(main_data.window, true);
 #if APP_TOUCH_CONTROLS
-  // register the click wheel; RotaryKit still no-ops if the hardware reports no touch surface
-  prv_rotary_register(main_data.window);
+  // register the touch controls; they no-op if the hardware reports no touch surface, or if the
+  // wearer has switched touch off in Settings
+  prv_touch_register(main_data.window);
 #endif
   // initialize main layer
   main_data.layer = layer_create(window_bounds);
@@ -661,7 +656,7 @@ static void prv_terminate(void) {
   // destroy
   timer_persist_store();
 #if APP_TOUCH_CONTROLS
-  rotary_kit_clear_window_config(main_data.window);
+  touch_input_detach(main_data.window);
 #endif
   drawing_terminate();
   utility_terminate();
