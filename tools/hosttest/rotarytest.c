@@ -42,14 +42,23 @@ static int failures = 0;
     if (!(c)) { printf("  FAIL: "); printf(__VA_ARGS__); printf("\n"); failures++; }                \
   } while (0)
 
-static int clicks, taps, swipes, liftoffs;
+static int clicks, swipes, liftoffs;
+static int hold_hints, hold_fires, hold_cancels;
 static RotarySwipeDirection last_dir;
 
 static void on_click(int d, int n, void *c) { (void)d; (void)n; (void)c; clicks++; }
-static void on_tap(void *c) { (void)c; taps++; }
+static void on_hold(RotaryHoldEvent e, void *c) {
+  (void)c;
+  if (e == RotaryHoldEvent_Hint) { hold_hints++; }
+  else if (e == RotaryHoldEvent_Fire) { hold_fires++; }
+  else { hold_cancels++; }
+}
 static void on_swipe(RotarySwipeDirection d, void *c) { (void)c; swipes++; last_dir = d; }
 static void on_liftoff(int cl, int deg, void *c) { (void)cl; (void)deg; (void)c; liftoffs++; }
-static void reset(void) { clicks = taps = swipes = liftoffs = 0; }
+static void reset(void) {
+  clicks = swipes = liftoffs = 0;
+  hold_hints = hold_fires = hold_cancels = 0;
+}
 
 static void emit(TouchEventType t, int x, int y) {
   TouchEvent e;
@@ -94,7 +103,7 @@ int main(void) {
   cfg.degrees_per_click = DEGREES_PER_CLICK;
   cfg.accel_upshift_dps = 0; //< acceleration has its own tests below; keep the arithmetic plain
   cfg.on_click = on_click;
-  cfg.on_center_tap = on_tap;
+  cfg.on_hold = on_hold;
   cfg.on_swipe = on_swipe;
   cfg.on_liftoff = on_liftoff;
   rotary_kit_set_window_config(stub_top_window, &cfg);
@@ -209,14 +218,57 @@ int main(void) {
   emit(TouchEvent_Liftoff, 0, 0);
   CHECK(!rotary_kit_in_progress(), "liftoff should clear it");
 
-  printf("a tap in the dead zone is still a tap:\n");
+  // Nothing answers to a brief touch any more, so a graze is inert wherever it lands. What the
+  // middle answers to is a finger put down and left there.
+  printf("a brief touch in the middle does nothing at all:\n");
   reset();
   emit(TouchEvent_Touchdown, CX, CY);
   fake_now_ms += 80;
   emit(TouchEvent_PositionUpdate, CX + 2, CY + 1);
   emit(TouchEvent_Liftoff, 0, 0);
-  CHECK(taps == 1, "expected a centre tap, got %d", taps);
-  CHECK(swipes == 0, "a tap is not a swipe");
+  CHECK(hold_hints == 0 && hold_fires == 0, "a touch too short to hint should do nothing");
+  CHECK(swipes == 0 && clicks == 0, "and it is neither a swipe nor a turn");
+
+  printf("a finger held still in the middle hints, then fires:\n");
+  reset();
+  emit(TouchEvent_Touchdown, CX, CY);
+  stub_fire_timer(); //< the hint
+  CHECK(hold_hints == 1, "expected the hint, got %d", hold_hints);
+  CHECK(hold_fires == 0, "the hint must not be the fire");
+  stub_fire_timer(); //< the rest of the hold
+  CHECK(hold_fires == 1, "expected the hold to fire, got %d", hold_fires);
+  CHECK(hold_cancels == 0, "a hold which fired was not cancelled");
+  emit(TouchEvent_Liftoff, 0, 0);
+  CHECK(liftoffs == 0, "the liftoff which ends a fired hold should mean nothing");
+  CHECK(hold_cancels == 0, "and it is not a cancel either");
+
+  printf("moving off the spot cancels it, and the hint is taken back:\n");
+  reset();
+  emit(TouchEvent_Touchdown, CX, CY);
+  stub_fire_timer(); //< the hint
+  CHECK(hold_hints == 1, "expected the hint first");
+  fake_now_ms += 50;
+  emit(TouchEvent_PositionUpdate, CX + 20, CY); //< past the 10px slop
+  CHECK(hold_cancels == 1, "moving past the slop should cancel the hold");
+  emit(TouchEvent_Liftoff, 0, 0);
+  CHECK(hold_fires == 0, "a cancelled hold must not fire");
+
+  printf("a hold which never hinted cancels silently:\n");
+  reset();
+  emit(TouchEvent_Touchdown, CX, CY);
+  fake_now_ms += 20;
+  emit(TouchEvent_PositionUpdate, CX + 20, CY);
+  emit(TouchEvent_Liftoff, 0, 0);
+  CHECK(hold_cancels == 0, "there was no hint to take back, so no cancel is owed");
+
+  // This is what keeps a sleeve or a wrist on a desk away from the reset: the hold has to be
+  // placed in the middle, not merely somewhere.
+  printf("a finger held out on the rim arms nothing:\n");
+  reset();
+  emit(TouchEvent_Touchdown, CX + RIM, CY);
+  CHECK(!stub_timer_pending, "a touchdown on the wheel should not arm a hold at all");
+  emit(TouchEvent_Liftoff, 0, 0);
+  CHECK(hold_hints == 0 && hold_fires == 0, "and it should certainly not fire one");
 
   if (failures) { printf("%d failure(s)\n", failures); return 1; }
   printf("all passed\n");

@@ -23,7 +23,7 @@
 #define BUTTON_HOLD_REPEAT_MS 100
 // A swipe has no travel or click to feel, so it gets the one pulse the buttons do not need. It is
 // fired from the handler rather than by RotaryKit's swipe_vibe_ms, which cannot know that this app
-// acts on one direction out of the four and would buzz for the three it ignores.
+// acts on two directions out of the four and would buzz for the two it ignores.
 #define SWIPE_VIBE_MS 40
 #define PEEK_DURATION_MS 1000
 // How long the instant start window waits before asking again whether the finger has gone.
@@ -409,8 +409,11 @@ static void prv_select_raw_release_handler(ClickRecognizerRef recognizer, void *
   layer_mark_dirty(main_data.layer);
 }
 
-// Select long click handler
-static void prv_select_long_click_handler(ClickRecognizerRef recognizer, void *ctx) {
+// Put everything back to zero, shared by the held button and the held touch
+// Written once for the reason prv_select_advance and prv_back_retreat are: the two inputs mean the
+// same thing, and re-arming the instant start window is exactly the sort of rule which gets
+// remembered in one copy and forgotten in the other.
+static void prv_reset_perform(void) {
   main_data.field = FieldMin;
   timer_reset();
   prv_refresh_stop();
@@ -421,6 +424,11 @@ static void prv_select_long_click_handler(ClickRecognizerRef recognizer, void *c
   // animate and refresh
   drawing_update_animated();
   layer_mark_dirty(main_data.layer);
+}
+
+// Select long click handler
+static void prv_select_long_click_handler(ClickRecognizerRef recognizer, void *ctx) {
+  prv_reset_perform();
 }
 
 // Down click handler
@@ -533,31 +541,50 @@ static void on_click(int direction, int click_num, void *context) {
   layer_mark_dirty(main_data.layer);
 }
 
+// Left is select and right is back, which is the mapping the system's own touch bridge uses. It
+// reads as a drag rather than as a pointer: the finger goes left and the selection advances right
+// through the fields, the way pulling a strip along under a fixed cursor would.
 static void on_swipe(RotarySwipeDirection direction, void *context) {
-  if (direction != RotarySwipeDirection_Left) {
-    return; // the other three are not bound, so they are silent as well as inert
-  }
-  // the swipe which stops the buzzing does nothing else, and does not pulse for it
+  // The swipe which stops the buzzing does nothing else and does not pulse for it -- and it is
+  // checked before the direction, so all four directions can call off an alert even though only
+  // two of them are bound to anything. Nothing else on this screen answers to a bare touch, so
+  // the noise should at least answer to a gesture in any direction.
   if (prv_silence_alert()) {
     layer_mark_dirty(main_data.layer);
     return;
   }
+  if (direction != RotarySwipeDirection_Left && direction != RotarySwipeDirection_Right) {
+    return; // up and down are not bound, so they are silent as well as inert
+  }
   const uint32_t vibe_ms = SWIPE_VIBE_MS;
   const VibePattern swipe_vibe = {.durations = &vibe_ms, .num_segments = 1};
   vibes_enqueue_custom_pattern(swipe_vibe);
-  prv_back_retreat();
+  if (direction == RotarySwipeDirection_Right) {
+    prv_back_retreat();
+  } else if (!prv_rewind_alert()) {
+    // as prv_select_click_handler: at the alert, select hands the time back rather than advancing
+    prv_select_advance();
+  }
   drawing_update();
   layer_mark_dirty(main_data.layer);
 }
 
-static void on_center_tap(void *context) {
-  // mirrors prv_select_click_handler
-  if (prv_rewind_alert()) {
-    layer_mark_dirty(main_data.layer);
-    return;
+// A finger put down in the middle and kept there is the held select, and resets.
+// The hint is the same shrinking focus layer the button draws while it is held, so the gesture
+// announces itself the same way and can be called off the same way -- by going somewhere else
+// before it fires.
+static void on_hold(RotaryHoldEvent event, void *context) {
+  switch (event) {
+  case RotaryHoldEvent_Hint:
+    drawing_start_reset_animation();
+    break;
+  case RotaryHoldEvent_Cancel:
+    drawing_stop_reset_animation();
+    break;
+  case RotaryHoldEvent_Fire:
+    prv_reset_perform();
+    return; //< prv_reset_perform marks the layer dirty itself
   }
-  prv_select_advance();
-  drawing_update();
   layer_mark_dirty(main_data.layer);
 }
 
@@ -579,7 +606,7 @@ static void prv_rotary_register(Window *window) {
   cfg.click_vibe_ms = 0; //< detents are silent; a spin would otherwise buzz continuously
   cfg.swipe_vibe_ms = 0; //< on_swipe pulses for itself, for the one direction it acts on
   cfg.on_click = on_click;
-  cfg.on_center_tap = on_center_tap;
+  cfg.on_hold = on_hold;
   cfg.on_swipe = on_swipe;
   rotary_kit_set_window_config(window, &cfg);
 }

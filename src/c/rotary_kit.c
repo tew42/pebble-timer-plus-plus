@@ -139,7 +139,11 @@ static uint64_t s_down_ms        = 0;
 static bool     s_entered_centre = false;
 static bool     s_swipe_failed   = false;
 
-static bool s_center_tap_pending = false;
+// Hold. Armed only by a touchdown inside the dead zone, and only when a callback wants it.
+static AppTimer *s_hold_timer  = NULL;
+static bool      s_hold_armed  = false;
+static bool      s_hold_hinted = false;
+static bool      s_hold_fired  = false;
 
 // True between Touchdown and Liftoff, whether or not a config was found for the gesture.
 static bool s_finger_down = false;
@@ -354,6 +358,43 @@ static void prv_fire_click(int direction) {
     }
 }
 
+// Stop tracking a hold, telling the caller only if it had already been told a hold was building.
+static void prv_hold_cancel(void) {
+    if (s_hold_timer) {
+        app_timer_cancel(s_hold_timer);
+        s_hold_timer = NULL;
+    }
+    if (s_hold_armed && s_hold_hinted && s_cfg.on_hold) {
+        s_cfg.on_hold(RotaryHoldEvent_Cancel, s_cfg.context);
+    }
+    s_hold_armed  = false;
+    s_hold_hinted = false;
+}
+
+// One timer does both stages: it runs to the hint, reports it, then runs on to the fire.
+static void prv_hold_timer_cb(void *data) {
+    s_hold_timer = NULL;
+    if (!s_hold_armed) {
+        return;
+    }
+    if (!s_hold_hinted) {
+        s_hold_hinted = true;
+        if (s_cfg.on_hold) {
+            s_cfg.on_hold(RotaryHoldEvent_Hint, s_cfg.context);
+        }
+        const uint32_t remaining =
+            (s_cfg.hold_ms > s_cfg.hold_hint_ms) ? (s_cfg.hold_ms - s_cfg.hold_hint_ms) : 1;
+        s_hold_timer = app_timer_register(remaining, prv_hold_timer_cb, NULL);
+        return;
+    }
+    s_hold_armed  = false;
+    s_hold_hinted = false;
+    s_hold_fired  = true;
+    if (s_cfg.on_hold) {
+        s_cfg.on_hold(RotaryHoldEvent_Fire, s_cfg.context);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Touch service handler
 // ---------------------------------------------------------------------------
@@ -381,7 +422,8 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
             s_translating        = false;
             s_entered_centre     = false;
             s_swipe_failed       = false;
-            s_center_tap_pending = false;
+            prv_hold_cancel();
+            s_hold_fired         = false;
             // Acceleration is scoped to the gesture. Carrying a multiplier across a liftoff meant
             // the first detent of the next turn could be worth eight steps, having been earned by
             // a turn which was already over.
@@ -402,9 +444,14 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
                 s_last_angle_hd = prv_coords_to_angle_hd(event->x, event->y);
                 s_rot_radius    = prv_radius(event->x, event->y);
             } else {
-                // In the dead zone — could be a centre tap, and the hole has been entered.
-                s_center_tap_pending = true;
-                s_entered_centre     = true;
+                // In the dead zone, so the hole has been entered and a hold can start building.
+                s_entered_centre = true;
+                if (s_cfg.on_hold && s_cfg.hold_ms > 0) {
+                    s_hold_armed = true;
+                    s_hold_timer = app_timer_register(
+                        s_cfg.hold_hint_ms ? s_cfg.hold_hint_ms : s_cfg.hold_ms,
+                        prv_hold_timer_cb, NULL);
+                }
             }
             break;
         }
@@ -421,14 +468,24 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
                 s_entered_centre = true;
             }
 
-            // Started in the dead zone and has moved onto the wheel: no longer a centre tap, and
-            // rotation begins from here rather than from the touchdown point.
-            if (s_center_tap_pending && on_wheel) {
-                s_center_tap_pending = false;
-                s_is_rotating        = true;
-                s_last_angle_hd      = prv_coords_to_angle_hd(event->x, event->y);
-                s_rot_radius         = prv_radius(event->x, event->y);
-                s_total_hd           = 0;
+            // A hold is a finger put down and kept still. Past the slop it is a gesture going
+            // somewhere, whatever it turns out to be.
+            if (s_hold_armed) {
+                const int32_t hdx = event->x - s_down_pt.x;
+                const int32_t hdy = event->y - s_down_pt.y;
+                const int32_t slop = s_cfg.hold_slop_px;
+                if (hdx * hdx + hdy * hdy > slop * slop) {
+                    prv_hold_cancel();
+                }
+            }
+
+            // Started in the dead zone and has moved onto the wheel, so rotation begins from here
+            // rather than from the touchdown point.
+            if (!s_is_rotating && on_wheel) {
+                s_is_rotating   = true;
+                s_last_angle_hd = prv_coords_to_angle_hd(event->x, event->y);
+                s_rot_radius    = prv_radius(event->x, event->y);
+                s_total_hd      = 0;
             }
 
             if (!s_is_rotating || s_translating || !on_wheel) {
@@ -502,18 +559,19 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
             // The gesture ends at the last position update rather than at the liftoff
             // coordinates: the digitizer reports finger-up at (0, 0), which is why the platform's
             // own recognizers ignore them too.
+            const bool hold_fired = s_hold_fired;
+            prv_hold_cancel();
+
             RotarySwipeDirection direction;
-            if (prv_swipe_completed(&direction)) {
+            if (hold_fired) {
+                // The hold has already done something; the liftoff which ends it means nothing.
+            } else if (prv_swipe_completed(&direction)) {
                 // The haptic belongs to the callback, not to the recognition: on_swipe is
                 // documented optional, so an app which passed NULL has opted out of swipes and
                 // must not be buzzed for a gesture that does nothing.
                 if (s_cfg.on_swipe) {
                     prv_vibe(s_cfg.swipe_vibe_ms);
                     s_cfg.on_swipe(direction, s_cfg.context);
-                }
-            } else if (s_center_tap_pending) {
-                if (s_cfg.on_center_tap) {
-                    s_cfg.on_center_tap(s_cfg.context);
                 }
             } else if (s_cfg.on_liftoff) {
                 s_cfg.on_liftoff(s_click_count, (int)s_total_hd / 2, s_cfg.context);
@@ -525,7 +583,7 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
             s_accumulated_hd     = 0;
             s_entered_centre     = false;
             s_swipe_failed       = false;
-            s_center_tap_pending = false;
+            s_hold_fired         = false;
             break;
         }
     }
@@ -546,9 +604,12 @@ RotaryConfig rotary_kit_default_config(void) {
         .accel_upshift_dps   = 150,
         .accel_downshift_dps = 120,
         .accel_max_level     = 2,
+        .hold_ms           = 750,
+        .hold_hint_ms      = 150,
+        .hold_slop_px      = 10,
         .on_click          = NULL,
         .on_liftoff        = NULL,
-        .on_center_tap     = NULL,
+        .on_hold           = NULL,
         .on_swipe          = NULL,
         .context           = NULL,
     };
@@ -610,7 +671,8 @@ void rotary_kit_clear_window_config(Window *window) {
         s_translating        = false;
         s_entered_centre     = false;
         s_swipe_failed       = false;
-        s_center_tap_pending = false;
+        prv_hold_cancel();
+        s_hold_fired         = false;
         s_speed_dps         = 0;
         s_accel_level       = 0;
         s_last_threshold_hd = 0;

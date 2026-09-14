@@ -8,6 +8,9 @@
 //   - Rotation stops for the rest of a gesture once the finger's radial movement outruns the arc
 //     it has travelled. Without that a swipe emitted detents on its way across the wheel.
 //   - The four-wedge region machinery is gone; direction now comes from the displacement.
+//   - Acceleration follows the speed of a turn rather than its accumulated distance, and is
+//     scoped to the gesture rather than to a timeout.
+//   - The centre tap is replaced by a hold, which reports a hint and a cancel as well as firing.
 //
 // Usage:
 //   1. Call rotary_kit_set_window_config() when creating each window.
@@ -34,10 +37,28 @@ typedef void (*RotaryClickCallback)(int direction, int click_num, void *context)
 //   total_degrees: total absolute rotation in degrees (always positive)
 typedef void (*RotaryLiftoffCallback)(int total_clicks, int total_degrees, void *context);
 
-// Fired when the user taps and releases inside the dead-zone centre without
-// drifting onto the wheel — equivalent to pressing the physical Select button.
-// (optional — pass NULL to skip)
-typedef void (*RotaryCenterTapCallback)(void *context);
+// Stages of a hold: a finger placed in the dead-zone centre and kept still.
+//
+// The platform has no long-press recognizer, so this is built here. It is the one gesture which
+// is worth reporting before it completes: a hold has nothing to see or feel while it is being
+// made, so an app which shows the wearer that something is about to happen needs somewhere to
+// start and stop that hint, and a cancel window is what makes a destructive action safe to put on
+// a press that could be accidental.
+//
+// Hint arrives once the finger has been still for hold_hint_ms, which is deliberately later than
+// touchdown: starting the hint immediately flashes it on every gesture which merely begins near
+// the middle, since a swipe is gone again within a few frames. Cancel only ever follows a Hint,
+// so a caller which does nothing until Hint has nothing to undo. Fire is terminal, and is not
+// followed by Cancel or by on_liftoff.
+typedef enum {
+    RotaryHoldEvent_Hint   = 0, // still long enough to be worth showing; the hold has not fired
+    RotaryHoldEvent_Fire   = 1, // held the distance
+    RotaryHoldEvent_Cancel = 2, // moved too far, or lifted early; only ever follows a Hint
+} RotaryHoldEvent;
+
+// Fired as a hold passes through the stages above.
+// (optional — pass NULL to skip, and no hold is tracked at all)
+typedef void (*RotaryHoldCallback)(RotaryHoldEvent event, void *context);
 
 // Direction reported by on_swipe.
 typedef enum {
@@ -88,6 +109,14 @@ typedef struct {
     int16_t accel_downshift_dps;  // speed leaving it again; lower, for hysteresis (default: 120)
     int8_t  accel_max_level;      // doubling cap — multiplier ≤ 2^n (default: 2 = 4×)
 
+    // --- Hold ---
+    // A hold must start inside min_radius and stay within hold_slop_px of where it landed. It has
+    // to be placed in the centre rather than wandering into it, which is what keeps a sleeve or a
+    // wrist on a desk from ever reaching it: contact out on the rim arms nothing.
+    uint32_t hold_ms;       // still this long to fire (default: 750, matching a long button press)
+    uint32_t hold_hint_ms;  // still this long to report Hint (default: 150)
+    int16_t  hold_slop_px;  // movement from the touchdown point which cancels it (default: 10)
+
     // --- Haptics ---
     // Duration in milliseconds for the vibration pulse on each event.
     // Set to 0 to disable vibration entirely for that event.
@@ -97,10 +126,10 @@ typedef struct {
     uint32_t swipe_vibe_ms;   // pulse duration on swipe fire        (default: 40)
 
     // --- Callbacks ---
-    RotaryClickCallback     on_click;       // Required
-    RotaryLiftoffCallback   on_liftoff;     // Optional — pass NULL
-    RotaryCenterTapCallback on_center_tap;  // Optional — pass NULL
-    RotarySwipeCallback     on_swipe;       // Optional — pass NULL
+    RotaryClickCallback   on_click;    // Required
+    RotaryLiftoffCallback on_liftoff;  // Optional — pass NULL
+    RotaryHoldCallback    on_hold;     // Optional — pass NULL
+    RotarySwipeCallback   on_swipe;    // Optional — pass NULL
 
     // --- User data passed back to all callbacks ---
     void *context;
