@@ -26,6 +26,10 @@
 // acts on one direction out of the four and would buzz for the three it ignores.
 #define SWIPE_VIBE_MS 40
 #define PEEK_DURATION_MS 1000
+// How long the instant start window waits before asking again whether the finger has gone.
+// Short enough that the start is not visibly late, and it only ever runs while a finger is
+// actually down.
+#define INSTANT_DEFER_MS 100
 #define SYSTEM_ENTRANCE_ANIMATION_MS 400
 // Wakeup scheduling
 // A wakeup is refused within a minute either side of another app's, so stepping clear of one
@@ -181,6 +185,20 @@ static void prv_instant_stand_down(void) {
 // draws the credited position, and travelling to it would be an animation nobody is watching.
 static void prv_instant_expire(void *data) {
   main_data.instant_timer = NULL;
+#if APP_TOUCH_CONTROLS
+  // Not while a finger is on the screen. A gesture is only classified when it lifts, so starting
+  // a stopwatch underneath one which turns out to be the swipe that leaves would put a run nobody
+  // asked for into what gets stored on the way out -- the same defect the buttons had, fixed in
+  // 96ae982. Waiting costs nothing: the credit main_instant_credit_ms hands out is capped at the
+  // window length, so a start held back by a few hundred milliseconds is still credited the same.
+  // Note this defers the wait rather than standing it down. A finger which turns out to have been
+  // a graze should leave the feature exactly as it found it, and only a gesture which means
+  // something calls prv_instant_stand_down().
+  if (rotary_kit_in_progress()) {
+    main_data.instant_timer = app_timer_register(INSTANT_DEFER_MS, prv_instant_expire, NULL);
+    return;
+  }
+#endif
   main_data.field = FieldSec;
   timer_toggle_play_pause();
   prv_instant_spend();
@@ -557,6 +575,15 @@ static void prv_rotary_register(Window *window) {
   rotary_kit_set_window_config(window, &cfg);
 }
 
+static void prv_window_appear(Window *window) {
+  // RotaryKit still no-ops if the hardware reports no touch surface
+  prv_rotary_register(window);
+}
+
+static void prv_window_disappear(Window *window) {
+  rotary_kit_clear_window_config(window);
+}
+
 #endif // APP_TOUCH_CONTROLS
 
 // TickTimerService callback
@@ -588,11 +615,17 @@ static void prv_initialize(void) {
   window_set_click_config_provider(main_data.window, prv_click_config_provider);
   Layer *window_root = window_get_root_layer(main_data.window);
   GRect window_bounds = layer_get_bounds(window_root);
-  window_stack_push(main_data.window, true);
 #if APP_TOUCH_CONTROLS
-  // register the click wheel; RotaryKit still no-ops if the hardware reports no touch surface
-  prv_rotary_register(main_data.window);
+  // The digitizer draws power for as long as it is subscribed, and RotaryKit subscribes with the
+  // first window registered and unsubscribes with the last one cleared. Registering on appear and
+  // clearing on disappear therefore hands it the window's lifetime rather than the app's, which
+  // is what the SDK asks for. Set before the push, so the first appear is not missed.
+  window_set_window_handlers(main_data.window, (WindowHandlers){
+                                                   .appear = prv_window_appear,
+                                                   .disappear = prv_window_disappear,
+                                               });
 #endif
+  window_stack_push(main_data.window, true);
   // initialize main layer
   main_data.layer = layer_create(window_bounds);
   ASSERT(main_data.layer);
@@ -660,9 +693,6 @@ static void prv_terminate(void) {
   }
   // destroy
   timer_persist_store();
-#if APP_TOUCH_CONTROLS
-  rotary_kit_clear_window_config(main_data.window);
-#endif
   drawing_terminate();
   utility_terminate();
   layer_destroy(main_data.layer);

@@ -125,3 +125,8 @@ void rotary_kit_clear_window_config(Window *window);
 
 // Returns true if RotaryKit is currently subscribed to the touch service.
 bool rotary_kit_is_active(void);
+
+// Returns true while a finger is on the screen, from Touchdown until Liftoff.
+// A gesture is only classified when the finger lifts, so anything which must not happen
+// underneath one whose meaning is not yet known can hold off on this.
+bool rotary_kit_in_progress(void);

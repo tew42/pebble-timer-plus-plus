@@ -129,6 +129,9 @@ static bool     s_swipe_failed   = false;
 
 static bool s_center_tap_pending = false;
 
+// True between Touchdown and Liftoff, whether or not a config was found for the gesture.
+static bool s_finger_down = false;
+
 // ---------------------------------------------------------------------------
 // Geometry helpers
 // ---------------------------------------------------------------------------
@@ -323,6 +326,8 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
     switch (event->type) {
 
         case TouchEvent_Touchdown: {
+            s_finger_down = true;
+
             // Look up the top window's config — this snapshot drives the whole gesture.
             Window       *top = window_stack_get_top_window();
             RotaryConfig *cfg = top ? prv_find_window_config(top) : NULL;
@@ -427,6 +432,7 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
         }
 
         case TouchEvent_Liftoff: {
+            s_finger_down = false;
             if (!s_cfg_valid) {
                 break;
             }
@@ -537,6 +543,7 @@ void rotary_kit_clear_window_config(Window *window) {
     if (s_window_config_count == 0 && s_active) {
         touch_service_unsubscribe();
         s_active             = false;
+        s_finger_down        = false;
         s_is_rotating        = false;
         s_translating        = false;
         s_entered_centre     = false;
@@ -554,4 +561,8 @@ void rotary_kit_clear_window_config(Window *window) {
 
 bool rotary_kit_is_active(void) {
     return s_active;
+}
+
+bool rotary_kit_in_progress(void) {
+    return s_finger_down;
 }

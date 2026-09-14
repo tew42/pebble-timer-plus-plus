@@ -164,6 +164,19 @@ int main(void) {
   CHECK(swipes == 0, "a slow quarter turn is not a swipe");
   CHECK(clicks == 3, "expected 3 detents from 90 degrees at 24 each, got %d", clicks);
 
+  // Instant start leans on this: it must not start a stopwatch underneath a gesture whose meaning
+  // is not known yet, and a gesture is only classified when the finger lifts.
+  printf("a finger down is visible while it is down, and not after:\n");
+  reset();
+  CHECK(!rotary_kit_in_progress(), "nothing is touching the screen yet");
+  emit(TouchEvent_Touchdown, CX + RIM, CY);
+  CHECK(rotary_kit_in_progress(), "touchdown should show a finger down");
+  fake_now_ms += 50;
+  emit(TouchEvent_PositionUpdate, CX + RIM, CY - 10);
+  CHECK(rotary_kit_in_progress(), "still down part way through the gesture");
+  emit(TouchEvent_Liftoff, 0, 0);
+  CHECK(!rotary_kit_in_progress(), "liftoff should clear it");
+
   printf("a tap in the dead zone is still a tap:\n");
   reset();
   emit(TouchEvent_Touchdown, CX, CY);

@@ -56,6 +56,13 @@ Layer *window_get_root_layer(Window *window);
 void window_stack_push(Window *window, bool animated);
 void window_stack_pop(bool animated);
 void window_set_click_config_provider(Window *window, void (*provider)(void *));
+typedef struct {
+  void (*load)(Window *window);
+  void (*appear)(Window *window);
+  void (*disappear)(Window *window);
+  void (*unload)(Window *window);
+} WindowHandlers;
+void window_set_window_handlers(Window *window, WindowHandlers handlers);
 
 // clicks
 typedef struct ClickRecognizer *ClickRecognizerRef;
