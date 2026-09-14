@@ -23,7 +23,18 @@ A fork of [Timer+](https://github.com/YclepticStudios/pebble-timer-plus) by way 
 
 Select is always the state change and a held select is always the reset; up and down set the time while it is stopped and ask for the exact one while it runs. Pausing keeps the time, including a stopwatch's, so it can be read, adjusted and started again. When the timer alarm goes off, any button dismisses the vibration - with short-press select functioning as a rewind.
 
-On touch watches the click wheel turns for up and down, a tap in the centre acts as select, and a swipe left acts as back.
+On touch watches the same actions are on the screen:
+
+| Gesture         | Same as      | Notes                                                                                                     |
+| --------------- | ------------ | --------------------------------------------------------------------------------------------------------- |
+| Turn the ring   | Up / Down    | Sets the selected field while the clock is stopped. Turning faster covers more: a full turn is 15 seconds taken slowly, 30 quicker, 60 flat out |
+| Swipe left      | Select       | The selection advances rightwards as the finger goes left, as though the fields were being dragged along   |
+| Swipe right     | Back         | Back a field, or out of the app                                                                           |
+| Hold the middle | Select, held | Resets. The digits shrink while the hold builds, and moving off the spot calls it off                      |
+
+Nothing happens on a brief touch, wherever it lands. Every gesture asks for either deliberate movement or a held press, because the alternative is a sleeve pausing a running stopwatch without saying so. A swipe in any direction dismisses the alarm, as any button does.
+
+Peek and split are on the buttons only.
 
 ## Settings
 
