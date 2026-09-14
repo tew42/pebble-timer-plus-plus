@@ -22,12 +22,17 @@ def configure(ctx):
     ctx.load('pebble_sdk')
 
 
-# Platforms with a touch surface: the three Core Devices watches, which is what the SDK's own
-# PBL_TOUCH define marks. main.c keys APP_TOUCH_CONTROLS off PBL_TOUCH and compiles out every
-# reference to RotaryKit without it, so dropping the file here is what makes the code absent
-# rather than merely unreferenced -- worth doing where an app gets 24k, as it does on aplite.
-# If this list ever disagrees with PBL_TOUCH the build fails to link, which is the loud way round.
-TOUCH_PLATFORMS = ('flint', 'emery', 'gabbro')
+# Platforms with a touch surface, which is what the SDK's own PBL_TOUCH define marks. Read off
+# sdk-core/pebble/common/tools/pebble_sdk_platform.py in 4.33.1, where exactly two platforms carry
+# it: emery and gabbro. Flint was listed here and is not one of them -- being a Core Devices watch
+# is not the same as having a digitizer.
+#
+# main.c keys APP_TOUCH_CONTROLS off PBL_TOUCH and compiles out every reference to RotaryKit
+# without it, so dropping the file here is about not compiling it rather than not linking it: the
+# linker discards the unreferenced code either way, and flint's footprint was already identical to
+# aplite's, which never had the file at all. A disagreement between this list and PBL_TOUCH is
+# therefore quiet in this direction, and a link failure only in the other.
+TOUCH_PLATFORMS = ('emery', 'gabbro')
 
 
 def build(ctx):
