@@ -1,0 +1,17 @@
+# Compiled test binaries and the generated options header. Everything here is built by run.sh.
+*.o
+configopts.h
+# the tests themselves, which have no extension and so cannot be matched by a pattern
+anitest
+clocktest
+controltest
+convention
+flicker
+glyphtest
+layouttest
+ringtest
+settingstest
+shadetest
+test
+timertest
+touchtest
