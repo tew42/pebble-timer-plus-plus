@@ -575,6 +575,10 @@ void drawing_stop_reset_animation(void) {
 }
 
 // Render everything to the screen
+int16_t drawing_ring_radius(void) {
+  return CIRCLE_RADIUS;
+}
+
 void drawing_render(Layer *layer, GContext *ctx) {
   // get properties
   GRect bounds = layer_get_bounds(layer);

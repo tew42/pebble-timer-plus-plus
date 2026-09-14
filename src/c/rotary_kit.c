@@ -22,8 +22,19 @@ static bool s_active = false;
 // ---------------------------------------------------------------------------
 // Rotation acceleration
 //
-// Configurable via RotaryConfig: accel_degrees_per_level, accel_max_level,
-// accel_reset_ms.  Set accel_degrees_per_level = 0 to disable.
+// The multiplier follows how fast the wheel is being turned right now rather than how far it has
+// been turned altogether. For a value dial that is the difference between a control which can be
+// corrected and one which cannot: slowing down restores fine control at once, and reversing to
+// take back an overshoot passes through zero speed on the way, so it winds itself down. Measuring
+// distance instead -- which is what a scroll list wants -- meant a reversal added to the total
+// like everything else and the multiplier only ever grew.
+//
+// Speed is smoothed. Position updates are interrupt-driven and irregular, so one short interval
+// between two of them reads as hundreds of degrees a second on its own. The thresholds have
+// hysteresis as well, so a turn sitting near one cannot flap between two pitches.
+//
+// Configurable via RotaryConfig: accel_upshift_dps, accel_downshift_dps, accel_max_level.
+// Set accel_upshift_dps = 0 to disable.
 // ---------------------------------------------------------------------------
 
 // Largest shift the multiplier may be built from. accel_max_level is caller supplied, and
@@ -32,15 +43,15 @@ static bool s_active = false;
 // on. Clamping here keeps a nonsense config merely useless rather than fatal.
 #define ACCEL_MAX_SHIFT 15
 
-static int32_t   s_accel_total_hd   = 0;
-static int       s_accel_multiplier = 1;
-static AppTimer *s_accel_timer      = NULL;
+// Weight given to the newest speed sample, out of ACCEL_SPEED_EMA_DEN. Responsive enough that
+// slowing down is felt within a couple of samples, smooth enough that one short interval between
+// position updates cannot spike the multiplier on its own.
+#define ACCEL_SPEED_EMA_NUM 3
+#define ACCEL_SPEED_EMA_DEN 4
 
-static void prv_accel_reset(void *data) {
-    s_accel_timer      = NULL;
-    s_accel_total_hd   = 0;
-    s_accel_multiplier = 1;
-}
+static int32_t  s_speed_dps       = 0;  // smoothed angular speed, degrees per second
+static int      s_accel_level     = 0;  // current doubling level
+static uint64_t s_last_sample_ms  = 0;
 
 // ---------------------------------------------------------------------------
 // Per-window config table
@@ -118,6 +129,7 @@ static int32_t s_total_hd       = 0;
 static int     s_click_count    = 0;
 static bool    s_is_rotating    = false;
 static int32_t s_rot_radius     = 0;     // radius where rotation began, for the latch
+static int16_t s_last_threshold_hd = 0;  // pitch the part-detent below was banked at
 static bool    s_translating    = false; // the latch has fired: this gesture is not a turn
 
 // Translation, measured from Touchdown.
@@ -232,6 +244,38 @@ static bool prv_radius_latch_fires(int32_t radius_now) {
     return dr > arc_px;
 }
 
+// Fold the newest sample into the smoothed speed and move the multiplier to match it. Level L is
+// entered at accel_upshift_dps << (L-1) and left again below accel_downshift_dps << (L-1), so
+// both thresholds double alongside the multiplier they gate.
+static void prv_update_accel(int16_t abs_delta_hd, uint32_t dt_ms) {
+    if (s_cfg.accel_upshift_dps <= 0) {
+        s_accel_level = 0;
+        return;
+    }
+    if (dt_ms > 0) {
+        // half-degrees per millisecond into degrees per second
+        const int32_t instant_dps = ((int32_t)abs_delta_hd * 500) / (int32_t)dt_ms;
+        s_speed_dps = (s_speed_dps * (ACCEL_SPEED_EMA_DEN - ACCEL_SPEED_EMA_NUM) +
+                       instant_dps * ACCEL_SPEED_EMA_NUM) /
+                      ACCEL_SPEED_EMA_DEN;
+    }
+    int cap = s_cfg.accel_max_level;
+    if (cap > ACCEL_MAX_SHIFT) {
+        cap = ACCEL_MAX_SHIFT;
+    }
+    if (cap < 0) {
+        cap = 0;
+    }
+    while (s_accel_level < cap &&
+           s_speed_dps >= ((int32_t)s_cfg.accel_upshift_dps << s_accel_level)) {
+        s_accel_level++;
+    }
+    while (s_accel_level > 0 &&
+           s_speed_dps < ((int32_t)s_cfg.accel_downshift_dps << (s_accel_level - 1))) {
+        s_accel_level--;
+    }
+}
+
 // Direction of a displacement, by its dominant axis. Screen y grows downwards.
 static RotarySwipeDirection prv_swipe_direction(int32_t dx, int32_t dy) {
     const int32_t adx = dx < 0 ? -dx : dx;
@@ -308,13 +352,6 @@ static void prv_fire_click(int direction) {
     if (s_cfg.on_click) {
         s_cfg.on_click(direction, s_click_count, s_cfg.context);
     }
-    if (s_cfg.accel_reset_ms > 0) {
-        if (s_accel_timer) {
-            app_timer_reschedule(s_accel_timer, s_cfg.accel_reset_ms);
-        } else {
-            s_accel_timer = app_timer_register(s_cfg.accel_reset_ms, prv_accel_reset, NULL);
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -345,11 +382,18 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
             s_entered_centre     = false;
             s_swipe_failed       = false;
             s_center_tap_pending = false;
+            // Acceleration is scoped to the gesture. Carrying a multiplier across a liftoff meant
+            // the first detent of the next turn could be worth eight steps, having been earned by
+            // a turn which was already over.
+            s_speed_dps          = 0;
+            s_accel_level        = 0;
+            s_last_threshold_hd  = 0;
             if (!s_cfg_valid) {
                 break;
             }
 
             s_down_pt = GPoint(event->x, event->y);
+            s_last_sample_ms = prv_now_ms();
             s_last_pt = s_down_pt;
             s_down_ms = prv_now_ms();
 
@@ -405,28 +449,46 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
                 break;
             }
 
-            // Update the acceleration multiplier if enabled.
-            if (s_cfg.accel_degrees_per_level > 0) {
-                int16_t abs_delta = delta < 0 ? -delta : delta;
-                s_accel_total_hd += abs_delta;
-                int level = (int)(s_accel_total_hd / (s_cfg.accel_degrees_per_level * 2));
-                if (level > s_cfg.accel_max_level) level = s_cfg.accel_max_level;
-                if (level < 0)                     level = 0;
-                if (level > ACCEL_MAX_SHIFT)       level = ACCEL_MAX_SHIFT;
-                s_accel_multiplier = 1 << level;
+            {
+                const uint64_t now_ms = prv_now_ms();
+                prv_update_accel(delta < 0 ? -delta : delta,
+                                 (uint32_t)(now_ms - s_last_sample_ms));
+                s_last_sample_ms = now_ms;
             }
 
-            // Threshold shrinks as multiplier grows → more clicks per arc.
-            int16_t threshold_hd = (s_cfg.degrees_per_click * 2) / s_accel_multiplier;
-            if (threshold_hd < 1) threshold_hd = 1;
-
-            while (s_accumulated_hd >= threshold_hd) {
-                prv_fire_click(+1);
-                s_accumulated_hd -= threshold_hd;
+            // Threshold shrinks as the level rises → more detents per degree, every one of them
+            // still worth a single step, so no value is skipped on the way past.
+            int16_t threshold_hd = (int16_t)((s_cfg.degrees_per_click * 2) >> s_accel_level);
+            if (threshold_hd < 1) {
+                threshold_hd = 1;
             }
-            while (s_accumulated_hd <= -threshold_hd) {
-                prv_fire_click(-1);
-                s_accumulated_hd += threshold_hd;
+
+            // Carry the part-detent across a change of pitch as the fraction it is, rather than
+            // as a count of half-degrees. Left alone, a remainder banked at the coarse pitch is
+            // most of a detent at the fine one, and the moment the level rose it would be handed
+            // straight back as a burst of steps the finger never travelled.
+            if (s_last_threshold_hd > 0 && threshold_hd != s_last_threshold_hd) {
+                s_accumulated_hd = s_accumulated_hd * threshold_hd / s_last_threshold_hd;
+            }
+            s_last_threshold_hd = threshold_hd;
+
+            // The first detent of a gesture comes at half the arc. A detent boundary should fall
+            // where the digit changes, and seeding it half a pitch in puts the step in the middle
+            // of the arc which earns it instead of a whole pitch past it -- otherwise the wheel
+            // feels dead for the first 24° of every gesture and the value trails the finger by a
+            // step for the rest of it.
+            for (;;) {
+                const int16_t step_hd =
+                    (s_click_count == 0) ? (int16_t)((threshold_hd + 1) / 2) : threshold_hd;
+                if (s_accumulated_hd >= step_hd) {
+                    prv_fire_click(+1);
+                    s_accumulated_hd -= step_hd;
+                } else if (s_accumulated_hd <= -step_hd) {
+                    prv_fire_click(-1);
+                    s_accumulated_hd += step_hd;
+                } else {
+                    break;
+                }
             }
             break;
         }
@@ -481,9 +543,9 @@ RotaryConfig rotary_kit_default_config(void) {
         .degrees_per_click = 30,
         .click_vibe_ms     = 20,   // subtle — won't fatigue during fast scrolling
         .swipe_vibe_ms     = 40,   // slightly longer — marks a committed gesture
-        .accel_degrees_per_level = 180,
-        .accel_max_level         = 3,
-        .accel_reset_ms          = 500,
+        .accel_upshift_dps   = 150,
+        .accel_downshift_dps = 120,
+        .accel_max_level     = 2,
         .on_click          = NULL,
         .on_liftoff        = NULL,
         .on_center_tap     = NULL,
@@ -549,12 +611,9 @@ void rotary_kit_clear_window_config(Window *window) {
         s_entered_centre     = false;
         s_swipe_failed       = false;
         s_center_tap_pending = false;
-        if (s_accel_timer) {
-            app_timer_cancel(s_accel_timer);
-            s_accel_timer      = NULL;
-        }
-        s_accel_total_hd   = 0;
-        s_accel_multiplier = 1;
+        s_speed_dps         = 0;
+        s_accel_level       = 0;
+        s_last_threshold_hd = 0;
         APP_LOG(APP_LOG_LEVEL_INFO, "RotaryKit: touch service unsubscribed");
     }
 }

@@ -21,6 +21,13 @@ void drawing_start_reset_animation(void);
 //! Return the focus layer to full size, once the hold has ended or performed its reset
 void drawing_stop_reset_animation(void);
 
+//! Get the radius of the progress ring
+//! The ring is the outermost thing drawn, so it is what the touch dead zone is sized against:
+//! the wheel wants to be turned around the ring, and the digits inside it are a target of their
+//! own. Exposed rather than recomputed in main.c so the two cannot drift apart.
+//! @return The ring radius in pixels, scaled for the display
+int16_t drawing_ring_radius(void);
+
 //! Render everything to the screen
 //! @param layer The layer being rendered onto
 //! @param ctx The layer's drawing context

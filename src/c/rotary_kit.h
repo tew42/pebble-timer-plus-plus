@@ -77,13 +77,16 @@ typedef struct {
                                 //   Lower = more sensitive, higher = coarser
 
     // --- Acceleration ---
-    // After each accel_degrees_per_level of cumulative rotation the effective
-    // click rate doubles (threshold halved), up to 2^accel_max_level times.
-    // The multiplier resets to 1× after accel_reset_ms of inactivity.
-    // Set accel_degrees_per_level to 0 to disable acceleration entirely.
-    int16_t  accel_degrees_per_level;  // arc per doubling in degrees (default: 180)
-    int8_t   accel_max_level;          // doubling cap — multiplier ≤ 2^n (default: 3 = 8×)
-    uint32_t accel_reset_ms;           // inactivity timeout before reset (default: 500)
+    // The multiplier follows the speed of the turn rather than the distance of it, so slowing
+    // down restores fine control at once and a reversal winds it down on its way through zero.
+    // Level L is entered at accel_upshift_dps << (L-1) and left again below
+    // accel_downshift_dps << (L-1), so both thresholds double alongside the multiplier. Every
+    // detent is still worth one step whatever the level, so no value is skipped on the way past.
+    // Scoped to the gesture: a liftoff resets it.
+    // Set accel_upshift_dps to 0 to disable acceleration entirely.
+    int16_t accel_upshift_dps;    // speed entering the next level, degrees/second (default: 150)
+    int16_t accel_downshift_dps;  // speed leaving it again; lower, for hysteresis (default: 120)
+    int8_t  accel_max_level;      // doubling cap — multiplier ≤ 2^n (default: 2 = 4×)
 
     // --- Haptics ---
     // Duration in milliseconds for the vibration pulse on each event.

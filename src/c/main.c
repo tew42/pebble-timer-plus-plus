@@ -566,7 +566,16 @@ static void prv_rotary_register(Window *window) {
   RotaryConfig cfg = rotary_kit_default_config();
   cfg.center_x = PBL_DISPLAY_WIDTH / 2;
   cfg.center_y = PBL_DISPLAY_HEIGHT / 2;
-  cfg.degrees_per_click = 45;
+  // Two thirds of the ring. The dead zone was a fixed 40px, which is 40% of emery's width and 31%
+  // of gabbro's and lines up with nothing that is drawn; sized off the ring it scales with the
+  // display and lands just outside the digits, so the rule reads as turn the ring, and the middle
+  // is something else. Its job is now steadiness rather than aim: one pixel of sideways noise is
+  // 57/r degrees, so a smaller circle would let a shaking finger fake a detent.
+  cfg.min_radius = drawing_ring_radius() * 2 / 3;
+  // 24° a detent is 15 of them in a full turn, and the multiplier doubles twice, so a turn of the
+  // wheel is worth 15 seconds taken slowly, 30 faster and 60 flat out. A minute of seconds is one
+  // turn at the top of the range, which is the number worth having on a clock.
+  cfg.degrees_per_click = 24;
   cfg.click_vibe_ms = 0; //< detents are silent; a spin would otherwise buzz continuously
   cfg.swipe_vibe_ms = 0; //< on_swipe pulses for itself, for the one direction it acts on
   cfg.on_click = on_click;

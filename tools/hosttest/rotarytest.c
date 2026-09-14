@@ -92,7 +92,7 @@ int main(void) {
   cfg.center_y = CY;
   cfg.min_radius = DEAD_ZONE;
   cfg.degrees_per_click = DEGREES_PER_CLICK;
-  cfg.accel_degrees_per_level = 0; //< acceleration has its own tests; keep the arithmetic plain
+  cfg.accel_upshift_dps = 0; //< acceleration has its own tests below; keep the arithmetic plain
   cfg.on_click = on_click;
   cfg.on_center_tap = on_tap;
   cfg.on_swipe = on_swipe;
@@ -162,7 +162,39 @@ int main(void) {
   reset();
   arc(0, 90, RIM, 45, 600);
   CHECK(swipes == 0, "a slow quarter turn is not a swipe");
-  CHECK(clicks == 3, "expected 3 detents from 90 degrees at 24 each, got %d", clicks);
+  // The first detent comes at half a pitch and the rest at a full one, so the steps land at 12,
+  // 36, 60 and 84 degrees: four of them inside a quarter turn rather than three.
+  CHECK(clicks == 4, "expected 4 detents across 90 degrees at 24 each, got %d", clicks);
+
+  // The ladder the pitch was chosen for: a full turn is worth 15 steps taken slowly and 60 taken
+  // quickly, so a minute of seconds is one turn of the wheel at the top of the range.
+  printf("acceleration follows the speed of the turn:\n");
+  cfg.accel_upshift_dps = 150;
+  cfg.accel_downshift_dps = 120;
+  cfg.accel_max_level = 2;
+  rotary_kit_set_window_config(stub_top_window, &cfg);
+
+  reset();
+  arc(0, 360, RIM, 180, 6000); //< 60 degrees/second, well under the first threshold
+  CHECK(clicks == 15, "a slow full turn should be 15 steps, got %d", clicks);
+
+  reset();
+  arc(0, 360, RIM, 180, 600); //< 600 degrees/second, over the second
+  CHECK(clicks >= 55 && clicks <= 60, "a fast full turn should approach 60 steps, got %d", clicks);
+
+  // The multiplier used to be module-level and survive a liftoff, so the first detent of the next
+  // turn could be worth several steps earned by a turn which was already over.
+  printf("and is forgotten when the finger lifts:\n");
+  reset();
+  arc(0, 360, RIM, 180, 600);  //< wind it right up
+  const int fast = clicks;
+  reset();
+  arc(0, 360, RIM, 180, 6000); //< then a slow one, which must start from scratch
+  CHECK(fast > 40, "the fast turn did not accelerate, so the next check proves nothing");
+  CHECK(clicks == 15, "the slow turn inherited the multiplier: %d steps, expected 15", clicks);
+
+  cfg.accel_upshift_dps = 0;
+  rotary_kit_set_window_config(stub_top_window, &cfg);
 
   // Instant start leans on this: it must not start a stopwatch underneath a gesture whose meaning
   // is not known yet, and a gesture is only classified when the finger lifts.
