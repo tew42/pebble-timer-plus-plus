@@ -71,33 +71,37 @@ static RotaryConfig *prv_find_window_config(Window *window) {
 }
 
 // ---------------------------------------------------------------------------
-// Swipe region
+// Swipe recognition
 //
-// The screen is divided into four 90° wedges measured clockwise from 12-o'clock:
+// A swipe is a fast, straight flick which crosses the middle of the wheel.
 //
-//   UP    region:  315° – 45°   (top)
-//   RIGHT region:   45° – 135°  (right)
-//   DOWN  region:  135° – 225°  (bottom)
-//   LEFT  region:  225° – 315°  (left)
+// The first three thresholds are the platform's own rather than guesses.
+// SWIPE_MIN_LENGTH_PX and SWIPE_MAX_DURATION_MS are public macros in the
+// firmware's applib/ui/recognizer/swipe.h, exposed there so that code outside
+// the recognizer can size paths from the same numbers it enforces, and the
+// straightness rule is the one swipe.c applies: once a path has committed, its
+// minor-axis projection must stay within half the major axis.
 //
-// REGION_NONE means the touch is inside the dead zone.
+// The fourth condition is this library's, and it is the one the platform's
+// recognizer cannot express: the path must pass through the dead zone. The
+// wheel is an annulus and the dead zone is its hole, so requiring a swipe to
+// traverse the hole makes turning and swiping disjoint by geometry rather than
+// by tuning. It is needed because the straightness cone above accepts an arc of
+// up to about 53 degrees: without it a brisk flick along the rim -- an ordinary
+// nudge of the wheel -- reads as a perfectly good swipe.
 // ---------------------------------------------------------------------------
 
-typedef enum {
-    REGION_NONE  = -1,
-    REGION_UP    =  0,   // values map 1:1 to RotarySwipeDirection_*
-    REGION_DOWN  =  1,
-    REGION_LEFT  =  2,
-    REGION_RIGHT =  3,
-} TouchRegion;
+#define SWIPE_MIN_LENGTH_PX       30  // minimum travel along the major axis
+#define SWIPE_MAX_DURATION_MS    300  // slower than this is a drag, not a flick
+#define SWIPE_STRAIGHTNESS_MIN_PX 10  // straightness is only judged past this much travel
 
-// Opposite region table — used to validate a cross-screen swipe.
-static const TouchRegion OPPOSITE[4] = {
-    REGION_DOWN,   // opposite of UP
-    REGION_UP,     // opposite of DOWN
-    REGION_RIGHT,  // opposite of LEFT
-    REGION_LEFT,   // opposite of RIGHT
-};
+// Half-degrees in one radian, for turning a swept angle into an arc length.
+#define HD_PER_RADIAN 115
+
+// Radial movement below this is a finger settling rather than a direction, and never latches.
+// It has room to be generous: a detent needs 24 degrees of arc, which is 36px at the rim on
+// emery, while a swipe across the middle collapses the radius by far more than this.
+#define RADIUS_LATCH_MIN_PX 12
 
 // ---------------------------------------------------------------------------
 // Active gesture state (valid from Touchdown through Liftoff)
@@ -106,16 +110,24 @@ static const TouchRegion OPPOSITE[4] = {
 static RotaryConfig s_cfg;               // snapshot of the top window's config
 static bool         s_cfg_valid = false; // false if no config found at Touchdown
 
-static int16_t     s_last_angle_hd    = 0;
-static int32_t     s_accumulated_hd   = 0;
-static int32_t     s_total_hd         = 0;
-static int         s_click_count      = 0;
-static bool        s_is_rotating      = false;
+// Rotation. Accumulated only while the finger is on the wheel and the gesture has not been
+// latched out as a translation.
+static int16_t s_last_angle_hd  = 0;
+static int32_t s_accumulated_hd = 0;
+static int32_t s_total_hd       = 0;
+static int     s_click_count    = 0;
+static bool    s_is_rotating    = false;
+static int32_t s_rot_radius     = 0;     // radius where rotation began, for the latch
+static bool    s_translating    = false; // the latch has fired: this gesture is not a turn
 
-static TouchRegion s_start_region     = REGION_NONE;
-static TouchRegion s_last_region      = REGION_NONE;  // updated every PositionUpdate
-static bool        s_centre_crossed   = false;
-static bool        s_center_tap_pending = false;
+// Translation, measured from Touchdown.
+static GPoint   s_down_pt        = {0, 0};
+static GPoint   s_last_pt        = {0, 0};
+static uint64_t s_down_ms        = 0;
+static bool     s_entered_centre = false;
+static bool     s_swipe_failed   = false;
+
+static bool s_center_tap_pending = false;
 
 // ---------------------------------------------------------------------------
 // Geometry helpers
@@ -166,25 +178,109 @@ static int16_t prv_angle_delta_hd(int16_t from, int16_t to) {
     return delta;
 }
 
-// Returns which swipe region contains (x,y), or REGION_NONE if in dead zone.
-// prv_coords_to_angle_hd returns 0=right, CW. Add 180 hd (90°) to rotate
-// to 0=top, CW, then bucket into 90° wedges.
-//   Verified cardinal points:
-//     right  (dx>0, dy=0) → raw=0,   top=180, deg=90  → REGION_RIGHT ✓
-//     bottom (dx=0, dy>0) → raw=180, top=360, deg=180 → REGION_DOWN  ✓
-//     left   (dx<0, dy=0) → raw=360, top=540, deg=270 → REGION_LEFT  ✓
-//     top    (dx=0, dy<0) → raw=540, top=0,   deg=0   → REGION_UP    ✓
-static TouchRegion prv_region_at(int16_t x, int16_t y) {
-    if (!prv_on_wheel(x, y)) return REGION_NONE;
+// Milliseconds since the epoch. Local rather than borrowed from the app, so this file stays
+// droppable into another project.
+static uint64_t prv_now_ms(void) {
+    time_t         sec;
+    const uint16_t ms = time_ms(&sec, NULL);
+    return (uint64_t)sec * 1000 + ms;
+}
 
-    int16_t raw_hd = prv_coords_to_angle_hd(x, y);
-    int16_t top_hd = (raw_hd + 180) % 720;  // rotate so 0 = top, CW
-    int16_t deg    = top_hd / 2;             // 0–359°
+// Milliseconds since the current gesture began.
+static uint32_t prv_elapsed_ms(void) {
+    return (uint32_t)(prv_now_ms() - s_down_ms);
+}
 
-    if (deg < 45 || deg >= 315) return REGION_UP;
-    if (deg < 135)              return REGION_RIGHT;
-    if (deg < 225)              return REGION_DOWN;
-    return REGION_LEFT;
+// Integer square root, for turning a squared distance back into pixels.
+static int32_t prv_isqrt(int32_t value) {
+    if (value <= 0) {
+        return 0;
+    }
+    int32_t x = value;
+    int32_t y = (x + 1) / 2;
+    while (y < x) {
+        x = y;
+        y = (x + value / x) / 2;
+    }
+    return x;
+}
+
+// Distance from the wheel centre in pixels.
+static int32_t prv_radius(int16_t x, int16_t y) {
+    const int32_t dx = x - s_cfg.center_x;
+    const int32_t dy = y - s_cfg.center_y;
+    return prv_isqrt(dx * dx + dy * dy);
+}
+
+// A turn holds its radius; a translation collapses it towards the centre and grows it out the
+// other side. Once the radial change has outrun the arc actually travelled, the gesture is a
+// translation, and rotation stops for the rest of it -- which is what stops a swipe emitting
+// detents on its way across. Measured from where rotation began rather than from Touchdown, so
+// that starting in the dead zone and moving out onto the wheel still turns it.
+static bool prv_radius_latch_fires(int32_t radius_now) {
+    int32_t dr = radius_now - s_rot_radius;
+    if (dr < 0) {
+        dr = -dr;
+    }
+    if (dr < RADIUS_LATCH_MIN_PX) {
+        return false;
+    }
+    const int32_t arc_px = (s_rot_radius * s_total_hd) / HD_PER_RADIAN;
+    return dr > arc_px;
+}
+
+// Direction of a displacement, by its dominant axis. Screen y grows downwards.
+static RotarySwipeDirection prv_swipe_direction(int32_t dx, int32_t dy) {
+    const int32_t adx = dx < 0 ? -dx : dx;
+    const int32_t ady = dy < 0 ? -dy : dy;
+    if (adx >= ady) {
+        return dx >= 0 ? RotarySwipeDirection_Right : RotarySwipeDirection_Left;
+    }
+    return dy >= 0 ? RotarySwipeDirection_Down : RotarySwipeDirection_Up;
+}
+
+// Fail a swipe the moment its path wanders or outstays its welcome, as the platform's recognizer
+// does, rather than judging only the endpoints: a path which strays and comes back should not be
+// rescued by where it happens to finish.
+static void prv_swipe_track(int16_t x, int16_t y) {
+    if (s_swipe_failed) {
+        return;
+    }
+    const int32_t dx    = x - s_down_pt.x;
+    const int32_t dy    = y - s_down_pt.y;
+    const int32_t adx   = dx < 0 ? -dx : dx;
+    const int32_t ady   = dy < 0 ? -dy : dy;
+    const int32_t major = adx > ady ? adx : ady;
+    const int32_t minor = adx > ady ? ady : adx;
+    if ((major > SWIPE_STRAIGHTNESS_MIN_PX) && ((minor * 2) > major)) {
+        s_swipe_failed = true;
+    } else if (prv_elapsed_ms() > SWIPE_MAX_DURATION_MS) {
+        s_swipe_failed = true;
+    }
+}
+
+// Whether the gesture which has just ended was a swipe, and if so in which direction.
+static bool prv_swipe_completed(RotarySwipeDirection *direction) {
+    if (s_swipe_failed || !s_entered_centre) {
+        return false;
+    }
+    const int32_t dx    = s_last_pt.x - s_down_pt.x;
+    const int32_t dy    = s_last_pt.y - s_down_pt.y;
+    const int32_t adx   = dx < 0 ? -dx : dx;
+    const int32_t ady   = dy < 0 ? -dy : dy;
+    const int32_t major = adx > ady ? adx : ady;
+    const int32_t minor = adx > ady ? ady : adx;
+    if (major < SWIPE_MIN_LENGTH_PX) {
+        return false;
+    }
+    if ((minor * 2) > major) {
+        return false;
+    }
+    if (prv_elapsed_ms() > SWIPE_MAX_DURATION_MS) {
+        return false;
+    }
+    *direction = prv_swipe_direction(dx, dy);
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -226,17 +322,13 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
 
     switch (event->type) {
 
-        case TouchEvent_Touchdown:
+        case TouchEvent_Touchdown: {
             // Look up the top window's config — this snapshot drives the whole gesture.
-            {
-                Window *top = window_stack_get_top_window();
-                RotaryConfig *cfg = top ? prv_find_window_config(top) : NULL;
-                if (cfg) {
-                    s_cfg       = *cfg;
-                    s_cfg_valid = true;
-                } else {
-                    s_cfg_valid = false;
-                }
+            Window       *top = window_stack_get_top_window();
+            RotaryConfig *cfg = top ? prv_find_window_config(top) : NULL;
+            s_cfg_valid       = (cfg != NULL);
+            if (s_cfg_valid) {
+                s_cfg = *cfg;
             }
 
             // Reset all per-gesture state.
@@ -244,123 +336,128 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
             s_accumulated_hd     = 0;
             s_total_hd           = 0;
             s_is_rotating        = false;
-            s_centre_crossed     = false;
+            s_translating        = false;
+            s_entered_centre     = false;
+            s_swipe_failed       = false;
             s_center_tap_pending = false;
-            s_start_region       = s_cfg_valid
-                                       ? prv_region_at(event->x, event->y)
-                                       : REGION_NONE;
-            s_last_region        = s_start_region;
-
-            if (s_start_region != REGION_NONE) {
-                s_is_rotating   = true;
-                s_last_angle_hd = prv_coords_to_angle_hd(event->x, event->y);
-            } else if (s_cfg_valid) {
-                // In dead zone — could be a centre tap.
-                s_center_tap_pending = true;
-            }
-            break;
-
-        case TouchEvent_PositionUpdate:
-            if (!s_cfg_valid) break;
-
-            // Track centre crossing for swipe detection.
-            if (!s_centre_crossed && !prv_on_wheel(event->x, event->y)) {
-                s_centre_crossed = true;
-            }
-
-            // Always track the last region the finger was seen on the wheel.
-            if (prv_on_wheel(event->x, event->y)) {
-                s_last_region = prv_region_at(event->x, event->y);
-            }
-
-            // If the finger started in the dead zone and has moved onto the wheel,
-            // cancel the centre tap and begin rotation tracking.
-            if (s_center_tap_pending && prv_on_wheel(event->x, event->y)) {
-                s_center_tap_pending = false;
-                s_is_rotating        = true;
-                s_start_region       = s_last_region;
-                s_last_angle_hd      = prv_coords_to_angle_hd(event->x, event->y);
-            }
-
-            // Accumulate rotation while the finger is on the wheel.
-            if (s_is_rotating && prv_on_wheel(event->x, event->y)) {
-                int16_t cur_hd = prv_coords_to_angle_hd(event->x, event->y);
-                int16_t delta  = prv_angle_delta_hd(s_last_angle_hd, cur_hd);
-                s_accumulated_hd += delta;
-                s_total_hd       += delta < 0 ? -delta : delta;
-                s_last_angle_hd   = cur_hd;
-
-                // Update the acceleration multiplier if enabled.
-                if (s_cfg.accel_degrees_per_level > 0) {
-                    int16_t abs_delta = delta < 0 ? -delta : delta;
-                    s_accel_total_hd += abs_delta;
-                    int level = (int)(s_accel_total_hd / (s_cfg.accel_degrees_per_level * 2));
-                    if (level > s_cfg.accel_max_level) level = s_cfg.accel_max_level;
-                    if (level < 0)                     level = 0;
-                    if (level > ACCEL_MAX_SHIFT)       level = ACCEL_MAX_SHIFT;
-                    s_accel_multiplier = 1 << level;
-                }
-
-                // Threshold shrinks as multiplier grows → more clicks per arc.
-                int16_t threshold_hd = (s_cfg.degrees_per_click * 2) / s_accel_multiplier;
-                if (threshold_hd < 1) threshold_hd = 1;
-
-                while (s_accumulated_hd >= threshold_hd) {
-                    prv_fire_click(+1);
-                    s_accumulated_hd -= threshold_hd;
-                }
-                while (s_accumulated_hd <= -threshold_hd) {
-                    prv_fire_click(-1);
-                    s_accumulated_hd += threshold_hd;
-                }
-            }
-            break;
-
-        case TouchEvent_Liftoff: {
-            if (!s_cfg_valid) break;
-
-            // Centre tap: finger stayed in the dead zone the whole time.
-            if (s_center_tap_pending) {
-                s_center_tap_pending = false;
-                if (s_cfg.on_center_tap) {
-                    s_cfg.on_center_tap(s_cfg.context);
-                }
+            if (!s_cfg_valid) {
                 break;
             }
 
-            // Swipe: start region + centre crossed + last seen region is the opposite.
-            // We use s_last_region (last PositionUpdate on the wheel) rather than
-            // the liftoff event coordinates, which are unreliable on Pebble Time Round.
-            if (s_centre_crossed          &&
-                s_start_region != REGION_NONE &&
-                s_last_region  != REGION_NONE &&
-                s_last_region == OPPOSITE[s_start_region]) {
+            s_down_pt = GPoint(event->x, event->y);
+            s_last_pt = s_down_pt;
+            s_down_ms = prv_now_ms();
 
-                // Direction = the side the finger moved toward.
-                RotarySwipeDirection dir = (RotarySwipeDirection)s_last_region;
+            if (prv_on_wheel(event->x, event->y)) {
+                s_is_rotating   = true;
+                s_last_angle_hd = prv_coords_to_angle_hd(event->x, event->y);
+                s_rot_radius    = prv_radius(event->x, event->y);
+            } else {
+                // In the dead zone — could be a centre tap, and the hole has been entered.
+                s_center_tap_pending = true;
+                s_entered_centre     = true;
+            }
+            break;
+        }
 
+        case TouchEvent_PositionUpdate: {
+            if (!s_cfg_valid) {
+                break;
+            }
+            s_last_pt = GPoint(event->x, event->y);
+            prv_swipe_track(event->x, event->y);
+
+            const bool on_wheel = prv_on_wheel(event->x, event->y);
+            if (!on_wheel) {
+                s_entered_centre = true;
+            }
+
+            // Started in the dead zone and has moved onto the wheel: no longer a centre tap, and
+            // rotation begins from here rather than from the touchdown point.
+            if (s_center_tap_pending && on_wheel) {
+                s_center_tap_pending = false;
+                s_is_rotating        = true;
+                s_last_angle_hd      = prv_coords_to_angle_hd(event->x, event->y);
+                s_rot_radius         = prv_radius(event->x, event->y);
+                s_total_hd           = 0;
+            }
+
+            if (!s_is_rotating || s_translating || !on_wheel) {
+                break;
+            }
+
+            const int16_t cur_hd = prv_coords_to_angle_hd(event->x, event->y);
+            const int16_t delta  = prv_angle_delta_hd(s_last_angle_hd, cur_hd);
+            s_last_angle_hd      = cur_hd;
+            s_accumulated_hd += delta;
+            s_total_hd += delta < 0 ? -delta : delta;
+
+            // Decide what kind of gesture this is before letting it emit anything. A swipe which
+            // has already crossed onto the wheel must not leave detents behind it.
+            if (prv_radius_latch_fires(prv_radius(event->x, event->y))) {
+                s_translating    = true;
+                s_accumulated_hd = 0;
+                break;
+            }
+
+            // Update the acceleration multiplier if enabled.
+            if (s_cfg.accel_degrees_per_level > 0) {
+                int16_t abs_delta = delta < 0 ? -delta : delta;
+                s_accel_total_hd += abs_delta;
+                int level = (int)(s_accel_total_hd / (s_cfg.accel_degrees_per_level * 2));
+                if (level > s_cfg.accel_max_level) level = s_cfg.accel_max_level;
+                if (level < 0)                     level = 0;
+                if (level > ACCEL_MAX_SHIFT)       level = ACCEL_MAX_SHIFT;
+                s_accel_multiplier = 1 << level;
+            }
+
+            // Threshold shrinks as multiplier grows → more clicks per arc.
+            int16_t threshold_hd = (s_cfg.degrees_per_click * 2) / s_accel_multiplier;
+            if (threshold_hd < 1) threshold_hd = 1;
+
+            while (s_accumulated_hd >= threshold_hd) {
+                prv_fire_click(+1);
+                s_accumulated_hd -= threshold_hd;
+            }
+            while (s_accumulated_hd <= -threshold_hd) {
+                prv_fire_click(-1);
+                s_accumulated_hd += threshold_hd;
+            }
+            break;
+        }
+
+        case TouchEvent_Liftoff: {
+            if (!s_cfg_valid) {
+                break;
+            }
+
+            // The gesture ends at the last position update rather than at the liftoff
+            // coordinates: the digitizer reports finger-up at (0, 0), which is why the platform's
+            // own recognizers ignore them too.
+            RotarySwipeDirection direction;
+            if (prv_swipe_completed(&direction)) {
                 // The haptic belongs to the callback, not to the recognition: on_swipe is
                 // documented optional, so an app which passed NULL has opted out of swipes and
                 // must not be buzzed for a gesture that does nothing.
                 if (s_cfg.on_swipe) {
                     prv_vibe(s_cfg.swipe_vibe_ms);
-                    s_cfg.on_swipe(dir, s_cfg.context);
+                    s_cfg.on_swipe(direction, s_cfg.context);
                 }
-            } else {
-                // Not a valid swipe — report as rotation liftoff.
-                if (s_cfg.on_liftoff) {
-                    s_cfg.on_liftoff(s_click_count,
-                                     (int)s_total_hd / 2,
-                                     s_cfg.context);
+            } else if (s_center_tap_pending) {
+                if (s_cfg.on_center_tap) {
+                    s_cfg.on_center_tap(s_cfg.context);
                 }
+            } else if (s_cfg.on_liftoff) {
+                s_cfg.on_liftoff(s_click_count, (int)s_total_hd / 2, s_cfg.context);
             }
 
             // Reset gesture state.
-            s_is_rotating    = false;
-            s_accumulated_hd = 0;
-            s_centre_crossed = false;
-            s_start_region   = REGION_NONE;
-            s_last_region    = REGION_NONE;
+            s_is_rotating        = false;
+            s_translating        = false;
+            s_accumulated_hd     = 0;
+            s_entered_centre     = false;
+            s_swipe_failed       = false;
+            s_center_tap_pending = false;
             break;
         }
     }
@@ -441,10 +538,10 @@ void rotary_kit_clear_window_config(Window *window) {
         touch_service_unsubscribe();
         s_active             = false;
         s_is_rotating        = false;
-        s_centre_crossed     = false;
+        s_translating        = false;
+        s_entered_centre     = false;
+        s_swipe_failed       = false;
         s_center_tap_pending = false;
-        s_start_region       = REGION_NONE;
-        s_last_region        = REGION_NONE;
         if (s_accel_timer) {
             app_timer_cancel(s_accel_timer);
             s_accel_timer      = NULL;

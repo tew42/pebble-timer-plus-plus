@@ -1,6 +1,14 @@
 // rotary_kit.h — RotaryKit: iPod-style click wheel gesture library for Pebble
 // Drop rotary_kit.h + rotary_kit.c into your project and include this header.
 //
+// This copy has diverged from BrianEnders/pebble-rotary-kit upstream. What changed, and why:
+//   - A swipe must now be long enough, quick enough and straight enough, to the platform's own
+//     published thresholds, as well as crossing the dead zone. It used to be any drag from one
+//     90° wedge to the opposite one, with no test of distance, duration or straightness.
+//   - Rotation stops for the rest of a gesture once the finger's radial movement outruns the arc
+//     it has travelled. Without that a swipe emitted detents on its way across the wheel.
+//   - The four-wedge region machinery is gone; direction now comes from the displacement.
+//
 // Usage:
 //   1. Call rotary_kit_set_window_config() when creating each window.
 //   2. Call rotary_kit_clear_window_config() when destroying it.
@@ -19,7 +27,9 @@
 //   click_num: 1-based count of clicks fired in the current drag gesture
 typedef void (*RotaryClickCallback)(int direction, int click_num, void *context);
 
-// Fired when the user lifts their finger after a rotation (optional).
+// Fired on liftoff for any gesture which was neither a swipe nor a centre tap (optional).
+// Despite the name this is not only reported after a rotation: a gesture which moved on the wheel
+// without reaching a single detent arrives here too, with total_clicks zero.
 //   total_clicks : total click-events fired during this gesture
 //   total_degrees: total absolute rotation in degrees (always positive)
 typedef void (*RotaryLiftoffCallback)(int total_clicks, int total_degrees, void *context);
@@ -37,8 +47,17 @@ typedef enum {
     RotarySwipeDirection_Right = 3,
 } RotarySwipeDirection;
 
-// Fired when a cross-screen swipe is recognised (on liftoff).
-//   direction: one of the four RotarySwipeDirection values.
+// Fired on liftoff when a swipe is recognised: a flick of at least 30px along its major axis,
+// completed within 300ms, whose minor-axis projection stayed within half the major axis, and
+// whose path passed through the dead zone.
+//
+// That last requirement is what keeps swiping and turning apart. The wheel is an annulus and the
+// dead zone is its hole, so a gesture which never reaches the hole is a turn no matter how
+// straight and quick it was — which matters, because a straightness cone this wide accepts an arc
+// of up to about 53°, and that is an ordinary nudge of the wheel.
+//
+//   direction: one of the four RotarySwipeDirection values, from the dominant axis of the
+//              displacement between touchdown and the last position update.
 // (optional — pass NULL to skip)
 typedef void (*RotarySwipeCallback)(RotarySwipeDirection direction, void *context);
 
