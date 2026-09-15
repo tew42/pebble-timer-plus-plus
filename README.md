@@ -16,25 +16,19 @@ A fork of [Timer+](https://github.com/YclepticStudios/pebble-timer-plus) by way 
 
 | Button       | Setting a timer           | Counting down                     | Counting up                                     |
 | ------------ | ------------------------- | --------------------------------- | ----------------------------------------------- |
-| Select       | Next field, then start    | Pause                             | Pause                                           |
 | Up / Down    | Change the selected field | Peek: the exact time for a second | Split: hold the reading while the clock runs on |
-| Select, held | Reset to zero             | Reset to zero                     | Reset to zero                                   |
+| Select       | Next field, then start    | Pause, with option to edit        | Pause, with option to edit                      |
 | Back         | Back a field, or leave    | Leave                             | Leave                                           |
+| Select, held | Reset to zero             | Reset to zero                     | Reset to zero                                   |
 
-Select is always the state change and a held select is always the reset; up and down set the time while it is stopped and ask for the exact one while it runs. Pausing keeps the time, including a stopwatch's, so it can be read, adjusted and started again. When the timer alarm goes off, any button dismisses the vibration - with short-press select functioning as a rewind.
-
-On touch watches the same actions are on the screen:
+On touch watches the same actions are on the screen (peek and split remain button-only):
 
 | Gesture         | Same as      | Notes                                                                                                     |
 | --------------- | ------------ | --------------------------------------------------------------------------------------------------------- |
-| Turn the ring   | Up / Down    | Sets the selected field while the clock is stopped. Turning faster covers more: a full turn is 15 seconds taken slowly, 30 quicker, 60 flat out |
-| Swipe left      | Select       | The selection advances rightwards as the finger goes left, as though the fields were being dragged along   |
-| Swipe right     | Back         | Back a field, or out of the app                                                                           |
-| Hold the middle | Select, held | Resets. The digits shrink while the hold builds, and moving off the spot calls it off                      |
-
-Nothing happens on a brief touch, wherever it lands. Every gesture asks for either deliberate movement or a held press, because the alternative is a sleeve pausing a running stopwatch without saying so. A swipe in any direction dismisses the alarm, as any button does.
-
-Peek and split are on the buttons only.
+| Turn the ring left or right   | Up / Down    | Sets the selected field while the clock is stopped, turning faster covers more  |
+| Swipe left      | Select       | Go forward between edit fields, as if dragging the selector   |
+| Swipe right     | Back         | Back a field, or leave         |
+| Hold the middle | Select, held | Reset to zero                      |
 
 ## Settings
 
@@ -87,7 +81,7 @@ the build configuration changes:
 This app is other people's work with some of mine on top.
 
 - **[Timer+](https://github.com/YclepticStudios/pebble-timer-plus)** by [Ycleptic Studios](https://github.com/YclepticStudios) — the original, and everything that makes it worth using: the progress ring, the scalable digits, the whole design.
-- **[pebble-timer-plus-touch](https://github.com/BrianEnders/pebble-timer-plus-touch)** by [BrianEnders](https://github.com/BrianEnders) — the fork that originally introduced touch controls, built on his [RotaryKit](https://github.com/BrianEnders/pebble-rotary-kit) library, vendored here.
+- **[pebble-timer-plus-touch](https://github.com/BrianEnders/pebble-timer-plus-touch)** by [BrianEnders](https://github.com/BrianEnders) — the fork that originally introduced touch controls, built on his [RotaryKit](https://github.com/BrianEnders/pebble-rotary-kit) library, adapted here.
 - **[pebble-timer-quick](https://github.com/jazzabeanie/pebble-timer-quick)** by [jazzabeanie](https://github.com/jazzabeanie) — the fork that originally introduced quick/instant timer or stopwatch counts from app start, which inspired the optional (and differently coded) mode here.
 - **[pebble-instant-timer](https://github.com/howeaj/pebble-instant-timer)** by [howeaj](https://github.com/howeaj) — an entirely different timer that features saving battery by refreshing the display less often than once a second, which inspired the display update settings.
 
