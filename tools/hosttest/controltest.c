@@ -97,7 +97,42 @@ static void instant_settings_updated(void) {
   if (!settings_instant_start_ms(&window_ms)) { instant_close(); }
 }
 
+// The auto-close, mirroring main.c's. The AppTimer is a deadline here, as the instant window's
+// is, and idle_tick() stands in for the callback firing. IDLE_CLOSE_MS must match main.c.
+#define IDLE_CLOSE_MS (5 * 60 * MSEC_IN_SEC)
+static int64_t idle_input_ms;  // the epoch of the last press
+static bool idle_touched;      // whether anything has been pressed since the launch
+
+static bool idle_may_close(void) {
+  return timer_is_paused() &&
+         ((timer_get_value_ms() == 0 && timer_get_length_ms() == 0) || !idle_touched);
+}
+static void idle_seen(void) {
+  idle_touched = true;
+  idle_input_ms = (int64_t)epoch();
+}
+// prv_initialize: the launch counts as the last input, and nothing has been touched yet
+static void idle_launch(void) {
+  idle_touched = false;
+  idle_input_ms = (int64_t)epoch();
+}
+// the callback deciding whether to close, with the re-registering arithmetic main.c does
+static bool idle_tick(void) {
+  int64_t left_ms = IDLE_CLOSE_MS - ((int64_t)epoch() - idle_input_ms);
+  if (left_ms > IDLE_CLOSE_MS) { left_ms = IDLE_CLOSE_MS; }
+  if (left_ms <= 0 && !idle_may_close()) { left_ms = IDLE_CLOSE_MS; }
+  return left_ms <= 0;
+}
+// the close itself: the instant window goes with it, for the reason prv_back_retreat closes it
+static bool idle_fire(void) {
+  if (!idle_tick()) { return false; }
+  instant_close();
+  left = true;
+  return true;
+}
+
 static void press_select(void) {
+  idle_seen();
   if (rewind_if_alerting()) { return; }
   instant_stand_down();
   if (timer_is_paused()) {
@@ -123,6 +158,7 @@ static void reveal_exact_time(void) {
   if (settings_masked_second_digits(timer_get_display_ms())) { peeking = true; }
 }
 static void hold_select(void) {
+  idle_seen();
   stored = ModeEditMin;
   field = FieldMin;
   timer_reset();
@@ -144,11 +180,13 @@ static void step_field(int direction) {
   }
 }
 static void press_up(void) {
+  idle_seen();
   if (silence_if_vibrating()) { return; }
   if (!timer_is_paused()) { reveal_exact_time(); return; }
   step_field(1);
 }
 static void press_down(void) {
+  idle_seen();
   if (silence_if_vibrating()) { return; }
   if (!timer_is_paused()) { reveal_exact_time(); return; }
   step_field(-1);
@@ -158,12 +196,14 @@ static void press_down(void) {
 // see the exact time. That reading is a toggle counting up, and firing it per detent left a single
 // flick's outcome to the parity of the detent count.
 static void wheel_click(int direction) {
+  idle_seen();
   if (silence_if_vibrating()) { return; }
   if (!timer_is_paused()) { return; }
   step_field(direction);
 }
 
 static void press_back(void) {
+  idle_seen();
   if (silence_if_vibrating()) { return; }
   instant_stand_down();
   uint16_t hr, min, sec;
@@ -690,6 +730,142 @@ int main(void) {
   CHECK(!timer_is_vibrating() && timer_is_alerting(),
         "a detent should silence the alert without ending it");
   printf("  ok: edits while held, inert while running, and still silences\n");
+
+  // The auto-close: the app takes itself off the screen once it has been left alone. Two states
+  // it may go from -- sitting at zero, and stored state nobody has come back to -- and it stays
+  // put from everywhere else. Every case here is "advance the clock and ask".
+  printf("\nthe auto-close, after five minutes of being left alone:\n");
+  settings_data.instant_start_sec = SETTINGS_NEVER;
+  #define IDLE_LAUNCH() do { field = FieldMin; stored = ModeEditMin; left = false; idle_launch(); \
+                           } while (0)
+
+  // a launch onto nothing, untouched: closed at five minutes, and not a millisecond before
+  timer_reset();
+  IDLE_LAUNCH();
+  fake_now_ms += IDLE_CLOSE_MS - 1;
+  CHECK(!idle_tick(), "the auto-close fired a millisecond early");
+  fake_now_ms += 1;
+  CHECK(idle_tick(), "sitting at zero should have closed at five minutes");
+
+  // a stored timer length nobody has come back to
+  timer_reset();
+  for (int i = 0; i < 5; i++) { timer_increment(MSEC_IN_MIN, false); }
+  IDLE_LAUNCH();
+  CHECK(timer_is_paused() && timer_get_value_ms() == 300000, "expected a stored paused 5:00");
+  fake_now_ms += IDLE_CLOSE_MS;
+  CHECK(idle_tick(), "a stored timer nobody touched should close");
+
+  // and a stored stopwatch run, which is the same case: it is lossless to close either way
+  timer_reset();
+  timer_toggle_play_pause();
+  fake_now_ms += 222000;
+  timer_toggle_play_pause();
+  IDLE_LAUNCH();
+  CHECK(timer_is_paused() && timer_get_value_ms() == 222000, "expected a stored paused 3:42");
+  fake_now_ms += IDLE_CLOSE_MS;
+  CHECK(idle_tick(), "a stored stopwatch run nobody touched should close");
+
+  // but one press takes it out of that case for the rest of the session: a length somebody was
+  // working on is left alone however long it sits
+  timer_reset();
+  for (int i = 0; i < 5; i++) { timer_increment(MSEC_IN_MIN, false); }
+  IDLE_LAUNCH();
+  fake_now_ms += 60000;
+  press_select(); // to the seconds, the timer untouched at 5:00
+  CHECK(timer_get_value_ms() == 300000, "the press should not have moved the timer");
+  fake_now_ms += MSEC_IN_HR;
+  CHECK(!idle_tick(), "a timer touched in this session should stay open");
+
+  // a clock which is moving is the app doing its job, whichever way it counts
+  timer_reset();
+  for (int i = 0; i < 5; i++) { timer_increment(MSEC_IN_MIN, false); }
+  timer_toggle_play_pause();
+  IDLE_LAUNCH();
+  fake_now_ms += MSEC_IN_HR;
+  CHECK(!idle_tick(), "a running clock should never close");
+  // including the wakeup launch, which is always a restored running countdown. By an hour in it
+  // has long elapsed and is counting up, and it still holds the app open -- see the note in
+  // main.c on why that case is deliberately out of scope.
+  CHECK(timer_is_chrono() && !timer_is_paused(), "expected an elapsed timer counting up");
+  CHECK(!idle_tick(), "an elapsed timer counting up should hold the app open");
+
+  // the alert: the press which stops the buzzing is still a press, and the clock is still moving
+  timer_reset();
+  for (int k = 0; k < 3; k++) { timer_increment(MSEC_IN_SEC, false); }
+  timer_toggle_play_pause();
+  IDLE_LAUNCH();
+  fake_now_ms += 4000;
+  CHECK(timer_is_vibrating(), "the timer should be sounding");
+  press_back();
+  CHECK(!timer_is_vibrating(), "the press should have stopped the noise");
+  fake_now_ms += IDLE_CLOSE_MS;
+  CHECK(!idle_tick(), "a silenced alert is still a running clock, so it should stay open");
+
+  // dialled up and back down to nothing: at zero again, and the five minutes run from the last
+  // press rather than from the launch
+  timer_reset();
+  IDLE_LAUNCH();
+  press_select(); // to the seconds
+  press_up();
+  fake_now_ms += 120000;
+  press_down(); // back to nothing
+  CHECK(timer_get_value_ms() == 0 && timer_get_length_ms() == 0, "expected to be back at nothing");
+  fake_now_ms += IDLE_CLOSE_MS - 1;
+  CHECK(!idle_tick(), "the five minutes should run from the last press, not the launch");
+  fake_now_ms += 1;
+  CHECK(idle_tick(), "dialled back down to nothing, it should close five minutes later");
+
+  // a reset puts it back at the start, from wherever it was
+  timer_reset();
+  for (int i = 0; i < 5; i++) { timer_increment(MSEC_IN_MIN, false); }
+  timer_toggle_play_pause();
+  IDLE_LAUNCH();
+  fake_now_ms += 30000;
+  hold_select();
+  CHECK(timer_is_paused() && timer_get_value_ms() == 0, "the reset should land at nothing");
+  fake_now_ms += IDLE_CLOSE_MS - 1;
+  CHECK(!idle_tick(), "the five minutes should run from the reset");
+  fake_now_ms += 1;
+  CHECK(idle_tick(), "a reset should close five minutes later");
+
+  // an inert input is still somebody being there: a detent on a running clock does nothing to the
+  // timer, but it stands the five minutes up again
+  timer_reset();
+  IDLE_LAUNCH();
+  fake_now_ms += IDLE_CLOSE_MS - 1000;
+  wheel_click(1);
+  fake_now_ms += 2000;
+  CHECK(!idle_tick(), "a detent should have put the five minutes back to the start");
+
+  // with instant start on, the window starts the stopwatch long before the five minutes, and a
+  // running clock holds the app open
+  settings_data.instant_start_sec = 10;
+  timer_reset();
+  instant_arm();
+  IDLE_LAUNCH();
+  fake_now_ms += 10000;
+  CHECK(instant_tick(), "the instant start window should have fired");
+  fake_now_ms += IDLE_CLOSE_MS;
+  CHECK(!idle_tick(), "the stopwatch it started should hold the app open");
+
+  // and where a press stood the wait down but left the credit standing, the auto-close has to
+  // take the window with it: a stopwatch started behind the closing door would be stored running
+  timer_reset();
+  instant_arm();
+  IDLE_LAUNCH();
+  press_select(); // to the seconds: the wait is stood down, the credit stays
+  CHECK(instant_ms && !instant_due_ms, "expected a standing credit with no wait");
+  CHECK(timer_get_value_ms() == 0 && timer_get_length_ms() == 0, "still sitting at nothing");
+  fake_now_ms += IDLE_CLOSE_MS;
+  CHECK(idle_fire(), "sitting at zero with a credit standing should still close");
+  CHECK(!instant_ms && !instant_due_ms, "the close must take the instant start window with it");
+  CHECK(timer_is_paused() && timer_get_value_ms() == 0,
+        "the app should be stored at nothing, got %lldms paused=%d",
+        (long long)timer_get_value_ms(), timer_is_paused());
+
+  settings_data.instant_start_sec = SETTINGS_NEVER;
+  #undef IDLE_LAUNCH
+  printf("  ok: closes from nothing and from stored state, stays put everywhere else\n");
 
   printf(failures ? "\n%d FAILURES\n" : "\ncontrol modes agree\n", failures);
   return failures != 0;

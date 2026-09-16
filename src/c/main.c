@@ -30,6 +30,9 @@
 // Short enough that the start is not visibly late, and it only ever runs while a finger is
 // actually down.
 #define INSTANT_DEFER_MS 100
+// How long the app will sit untouched before it takes itself off the screen. See the auto-close
+// block below for what "untouched" is allowed to mean.
+#define IDLE_CLOSE_MS (5 * 60 * MSEC_IN_SEC)
 #define SYSTEM_ENTRANCE_ANIMATION_MS 400
 // Wakeup scheduling
 // A wakeup is refused within a minute either side of another app's, so stepping clear of one
@@ -49,10 +52,16 @@ static struct {
   bool peeking;            //< Whether the exact time is being shown at the user's asking
   AppTimer *instant_timer; //< The AppTimer which starts the stopwatch if nothing is pressed
   int64_t instant_ms;      //< The epoch the instant start window opened at, zero when closed
+  AppTimer *idle_timer;    //< The AppTimer which closes the app once it has been left alone
+  int64_t input_ms;        //< The epoch of the last press, which the five minutes are measured from
+  bool touched;            //< Whether anything has been pressed since the app launched
 } main_data;
 
 // Function declarations
 static void prv_app_timer_callback(void *data);
+static void prv_idle_expire(void *data);
+static bool prv_idle_may_close(void);
+static void prv_idle_seen(void);
 static void prv_instant_arm(void);
 static void prv_instant_close(void);
 static void prv_instant_spend(void);
@@ -227,6 +236,76 @@ static void prv_instant_arm(void) {
   main_data.instant_timer = app_timer_register(window_ms, prv_instant_expire, NULL);
 }
 
+// The auto-close. A watch app left sitting in the foreground costs battery for nothing, and most
+// of all on a touch watch, where the digitizer draws power for as long as the window is up (see
+// prv_window_appear). Five minutes with nothing pressed and no clock moving is nobody being
+// there, and going costs them nothing: prv_terminate stores the timer on the way out either way,
+// so reopening puts back exactly what was left.
+//
+// The rule is read in the callback rather than at the press, which is what lets a handler get
+// away with the bare timestamp below. What the app may do depends on the state a press leaves
+// behind rather than the state it found, so arming from the top of a handler would arm at zero
+// and then miss the select which starts the clock, and arming from the bottom would have to catch
+// every early return -- including the two which do not even redraw. Instead one timer is armed at
+// launch and re-registers itself for the life of the app, and a press only says when it happened.
+// A call site missed that way can delay a close; it cannot cause a wrong one.
+
+// Whether the app is in a state it may close itself from
+// Two, and both of them are "the app is not in the middle of anything": sitting at zero, which is
+// where it opens onto nothing and where a reset leaves it, and stored state nobody has come back
+// to. A value dialled or run in this session is something someone was doing, so it is left alone
+// however long it sits, and a clock which is still moving is the app doing its job.
+//
+// The length is asked for as well as the value so that zero means the timer is genuinely empty,
+// rather than a countdown caught in the millisecond it reads zero with a length still set.
+//
+// Deliberately not the same rule as prv_instant_arm's, which will not open its window where the
+// value has been dialled down to zero. The two differ because they do opposite things: starting a
+// stopwatch under someone who is still dialling would turn their next two presses into a split
+// and a peek, where closing an app nobody has touched for five minutes costs only a relaunch.
+static bool prv_idle_may_close(void) {
+  return timer_is_paused() &&
+         ((timer_get_value_ms() == 0 && timer_get_length_ms() == 0) || !main_data.touched);
+}
+
+// Something was pressed
+// The stamp and the latch, and nothing else -- see the note above on why the rule is not read
+// here. The latch is what takes stored state out of the "nobody came back to it" case, and it
+// stays down for the rest of the session: having been here once is the whole of what it says.
+static void prv_idle_seen(void) {
+  main_data.touched = true;
+  main_data.input_ms = (int64_t)epoch();
+}
+
+// The five minutes are up, so look at what the app has become
+static void prv_idle_expire(void *data) {
+  main_data.idle_timer = NULL; //< before anything below registers into it again
+  int64_t left_ms = IDLE_CLOSE_MS - ((int64_t)epoch() - main_data.input_ms);
+  // a clock which has been put back would otherwise hold the app open for however far it moved
+  if (left_ms > IDLE_CLOSE_MS) {
+    left_ms = IDLE_CLOSE_MS;
+  }
+  if (left_ms <= 0 && !prv_idle_may_close()) {
+    left_ms = IDLE_CLOSE_MS; //< nothing to close from, so ask again in another five minutes
+  }
+#if APP_TOUCH_CONTROLS
+  // Not out from under a finger, for the reason prv_instant_expire holds off: a gesture is only
+  // classified when it lifts, so a window closed underneath one would drop whatever it turned out
+  // to mean onto the watchface.
+  if (left_ms <= 0 && rotary_kit_in_progress()) {
+    left_ms = INSTANT_DEFER_MS;
+  }
+#endif
+  if (left_ms > 0) {
+    main_data.idle_timer = app_timer_register((uint32_t)left_ms, prv_idle_expire, NULL);
+    return;
+  }
+  // an instant start wait can still be standing, and the pop below is not instantaneous -- the
+  // same reason prv_back_retreat closes it before leaving
+  prv_instant_close();
+  window_stack_pop(false);
+}
+
 // Get the current control mode of the timer
 // Not stored: the timer knows whether the clock is moving and this file knows where the buttons
 // are pointed, and keeping a third copy of the answer only let the three disagree
@@ -273,6 +352,7 @@ static void prv_back_retreat(void) {
 
 // Back click handler
 static void prv_back_click_handler(ClickRecognizerRef recognizer, void *ctx) {
+  prv_idle_seen();
   // the press which stops the buzzing does nothing else
   if (prv_silence_alert()) {
     layer_mark_dirty(main_data.layer);
@@ -316,6 +396,7 @@ static void prv_step_selected_field(int direction) {
 
 // Up click handler
 static void prv_up_click_handler(ClickRecognizerRef recognizer, void *ctx) {
+  prv_idle_seen();
   // the press which stops the buzzing does nothing else
   if (prv_silence_alert()) {
     layer_mark_dirty(main_data.layer);
@@ -382,6 +463,7 @@ static void prv_reveal_exact_time(void) {
 
 // Select click handler
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *ctx) {
+  prv_idle_seen();
   // at the alert, select hands the time back rather than advancing
   if (prv_rewind_alert()) {
     layer_mark_dirty(main_data.layer);
@@ -395,6 +477,10 @@ static void prv_select_click_handler(ClickRecognizerRef recognizer, void *ctx) {
 
 // Select raw click handler
 static void prv_select_raw_click_handler(ClickRecognizerRef recognizer, void *ctx) {
+  // Stamped here rather than in prv_select_click_handler alone, because this is the down edge.
+  // Select carries a long click, so its single click handler only arrives on the release, and a
+  // press which is still being held is already somebody being here.
+  prv_idle_seen();
   // stop the buzzing on the way down, before the press has decided what it is
   prv_silence_alert();
   // animate and refresh
@@ -414,6 +500,7 @@ static void prv_select_raw_release_handler(ClickRecognizerRef recognizer, void *
 // same thing, and re-arming the instant start window is exactly the sort of rule which gets
 // remembered in one copy and forgotten in the other.
 static void prv_reset_perform(void) {
+  prv_idle_seen();
   main_data.field = FieldMin;
   timer_reset();
   prv_refresh_stop();
@@ -433,6 +520,7 @@ static void prv_select_long_click_handler(ClickRecognizerRef recognizer, void *c
 
 // Down click handler
 static void prv_down_click_handler(ClickRecognizerRef recognizer, void *ctx) {
+  prv_idle_seen();
   // the press which stops the buzzing does nothing else
   if (prv_silence_alert()) {
     layer_mark_dirty(main_data.layer);
@@ -518,6 +606,8 @@ static void prv_settings_updated(void) {
 #if APP_TOUCH_CONTROLS
 
 static void on_click(int direction, int click_num, void *context) {
+  // before the returns below: a detent which turns out to do nothing is still somebody turning it
+  prv_idle_seen();
   // the detent which stops the buzzing does nothing else
   if (prv_silence_alert()) {
     layer_mark_dirty(main_data.layer);
@@ -545,6 +635,8 @@ static void on_click(int direction, int click_num, void *context) {
 // reads as a drag rather than as a pointer: the finger goes left and the selection advances right
 // through the fields, the way pulling a strip along under a fixed cursor would.
 static void on_swipe(RotarySwipeDirection direction, void *context) {
+  // before the returns below, as in on_click: the two unbound directions are inert, not unheard
+  prv_idle_seen();
   // The swipe which stops the buzzing does nothing else and does not pulse for it -- and it is
   // checked before the direction, so all four directions can call off an alert even though only
   // two of them are bound to anything. Nothing else on this screen answers to a bare touch, so
@@ -689,6 +781,10 @@ static void prv_initialize(void) {
   if (reason != APP_LAUNCH_WAKEUP) {
     prv_instant_arm();
   }
+  // the auto-close, which runs for the life of the app and re-registers itself. Armed with the
+  // launch as the last input, so an app opened onto stored state nobody touches closes on time.
+  main_data.input_ms = (int64_t)epoch();
+  main_data.idle_timer = app_timer_register(IDLE_CLOSE_MS, prv_idle_expire, NULL);
 }
 
 // Schedule the wakeup which reopens the app when the timer elapses
@@ -722,6 +818,10 @@ static void prv_terminate(void) {
   // an unspent window goes no further than the app: nothing about it is stored, and the wakeup
   // below is only ever scheduled for a running countdown, which is a window already spent
   prv_instant_close();
+  if (main_data.idle_timer) {
+    app_timer_cancel(main_data.idle_timer);
+    main_data.idle_timer = NULL;
+  }
   // schedule wakeup on the second the digits count down to, rather than truncating to just
   // before it
   if (!timer_is_chrono() && !timer_is_paused()) {
