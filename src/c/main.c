@@ -30,8 +30,8 @@
 // Short enough that the start is not visibly late, and it only ever runs while a finger is
 // actually down.
 #define INSTANT_DEFER_MS 100
-// How long the app will sit untouched before it takes itself off the screen. See the auto-close
-// block below for what "untouched" is allowed to mean.
+// How long the app will sit with nothing pressed before it takes itself off the screen, where
+// the clock is stopped. See the auto-close block below.
 #define IDLE_CLOSE_MS (5 * 60 * MSEC_IN_SEC)
 #define SYSTEM_ENTRANCE_ANIMATION_MS 400
 // Wakeup scheduling
@@ -54,13 +54,11 @@ static struct {
   int64_t instant_ms;      //< The epoch the instant start window opened at, zero when closed
   AppTimer *idle_timer;    //< The AppTimer which closes the app once it has been left alone
   int64_t input_ms;        //< The epoch of the last press, which the five minutes are measured from
-  bool touched;            //< Whether anything has been pressed since the app launched
 } main_data;
 
 // Function declarations
 static void prv_app_timer_callback(void *data);
 static void prv_idle_expire(void *data);
-static bool prv_idle_may_close(void);
 static void prv_idle_seen(void);
 static void prv_instant_arm(void);
 static void prv_instant_close(void);
@@ -238,44 +236,26 @@ static void prv_instant_arm(void) {
 
 // The auto-close. A watch app left sitting in the foreground costs battery for nothing, and most
 // of all on a touch watch, where the digitizer draws power for as long as the window is up (see
-// prv_window_appear). Five minutes with nothing pressed and no clock moving is nobody being
+// prv_window_appear). Five minutes with nothing pressed and the clock stopped is nobody being
 // there, and going costs them nothing: prv_terminate stores the timer on the way out either way,
-// so reopening puts back exactly what was left.
+// so reopening puts back exactly what was left, dialled length and all.
 //
-// The rule is read in the callback rather than at the press, which is what lets a handler get
-// away with the bare timestamp below. What the app may do depends on the state a press leaves
-// behind rather than the state it found, so arming from the top of a handler would arm at zero
-// and then miss the select which starts the clock, and arming from the bottom would have to catch
-// every early return -- including the two which do not even redraw. Instead one timer is armed at
-// launch and re-registers itself for the life of the app, and a press only says when it happened.
-// A call site missed that way can delay a close; it cannot cause a wrong one.
-
-// Whether the app is in a state it may close itself from
-// Two, and both of them are "the app is not in the middle of anything": sitting at zero, which is
-// where it opens onto nothing and where a reset leaves it, and stored state nobody has come back
-// to. A value dialled or run in this session is something someone was doing, so it is left alone
-// however long it sits, and a clock which is still moving is the app doing its job.
+// One thing holds the app open, and it is the one thing worth watching: a clock which is still
+// moving. Everything else -- sitting at nothing, a length half dialled, a stopwatch paused mid
+// run -- is somewhere the app can be picked up again from, so five minutes of nobody there is
+// enough to leave. An earlier draft also exempted anything touched in this session, which sounds
+// protective and is not: five minutes of no input already says nobody is working on it, and the
+// rule it bought made a stored timer close while the same timer dialled by hand never did.
 //
-// The length is asked for as well as the value so that zero means the timer is genuinely empty,
-// rather than a countdown caught in the millisecond it reads zero with a length still set.
-//
-// Deliberately not the same rule as prv_instant_arm's, which will not open its window where the
-// value has been dialled down to zero. The two differ because they do opposite things: starting a
-// stopwatch under someone who is still dialling would turn their next two presses into a split
-// and a peek, where closing an app nobody has touched for five minutes costs only a relaunch.
-static bool prv_idle_may_close(void) {
-  return timer_is_paused() &&
-         ((timer_get_value_ms() == 0 && timer_get_length_ms() == 0) || !main_data.touched);
-}
+// The clock is a timestamp rather than a timer re-armed per press, so that a press does not have
+// to know what state it is about to produce. One timer is armed at launch and re-registers itself
+// for the life of the app; a press only says when it happened. A call site missed that way can
+// delay a close, and cannot cause a wrong one.
 
 // Something was pressed
-// The stamp and the latch, and nothing else -- see the note above on why the rule is not read
-// here. The latch is what takes stored state out of the "nobody came back to it" case, and it
-// stays down for the rest of the session: having been here once is the whole of what it says.
-static void prv_idle_seen(void) {
-  main_data.touched = true;
-  main_data.input_ms = (int64_t)epoch();
-}
+// Only the stamp: what the app does about it is read in the callback below, from the state the
+// press leaves behind rather than the state it found.
+static void prv_idle_seen(void) { main_data.input_ms = (int64_t)epoch(); }
 
 // The five minutes are up, so look at what the app has become
 static void prv_idle_expire(void *data) {
@@ -285,13 +265,17 @@ static void prv_idle_expire(void *data) {
   if (left_ms > IDLE_CLOSE_MS) {
     left_ms = IDLE_CLOSE_MS;
   }
-  if (left_ms <= 0 && !prv_idle_may_close()) {
-    left_ms = IDLE_CLOSE_MS; //< nothing to close from, so ask again in another five minutes
+  if (left_ms <= 0 && !timer_is_paused()) {
+    left_ms = IDLE_CLOSE_MS; //< a clock still moving is the app at work, so ask again later
   }
 #if APP_TOUCH_CONTROLS
   // Not out from under a finger, for the reason prv_instant_expire holds off: a gesture is only
   // classified when it lifts, so a window closed underneath one would drop whatever it turned out
-  // to mean onto the watchface.
+  // to mean onto the watchface. This is the only thing watching for that, and it has to be: a
+  // finger resting on the ring arms no hold, so no hint fires, and it turns no detents unless it
+  // moves a whole 24 degrees -- it produces no callbacks at all for as long as it sits there.
+  // Only rotary_kit_in_progress() sees it. The host harness has no touch service, so this branch
+  // is the one part of the auto-close controltest.c cannot reach.
   if (left_ms <= 0 && rotary_kit_in_progress()) {
     left_ms = INSTANT_DEFER_MS;
   }
