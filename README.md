@@ -64,11 +64,10 @@ If the app is left alone for five minutes it goes back to the watchface on its o
 sitting in the foreground costing battery. It costs most on the touch watches, where the screen
 stays powered for as long as the app is up.
 
-It only does this when it is not in the middle of anything: sitting at nothing, or showing a timer
-or stopwatch restored from last time that you have not touched since opening it. A clock that is
-still running keeps it open, and so does anything you dialled this time round, however long it
-sits there. Nothing is lost either way, because the app stores where it was on the way out, so
-opening it again puts back exactly what you left.
+A running timer or stopwatch keeps it open, and that is the only thing that does. Anywhere the
+clock is stopped it will go: sitting at nothing, a length you dialled but never started, a
+stopwatch you paused. Nothing is lost when it does, because the app stores where it was on the way
+out, so opening it again puts back exactly what you left.
 
 ## Building
 

@@ -99,28 +99,20 @@ static void instant_settings_updated(void) {
 
 // The auto-close, mirroring main.c's. The AppTimer is a deadline here, as the instant window's
 // is, and idle_tick() stands in for the callback firing. IDLE_CLOSE_MS must match main.c.
+// What this cannot reach: main.c defers the close while a finger is on the screen, and there is
+// no touch service here to put one there. That branch is checked by reading it, not by a test.
 #define IDLE_CLOSE_MS (5 * 60 * MSEC_IN_SEC)
 static int64_t idle_input_ms;  // the epoch of the last press
-static bool idle_touched;      // whether anything has been pressed since the launch
 
-static bool idle_may_close(void) {
-  return timer_is_paused() &&
-         ((timer_get_value_ms() == 0 && timer_get_length_ms() == 0) || !idle_touched);
-}
-static void idle_seen(void) {
-  idle_touched = true;
-  idle_input_ms = (int64_t)epoch();
-}
-// prv_initialize: the launch counts as the last input, and nothing has been touched yet
-static void idle_launch(void) {
-  idle_touched = false;
-  idle_input_ms = (int64_t)epoch();
-}
-// the callback deciding whether to close, with the re-registering arithmetic main.c does
+static void idle_seen(void) { idle_input_ms = (int64_t)epoch(); }
+// prv_initialize: the launch counts as the last input
+static void idle_launch(void) { idle_input_ms = (int64_t)epoch(); }
+// the callback deciding whether to close, with the re-registering arithmetic main.c does. One
+// thing holds the app open, and it is a clock which is still moving.
 static bool idle_tick(void) {
   int64_t left_ms = IDLE_CLOSE_MS - ((int64_t)epoch() - idle_input_ms);
   if (left_ms > IDLE_CLOSE_MS) { left_ms = IDLE_CLOSE_MS; }
-  if (left_ms <= 0 && !idle_may_close()) { left_ms = IDLE_CLOSE_MS; }
+  if (left_ms <= 0 && !timer_is_paused()) { left_ms = IDLE_CLOSE_MS; }
   return left_ms <= 0;
 }
 // the close itself: the instant window goes with it, for the reason prv_back_retreat closes it
@@ -731,15 +723,15 @@ int main(void) {
         "a detent should silence the alert without ending it");
   printf("  ok: edits while held, inert while running, and still silences\n");
 
-  // The auto-close: the app takes itself off the screen once it has been left alone. Two states
-  // it may go from -- sitting at zero, and stored state nobody has come back to -- and it stays
-  // put from everywhere else. Every case here is "advance the clock and ask".
+  // The auto-close: the app takes itself off the screen once it has been left alone. It may go
+  // from anywhere the clock is stopped, and a clock which is still moving is the only thing that
+  // holds it open. Every case here is "advance the clock and ask".
   printf("\nthe auto-close, after five minutes of being left alone:\n");
   settings_data.instant_start_sec = SETTINGS_NEVER;
   #define IDLE_LAUNCH() do { field = FieldMin; stored = ModeEditMin; left = false; idle_launch(); \
                            } while (0)
 
-  // a launch onto nothing, untouched: closed at five minutes, and not a millisecond before
+  // a launch onto nothing: closed at five minutes, and not a millisecond before
   timer_reset();
   IDLE_LAUNCH();
   fake_now_ms += IDLE_CLOSE_MS - 1;
@@ -765,16 +757,28 @@ int main(void) {
   fake_now_ms += IDLE_CLOSE_MS;
   CHECK(idle_tick(), "a stored stopwatch run nobody touched should close");
 
-  // but one press takes it out of that case for the rest of the session: a length somebody was
-  // working on is left alone however long it sits
+  // a press only moves the deadline; it does not exempt the timer. A length dialled and then
+  // abandoned is the commonest way this app is left paused in the foreground, so it closes too.
   timer_reset();
   for (int i = 0; i < 5; i++) { timer_increment(MSEC_IN_MIN, false); }
   IDLE_LAUNCH();
   fake_now_ms += 60000;
   press_select(); // to the seconds, the timer untouched at 5:00
   CHECK(timer_get_value_ms() == 300000, "the press should not have moved the timer");
-  fake_now_ms += MSEC_IN_HR;
-  CHECK(!idle_tick(), "a timer touched in this session should stay open");
+  fake_now_ms += IDLE_CLOSE_MS - 1;
+  CHECK(!idle_tick(), "the five minutes should run from the press, not the launch");
+  fake_now_ms += 1;
+  CHECK(idle_tick(), "a timer dialled and then abandoned should close");
+
+  // and a stopwatch paused mid run is the same: pausing is not working on it
+  timer_reset();
+  timer_toggle_play_pause();
+  fake_now_ms += 83000;
+  IDLE_LAUNCH();
+  press_select(); // pause, landing on the seconds
+  CHECK(timer_is_paused() && timer_get_value_ms() == 83000, "expected a run paused at 1:23");
+  fake_now_ms += IDLE_CLOSE_MS;
+  CHECK(idle_tick(), "a stopwatch paused mid run should close");
 
   // a clock which is moving is the app doing its job, whichever way it counts
   timer_reset();
@@ -828,14 +832,17 @@ int main(void) {
   fake_now_ms += 1;
   CHECK(idle_tick(), "a reset should close five minutes later");
 
-  // an inert input is still somebody being there: a detent on a running clock does nothing to the
-  // timer, but it stands the five minutes up again
+  // an inert input is still somebody being there, and all it does is move the deadline: it
+  // no longer exempts the app for the rest of the session the way the old latch did
   timer_reset();
+  for (int i = 0; i < 5; i++) { timer_increment(MSEC_IN_MIN, false); }
   IDLE_LAUNCH();
   fake_now_ms += IDLE_CLOSE_MS - 1000;
   wheel_click(1);
   fake_now_ms += 2000;
   CHECK(!idle_tick(), "a detent should have put the five minutes back to the start");
+  fake_now_ms += IDLE_CLOSE_MS;
+  CHECK(idle_tick(), "but it should not hold the app open for good");
 
   // with instant start on, the window starts the stopwatch long before the five minutes, and a
   // running clock holds the app open
@@ -865,7 +872,7 @@ int main(void) {
 
   settings_data.instant_start_sec = SETTINGS_NEVER;
   #undef IDLE_LAUNCH
-  printf("  ok: closes from nothing and from stored state, stays put everywhere else\n");
+  printf("  ok: closes from anywhere the clock is stopped, and only a running one holds it\n");
 
   printf(failures ? "\n%d FAILURES\n" : "\ncontrol modes agree\n", failures);
   return failures != 0;
