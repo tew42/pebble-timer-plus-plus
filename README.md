@@ -58,6 +58,18 @@ There is a configurable time window of 5s or 10s; if nothing is pressed within t
 
 Counting down (timer) and counting up (stopwatch) each get their own accent, both green to start. Only the primary ring color is chosen; the middle and the interval band are shaded from it, so only colors that stay legible when shaded are offered. Color watches only.
 
+## Closing itself
+
+If the app is left alone for five minutes it goes back to the watchface on its own, rather than
+sitting in the foreground costing battery. It costs most on the touch watches, where the screen
+stays powered for as long as the app is up.
+
+It only does this when it is not in the middle of anything: sitting at nothing, or showing a timer
+or stopwatch restored from last time that you have not touched since opening it. A clock that is
+still running keeps it open, and so does anything you dialled this time round, however long it
+sits there. Nothing is lost either way, because the app stores where it was on the way out, so
+opening it again puts back exactly what you left.
+
 ## Building
 
 Build a `.pbw` with the [`pebble`](https://github.com/pebble-dev/pebble-tool) CLI:
