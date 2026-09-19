@@ -49,10 +49,15 @@ int app_message_open(uint32_t i, uint32_t o) {
   return 0;
 }
 void app_message_deregister_callbacks(void) { stub_outbox_failed = NULL; }
+bool stub_outbox_busy;
 AppMessageResult app_message_outbox_begin(DictionaryIterator **iter) {
   // an outbox of no size is one nothing can be sent through, which is what the app had before
   if (stub_outbox_size == 0) {
     return APP_MSG_INVALID_ARGS;
+  }
+  // and one already carrying a message refuses the next, without ever taking it
+  if (stub_outbox_busy) {
+    return APP_MSG_BUSY;
   }
   (*iter) = (DictionaryIterator *)&stub_outbox_iter;
   return APP_MSG_OK;

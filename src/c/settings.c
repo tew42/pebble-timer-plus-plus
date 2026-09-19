@@ -78,12 +78,19 @@ static void prv_retry_request(void *data) {
   prv_request_settings();
 }
 
+// Give the request another go, if there is one left to give
 // The phone can easily be out of reach in the moment the app starts, and often is: a launch from
 // a wakeup happens whether or not anything is listening. A few more goes covers a phone which is
 // merely slow to answer, and giving up after that leaves the stored settings in force, which is
 // the right answer when there is no phone to ask.
-static void prv_outbox_failed_handler(DictionaryIterator *iter, AppMessageResult reason,
-                                      void *context) {
+//
+// Shared, because a request can fail two ways and they are not the same event. AppMessage calls
+// the outbox-failed handler for a message it took and then could not deliver; a message it will
+// not take at all it reports in the return value and says nothing more about. Only the first used
+// to reach here, so an outbox which was busy, or which was never opened because app_message_open
+// had failed, dropped the request for the whole launch without consuming a retry or leaving a
+// trace -- and the watch then ran on stored settings, which is the gap this all exists to close.
+static void prv_schedule_retry(void) {
   if (request_timer || requests_left == 0) {
     return;
   }
@@ -91,15 +98,23 @@ static void prv_outbox_failed_handler(DictionaryIterator *iter, AppMessageResult
   request_timer = app_timer_register(SETTINGS_REQUEST_RETRY_MS, prv_retry_request, NULL);
 }
 
+static void prv_outbox_failed_handler(DictionaryIterator *iter, AppMessageResult reason,
+                                      void *context) {
+  prv_schedule_retry();
+}
+
 // Ask the phone to send the settings it has
 // What is in the message does not matter; that one arrived is the whole signal.
 static void prv_request_settings(void) {
   DictionaryIterator *iter;
   if (app_message_outbox_begin(&iter) != APP_MSG_OK) {
+    prv_schedule_retry();
     return;
   }
   dict_write_uint8(iter, MESSAGE_KEY_settingsRequest, 1);
-  app_message_outbox_send();
+  if (app_message_outbox_send() != APP_MSG_OK) {
+    prv_schedule_retry();
+  }
 }
 
 // Convert a threshold into milliseconds, SETTINGS_NEVER becoming a value nothing can exceed

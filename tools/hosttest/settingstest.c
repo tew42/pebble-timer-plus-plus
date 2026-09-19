@@ -117,6 +117,46 @@ int main(void) {
     printf("  ok: out of range falls back to what was already set\n");
   }
 
+  // A request the outbox will not take at all. AppMessage only calls the outbox-failed handler
+  // for a message it accepted and then could not deliver, so a refusal at the door fires nothing:
+  // without its own retry the request is simply lost for the launch, and the watch runs on
+  // whatever it had stored, which is the one thing the request exists to prevent.
+  printf("\na request the outbox refuses is retried, not dropped:\n");
+  {
+    stub_reset();
+    settings_initialize(&on_change);
+    CHECK(stub_outbox_sends == 1, "the launch request should have gone out");
+
+    // the launch request fails the ordinary way, scheduling the first retry
+    stub_fail_outbox();
+    CHECK(stub_timer_pending, "a failed request should schedule a retry");
+
+    // and the outbox is busy by the time that retry runs
+    stub_outbox_busy = true;
+    stub_outbox_sends = 0;
+    stub_fire_timer();
+    CHECK(stub_outbox_sends == 0, "nothing can be sent through a refused outbox");
+    CHECK(stub_timer_pending, "a refused request should schedule another retry, not give up");
+
+    // once it clears, the next go gets through
+    stub_outbox_busy = false;
+    stub_fire_timer();
+    CHECK(stub_outbox_sends == 1, "the request should have gone out once the outbox cleared");
+    CHECK(stub_outbox_last_key == MESSAGE_KEY_settingsRequest, "on the wrong key");
+
+    // and a refusal still spends a go, so a permanently jammed outbox is not asked for ever
+    stub_outbox_busy = true;
+    int spins = 0;
+    while (stub_timer_pending && spins < 20) {
+      stub_fire_timer();
+      spins++;
+    }
+    CHECK(spins < 20, "a jammed outbox was retried without end");
+    stub_outbox_busy = false;
+    settings_terminate();
+    printf("  ok: refused at the door, retried, and still bounded\n");
+  }
+
   // A tuple says what it holds in its type. Its length is a width only for the two integer
   // types; for a byte array it is the size of the array, so taking it for a width read four
   // bytes out of a payload which may hold three -- exactly the shape a colour arrives in -- and

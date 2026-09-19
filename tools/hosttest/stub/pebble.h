@@ -31,6 +31,7 @@ int persist_write_data(uint32_t key, const void *buf, size_t size);
 int persist_write_int(uint32_t key, int32_t value);
 typedef enum {
   APP_MSG_OK = 0,
+  APP_MSG_BUSY = 1,
   APP_MSG_SEND_TIMEOUT = 2,
   APP_MSG_INVALID_ARGS = 128,
 } AppMessageResult;
@@ -62,6 +63,7 @@ extern bool stub_timer_pending;
 void stub_reset(void);
 void stub_fire_timer(void);
 void stub_fail_outbox(void);
+extern bool stub_outbox_busy; //< when set, app_message_outbox_begin refuses as the real one can
 void stub_dict_reset(void);
 void stub_dict_put(uint32_t key, Tuple *tuple);
 bool persist_exists(uint32_t key);
