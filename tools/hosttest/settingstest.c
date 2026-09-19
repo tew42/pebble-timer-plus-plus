@@ -117,6 +117,67 @@ int main(void) {
     printf("  ok: out of range falls back to what was already set\n");
   }
 
+  // A tuple says what it holds in its type. Its length is a width only for the two integer
+  // types; for a byte array it is the size of the array, so taking it for a width read four
+  // bytes out of a payload which may hold three -- exactly the shape a colour arrives in -- and
+  // ran a byte past the tuple inside the inbox buffer.
+  printf("\nan inbound tuple is read by its type, not by its length:\n");
+  {
+    int32_t value;
+    Tuple t;
+
+    // the widths an integer actually comes in, both signed and unsigned
+    t = (Tuple){.type = TUPLE_UINT, .length = 1, .value = {{.uint8 = 200}}};
+    CHECK(prv_tuple_int(&t, &value) && value == 200, "a one byte uint read as %ld",
+          (long)value);
+    t = (Tuple){.type = TUPLE_UINT, .length = 2, .value = {{.uint16 = 4000}}};
+    CHECK(prv_tuple_int(&t, &value) && value == 4000, "a two byte uint read as %ld",
+          (long)value);
+    t = (Tuple){.type = TUPLE_INT, .length = 4, .value = {{.int32 = -70000}}};
+    CHECK(prv_tuple_int(&t, &value) && value == -70000, "a four byte int read as %ld",
+          (long)value);
+    // and the strings Clay sends when an item does not set serializeValueAs
+    t = (Tuple){.type = TUPLE_CSTRING, .length = 4, .value = {{.cstring = "255"}}};
+    CHECK(prv_tuple_int(&t, &value) && value == 255, "a cstring read as %ld", (long)value);
+
+    // none of which a byte array is, whatever its length happens to be
+    for (uint16_t len = 0; len <= 8; len++) {
+      t = (Tuple){.type = TUPLE_BYTE_ARRAY, .length = len, .value = {{.uint32 = 0x11223344}}};
+      CHECK(!prv_tuple_int(&t, &value), "a %u byte array was read as an integer", (unsigned)len);
+    }
+    // nor is an integer of a width no integer has
+    t = (Tuple){.type = TUPLE_UINT, .length = 3, .value = {{.uint32 = 0x00FF00}}};
+    CHECK(!prv_tuple_int(&t, &value), "a three byte integer was read as one");
+    // nor an empty string, which has not even a terminator to stop atoi
+    t = (Tuple){.type = TUPLE_CSTRING, .length = 0, .value = {{.cstring = NULL}}};
+    CHECK(!prv_tuple_int(&t, &value), "an empty cstring was read as an integer");
+    printf("  ok: integers by width, strings parsed, everything else refused\n");
+
+    // and what that means where it matters: an unreadable colour leaves the accent alone rather
+    // than painting it whatever the bytes past the tuple happened to be
+    stub_reset();
+    settings_initialize(&on_change);
+    settings_data.timer_rgb = SETTINGS_TIMER_RGB_DEFAULT;
+    const uint32_t before = settings_data.timer_rgb;
+    Tuple colour = {.type = TUPLE_BYTE_ARRAY, .length = 3, .value = {{.uint32 = 0x00FF0000}}};
+    stub_dict_reset();
+    stub_dict_put(MESSAGE_KEY_timerColor, &colour);
+    prv_inbox_received_handler(NULL, NULL);
+    CHECK(settings_data.timer_rgb == before, "an unreadable colour changed the accent to %06lx",
+          (unsigned long)settings_data.timer_rgb);
+
+    // while a colour which is readable still lands
+    Tuple good = {.type = TUPLE_INT, .length = 4, .value = {{.int32 = 0x0055FF}}};
+    stub_dict_reset();
+    stub_dict_put(MESSAGE_KEY_timerColor, &good);
+    prv_inbox_received_handler(NULL, NULL);
+    CHECK(settings_data.timer_rgb == 0x0055FF, "a readable colour came through as %06lx",
+          (unsigned long)settings_data.timer_rgb);
+    stub_dict_reset();
+    settings_terminate();
+    printf("  ok: an unreadable setting is left alone, a readable one still arrives\n");
+  }
+
   printf(failures ? "\n%d FAILURES\n" : "\nthe settings request holds up\n", failures);
   return failures != 0;
 }

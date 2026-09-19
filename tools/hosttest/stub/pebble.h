@@ -62,6 +62,8 @@ extern bool stub_timer_pending;
 void stub_reset(void);
 void stub_fire_timer(void);
 void stub_fail_outbox(void);
+void stub_dict_reset(void);
+void stub_dict_put(uint32_t key, Tuple *tuple);
 bool persist_exists(uint32_t key);
 
 // --- vibration, enough for timer.c ---

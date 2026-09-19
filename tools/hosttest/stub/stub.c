@@ -1,6 +1,24 @@
 #include "pebble.h"
 #include <string.h>
-Tuple *dict_find(DictionaryIterator *i, uint32_t k) { (void)i; (void)k; return NULL; }
+// A tiny inbox the tests fill, so prv_inbox_received_handler can be driven with real tuples.
+// Empty unless a test puts something in it, so dict_find still finds nothing by default.
+static Tuple *stub_tuples[8];
+static uint32_t stub_tuple_keys[8];
+static int stub_tuple_count;
+void stub_dict_reset(void) { stub_tuple_count = 0; }
+void stub_dict_put(uint32_t key, Tuple *tuple) {
+  if (stub_tuple_count < 8) {
+    stub_tuple_keys[stub_tuple_count] = key;
+    stub_tuples[stub_tuple_count++] = tuple;
+  }
+}
+Tuple *dict_find(DictionaryIterator *i, uint32_t k) {
+  (void)i;
+  for (int n = 0; n < stub_tuple_count; n++) {
+    if (stub_tuple_keys[n] == k) { return stub_tuples[n]; }
+  }
+  return NULL;
+}
 int32_t persist_read_int(uint32_t k) { (void)k; return 0; }
 int persist_read_data(uint32_t k, void *b, size_t s) { (void)k; (void)b; (void)s; return 0; }
 uint8_t stub_persist_last[64];

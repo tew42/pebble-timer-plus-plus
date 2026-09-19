@@ -108,25 +108,28 @@ static void check_config_values(void) {
     CHECK(prv_validate(TEN_OPTS[i], SETTINGS_TEN_SECOND_MIN_SEC, SETTINGS_TEN_SECOND_MAX_SEC, 99)
               == TEN_OPTS[i], "10s option %d rejected", TEN_OPTS[i]);
     char text[8]; snprintf(text, sizeof(text), "%d", TEN_OPTS[i]);
+    int32_t got = 0;
     Tuple as_string = {.type = TUPLE_CSTRING, .length = 4, .value = {{.cstring = text}}};
-    CHECK(prv_tuple_int(&as_string) == TEN_OPTS[i], "cstring \"%s\" decoded as %d", text,
-          prv_tuple_int(&as_string));
+    CHECK(prv_tuple_int(&as_string, &got) && got == TEN_OPTS[i],
+          "cstring \"%s\" decoded as %d", text, (int)got);
     // AppMessage narrows an integer to the smallest field that fits it, signed or not
     Tuple as_int = {.type = TUPLE_INT, .length = 4, .value = {{.int32 = TEN_OPTS[i]}}};
-    CHECK(prv_tuple_int(&as_int) == TEN_OPTS[i], "int32 %d decoded wrong", TEN_OPTS[i]);
+    CHECK(prv_tuple_int(&as_int, &got) && got == TEN_OPTS[i], "int32 %d decoded wrong",
+          TEN_OPTS[i]);
     Tuple as_u32 = {.type = TUPLE_UINT, .length = 4, .value = {{.uint32 = TEN_OPTS[i]}}};
-    CHECK(prv_tuple_int(&as_u32) == TEN_OPTS[i], "uint32 %d decoded wrong", TEN_OPTS[i]);
+    CHECK(prv_tuple_int(&as_u32, &got) && got == TEN_OPTS[i], "uint32 %d decoded wrong",
+          TEN_OPTS[i]);
     Tuple as_u8 = {.type = TUPLE_UINT, .length = 1, .value = {{.uint8 = TEN_OPTS[i]}}};
-    CHECK(prv_tuple_int(&as_u8) == TEN_OPTS[i], "uint8 %d decoded as %d", TEN_OPTS[i],
-          prv_tuple_int(&as_u8));
+    CHECK(prv_tuple_int(&as_u8, &got) && got == TEN_OPTS[i], "uint8 %d decoded as %d",
+          TEN_OPTS[i], (int)got);
     if (TEN_OPTS[i] <= 127) {
       Tuple as_i8 = {.type = TUPLE_INT, .length = 1, .value = {{.int8 = TEN_OPTS[i]}}};
-      CHECK(prv_tuple_int(&as_i8) == TEN_OPTS[i], "int8 %d decoded as %d", TEN_OPTS[i],
-            prv_tuple_int(&as_i8));
+      CHECK(prv_tuple_int(&as_i8, &got) && got == TEN_OPTS[i], "int8 %d decoded as %d",
+            TEN_OPTS[i], (int)got);
     }
     Tuple as_i16 = {.type = TUPLE_INT, .length = 2, .value = {{.int16 = TEN_OPTS[i]}}};
-    CHECK(prv_tuple_int(&as_i16) == TEN_OPTS[i], "int16 %d decoded as %d", TEN_OPTS[i],
-          prv_tuple_int(&as_i16));
+    CHECK(prv_tuple_int(&as_i16, &got) && got == TEN_OPTS[i], "int16 %d decoded as %d",
+          TEN_OPTS[i], (int)got);
   }
   for (unsigned i = 0; i < sizeof(MIN_OPTS) / sizeof(*MIN_OPTS); i++) {
     CHECK(prv_validate(MIN_OPTS[i], SETTINGS_MINUTE_MIN_MIN, SETTINGS_MINUTE_MAX_MIN, 99)

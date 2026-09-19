@@ -12,8 +12,11 @@
 #include "utility.h"
 #include <pebble.h>
 
-// AppMessage buffers: four tuples in, one out. A tuple costs seven bytes of header and its
-// payload, so the page's four integers need about forty-five and the request nine.
+// AppMessage buffers: five tuples in, one out. A tuple costs seven bytes of header and its
+// payload, so the page's five integers need fifty-six at their widest and the request nine.
+// The margin is smaller than it looks: an inbound dictionary larger than the inbox is dropped
+// whole, with no inbox-dropped handler registered to say so, and a sixth integer setting would
+// need sixty-seven. Grow this with the page.
 #define SETTINGS_INBOX_SIZE 64
 #define SETTINGS_OUTBOX_SIZE 32
 
@@ -168,18 +171,39 @@ static void prv_persist_store(void) {
 // An integer is packed into the narrowest field that holds it, so which member of the union
 // carries the value depends on the tuple's length: reading int32 from a one byte tuple takes
 // three bytes of whatever follows it.
-static int32_t prv_tuple_int(const Tuple *tuple) {
+//
+// The length only says that for the two integer types, which is why the type is checked first.
+// For a byte array the length is the size of the array and says nothing about a scalar width, so
+// falling through to the int32 read took four bytes from a payload which may hold fewer -- three
+// being exactly the shape a colour would arrive in, and the read then running one byte past the
+// tuple inside the inbox buffer. An unreadable tuple now says so instead, and the caller leaves
+// the setting as it found it. Returning a number could not: zero is a legal colour.
+// @param value Where to put the integer, written only when this returns true
+// @return True if the tuple holds something which can be read as an integer
+static bool prv_tuple_int(const Tuple *tuple, int32_t *value) {
   if (tuple->type == TUPLE_CSTRING) {
-    return atoi(tuple->value->cstring);
+    if (tuple->length == 0) {
+      return false; // no bytes at all, so not even a terminator to stop atoi
+    }
+    (*value) = atoi(tuple->value->cstring);
+    return true;
+  }
+  if (tuple->type != TUPLE_INT && tuple->type != TUPLE_UINT) {
+    return false;
   }
   const bool is_signed = (tuple->type == TUPLE_INT);
   switch (tuple->length) {
   case 1:
-    return is_signed ? tuple->value->int8 : tuple->value->uint8;
+    (*value) = is_signed ? tuple->value->int8 : tuple->value->uint8;
+    return true;
   case 2:
-    return is_signed ? tuple->value->int16 : tuple->value->uint16;
+    (*value) = is_signed ? tuple->value->int16 : tuple->value->uint16;
+    return true;
+  case 4:
+    (*value) = is_signed ? tuple->value->int32 : (int32_t)tuple->value->uint32;
+    return true;
   default:
-    return is_signed ? tuple->value->int32 : (int32_t)tuple->value->uint32;
+    return false; // an integer is one, two or four bytes wide; anything else is not one
   }
 }
 
@@ -190,33 +214,34 @@ static int32_t prv_tuple_int(const Tuple *tuple) {
 // New settings received from the phone
 static void prv_inbox_received_handler(DictionaryIterator *iter, void *context) {
   const Settings previous = settings_data;
+  int32_t value;
   Tuple *tuple = dict_find(iter, MESSAGE_KEY_tenSecondUpdatesAbove);
-  if (tuple) {
+  if (tuple && prv_tuple_int(tuple, &value)) {
     settings_data.ten_second_above_sec =
-        prv_validate(prv_tuple_int(tuple), SETTINGS_TEN_SECOND_MIN_SEC, SETTINGS_TEN_SECOND_MAX_SEC,
+        prv_validate(value, SETTINGS_TEN_SECOND_MIN_SEC, SETTINGS_TEN_SECOND_MAX_SEC,
                      settings_data.ten_second_above_sec);
   }
   tuple = dict_find(iter, MESSAGE_KEY_minuteUpdatesAbove);
-  if (tuple) {
+  if (tuple && prv_tuple_int(tuple, &value)) {
     settings_data.minute_above_min =
-        prv_validate(prv_tuple_int(tuple), SETTINGS_MINUTE_MIN_MIN, SETTINGS_MINUTE_MAX_MIN,
+        prv_validate(value, SETTINGS_MINUTE_MIN_MIN, SETTINGS_MINUTE_MAX_MIN,
                      settings_data.minute_above_min);
   }
   tuple = dict_find(iter, MESSAGE_KEY_instantStart);
-  if (tuple) {
+  if (tuple && prv_tuple_int(tuple, &value)) {
     settings_data.instant_start_sec =
-        prv_validate(prv_tuple_int(tuple), SETTINGS_INSTANT_START_MIN_SEC,
-                     SETTINGS_INSTANT_START_MAX_SEC, settings_data.instant_start_sec);
+        prv_validate(value, SETTINGS_INSTANT_START_MIN_SEC, SETTINGS_INSTANT_START_MAX_SEC,
+                     settings_data.instant_start_sec);
   }
   // the colour pickers are only offered on colour hardware, so a watch which cannot use them
   // never sends them and keeps whatever is stored
   tuple = dict_find(iter, MESSAGE_KEY_timerColor);
-  if (tuple) {
-    settings_data.timer_rgb = (uint32_t)prv_tuple_int(tuple) & 0xFFFFFF;
+  if (tuple && prv_tuple_int(tuple, &value)) {
+    settings_data.timer_rgb = (uint32_t)value & 0xFFFFFF;
   }
   tuple = dict_find(iter, MESSAGE_KEY_chronoColor);
-  if (tuple) {
-    settings_data.chrono_rgb = (uint32_t)prv_tuple_int(tuple) & 0xFFFFFF;
+  if (tuple && prv_tuple_int(tuple, &value)) {
+    settings_data.chrono_rgb = (uint32_t)value & 0xFFFFFF;
   }
   // the configuration page resends every key on each save, so only act on a genuine change
   if (memcmp(&previous, &settings_data, sizeof(previous)) != 0) {
@@ -291,7 +316,7 @@ void settings_initialize(void (*on_change)(void)) {
   prv_persist_read();
   app_message_register_inbox_received(prv_inbox_received_handler);
   app_message_register_outbox_failed(prv_outbox_failed_handler);
-  // four integers in from the configuration page, one byte out to ask for them
+  // five integers in from the configuration page, one byte out to ask for them
   app_message_open(SETTINGS_INBOX_SIZE, SETTINGS_OUTBOX_SIZE);
   requests_left = SETTINGS_REQUEST_RETRIES;
   prv_request_settings();
