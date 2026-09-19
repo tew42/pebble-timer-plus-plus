@@ -207,6 +207,45 @@ static void wheel_click(int direction) {
   step_field(direction);
 }
 
+// prv_schedule_wakeup, mirrored. The SDK refuses a slot within a minute either side of another
+// app's wakeup, and anything within thirty seconds of now, and reports that in its return value
+// rather than by failing, so the app has to step around a refusal rather than assume one took.
+// These three must match main.c.
+#define WAKEUP_STEP_S 60
+#define WAKEUP_STEPS 2
+#define WAKEUP_MIN_LEAD_S 35
+
+static int64_t wakeup_asked[8]; // every slot the app proposed, in the order it proposed them
+static int wakeup_asks;
+static int64_t wakeup_taken[8]; // slots the system will refuse
+static int wakeup_takens;
+static int64_t wakeup_set; // the slot it ended up with, zero for none at all
+
+static void wakeup_reset(void) {
+  wakeup_asks = 0;
+  wakeup_takens = 0;
+  wakeup_set = 0;
+}
+static int fake_wakeup_schedule(int64_t at) {
+  if (wakeup_asks < 8) { wakeup_asked[wakeup_asks++] = at; }
+  for (int i = 0; i < wakeup_takens; i++) {
+    if (wakeup_taken[i] == at) { return -1; }
+  }
+  wakeup_set = at;
+  return 0;
+}
+static void schedule_wakeup(int64_t elapse_time) {
+  const int64_t earliest = (int64_t)(epoch() / MSEC_IN_SEC) + WAKEUP_MIN_LEAD_S;
+  for (int step = 0; step <= WAKEUP_STEPS; step++) {
+    const int64_t at = elapse_time - step * WAKEUP_STEP_S;
+    if (at >= earliest && fake_wakeup_schedule(at) >= 0) { return; }
+  }
+  if (elapse_time != earliest && fake_wakeup_schedule(earliest) >= 0) { return; }
+  for (int step = 1; step <= WAKEUP_STEPS; step++) {
+    if (fake_wakeup_schedule(elapse_time + step * WAKEUP_STEP_S) >= 0) { return; }
+  }
+}
+
 static void press_back(void) {
   idle_seen();
   if (silence_if_vibrating()) { return; }
@@ -904,6 +943,62 @@ int main(void) {
   settings_data.instant_start_sec = SETTINGS_NEVER;
   #undef IDLE_LAUNCH
   printf("  ok: closes from anywhere the clock is stopped, and only a running one holds it\n");
+
+  // The wakeup which reopens the app when a timer elapses. Earlier is better than later: waking
+  // early means the app is already running when the timer finishes, so the alert is still on
+  // time, where a late wakeup delays the alert itself and -- past the vibration window -- cuts it
+  // to a single burst.
+  printf("\nthe wakeup lands as early as the system will take it:\n");
+  {
+    const int64_t now_s = (int64_t)(fake_now_ms / 1000);
+
+    // nothing in the way: the exact second the digits count down to
+    wakeup_reset();
+    schedule_wakeup(now_s + 600);
+    CHECK(wakeup_set == now_s + 600, "expected the elapse itself, got %+lld",
+          (long long)(wakeup_set - now_s));
+
+    // that slot taken by another app: a minute earlier, not a minute later
+    wakeup_reset();
+    wakeup_taken[wakeup_takens++] = now_s + 600;
+    schedule_wakeup(now_s + 600);
+    CHECK(wakeup_set == now_s + 540, "expected a minute early, got %+lld",
+          (long long)(wakeup_set - now_s));
+
+    // Under the lead time, which is the case the stepping loop can never help with: every point
+    // it proposes is at or before an elapse which is itself already too soon to schedule. The
+    // floor is the only candidate left, and it beats a late alert by most of a minute.
+    wakeup_reset();
+    schedule_wakeup(now_s + 30);
+    CHECK(wakeup_set == now_s + WAKEUP_MIN_LEAD_S, "expected the floor at %+d, got %+lld",
+          WAKEUP_MIN_LEAD_S, (long long)(wakeup_set - now_s));
+    CHECK(wakeup_set < now_s + 30 + WAKEUP_STEP_S, "the floor should beat a late slot");
+
+    // and only then a late one, when the floor is taken as well
+    wakeup_reset();
+    wakeup_taken[wakeup_takens++] = now_s + WAKEUP_MIN_LEAD_S;
+    schedule_wakeup(now_s + 30);
+    CHECK(wakeup_set == now_s + 30 + WAKEUP_STEP_S, "expected a late slot, got %+lld",
+          (long long)(wakeup_set - now_s));
+
+    // an elapse exactly on the floor is not asked for twice
+    wakeup_reset();
+    schedule_wakeup(now_s + WAKEUP_MIN_LEAD_S);
+    CHECK(wakeup_asks == 1, "the floor was offered %d times, expected once", wakeup_asks);
+
+    // nothing is ever asked for in the past, whatever the elapse
+    for (int remaining = 0; remaining <= 120; remaining += 7) {
+      wakeup_reset();
+      for (int i = 0; i < 3; i++) { wakeup_taken[wakeup_takens++] = now_s + remaining - i * 60; }
+      schedule_wakeup(now_s + remaining);
+      for (int i = 0; i < wakeup_asks; i++) {
+        CHECK(wakeup_asked[i] >= now_s + WAKEUP_MIN_LEAD_S,
+              "with %ds left it asked for %+lld, inside the thirty second floor", remaining,
+              (long long)(wakeup_asked[i] - now_s));
+      }
+    }
+  }
+  printf("  ok: the elapse, then earlier, then the floor, and only then late\n");
 
   printf(failures ? "\n%d FAILURES\n" : "\ncontrol modes agree\n", failures);
   return failures != 0;

@@ -800,6 +800,15 @@ static void prv_schedule_wakeup(time_t elapse_time) {
       return;
     }
   }
+  // Every candidate at or before the elapse is taken or too soon to ask for, but the floor itself
+  // has not been offered and is still sooner than anything past the elapse. Waking early costs
+  // nothing -- the app is simply already running when the timer finishes -- so it is worth one
+  // ask before settling for a late alert. It is the only candidate there is when the timer has
+  // less than the lead left, which is the case the loop above can never help with: every point it
+  // proposes is at or before an elapse which is itself too soon.
+  if (elapse_time != earliest && wakeup_schedule(earliest, 0, true) >= 0) {
+    return;
+  }
   // every earlier slot is taken or too soon, so a late alert is all that is left
   for (uint8_t step = 1; step <= WAKEUP_STEPS; step++) {
     if (wakeup_schedule(elapse_time + step * WAKEUP_STEP_S, 0, true) >= 0) {
