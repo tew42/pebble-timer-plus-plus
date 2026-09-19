@@ -10,13 +10,20 @@ R=$ROOT/src/c
 CF="-std=c99 -Wall -Wextra -Wno-unused-parameter -I. -Istub -I$R"
 fail=0
 node gen_configopts.js "$ROOT" >/dev/null || fail=1
+# Each binary is removed before it is rebuilt. Without that a build failure leaves the last good
+# one in place and the run loop below happily reports "ok" for code which no longer compiles.
 for t in test ringtest convention flicker shadetest timertest clocktest controltest settingstest; do
+  rm -f "$t"
   gcc $CF -o "$t" "$t.c" stub/stub.c || { echo "BUILD FAIL $t"; fail=1; continue; }
 done
 # rotarytest includes rotary_kit.c, and needs libm for the arcs it draws to drive it with
+rm -f rotarytest
 gcc $CF -o rotarytest rotarytest.c stub/stub.c -lm || { echo "BUILD FAIL rotarytest"; fail=1; }
+rm -f glyphtest
 gcc $CF -DNDEBUG=1 -o glyphtest glyphtest.c stub/stub.c "$R/text_render.c" || { echo "BUILD FAIL glyphtest"; fail=1; }
+rm -f layouttest
 gcc $CF -DNDEBUG=1 -o layouttest layouttest.c stub/stub.c "$R/text_render.c" || { echo "BUILD FAIL layouttest"; fail=1; }
+rm -f anitest
 gcc $CF -fsanitize=address -g -o anitest anitest.c stub/stub.c || { echo "BUILD FAIL anitest"; fail=1; }
 for t in test ringtest convention flicker shadetest timertest clocktest controltest settingstest rotarytest glyphtest layouttest anitest; do
   if ./"$t" >/tmp/$t.log 2>&1; then echo "  ok   $t"; else echo "  FAIL $t"; tail -20 /tmp/$t.log; fail=1; fi
