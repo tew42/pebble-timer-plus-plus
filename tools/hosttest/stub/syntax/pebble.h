@@ -103,6 +103,7 @@ typedef struct ResHandle *ResHandle;
 ResHandle resource_get_handle(uint32_t id);
 GFont fonts_get_system_font(const char *key);
 GFont fonts_load_custom_font(ResHandle handle);
+void fonts_unload_custom_font(GFont font);
 
 // logging
 // AppLogLevel comes from the base stub; only the macro is sharpened here, so a format string

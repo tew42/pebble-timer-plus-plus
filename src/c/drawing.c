@@ -85,6 +85,7 @@ static struct {
   DrawState draw_state;                //< An arbitrary description of the main drawing state
   GRect text_fields[TEXT_FIELD_COUNT]; //< The number of text fields (hr : min : sec)
   GRect focus_field;                   //< The selection field layer
+  GFont time_font;                     //< The digits font, where the platform carries one
   int32_t focus_inset;                 //< Shrinks the selection field while select is held
   GColor fore_color;                   //< Color of text
   GColor mid_color;                    //< Color of center
@@ -663,7 +664,17 @@ void drawing_initialize(Layer *layer) {
   // set fonts
   GFont font_gothic_24_bold = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
   GFont font_gothic_28_bold = fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD);
-  GFont font_bebas_35_bold = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_BEBAS_FONT_35));
+  // The digits font is drawn only on the two platforms below, and package.json now ships the
+  // resource only to them, so RESOURCE_ID_BEBAS_FONT_35 does not exist anywhere else and the
+  // guard is required rather than an optimisation. It is worth having on its own account: aplite
+  // allows 24k for code and heap together, and it was loading and holding a font it never drew.
+  // Elsewhere the two members below are set to the system font rather than left null. Nothing
+  // reads them there, and a real font cannot be dereferenced into trouble if that ever changes.
+#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
+  drawing_data.time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_BEBAS_FONT_35));
+#else
+  drawing_data.time_font = font_gothic_28_bold;
+#endif
   // clang-format off
   scl_set_fonts(ScalableFontLabel, {
     .o = font_gothic_24_bold, // Everything else
@@ -672,8 +683,8 @@ void drawing_initialize(Layer *layer) {
   });
   scl_set_fonts(ScalableFontTime, {
     .o = font_gothic_28_bold, // Everything else
-    .e = font_bebas_35_bold, // Emery (Pebble Time 2*)
-    .g = font_bebas_35_bold, // Gabbro (Pebble Round 2)
+    .e = drawing_data.time_font, // Emery (Pebble Time 2*)
+    .g = drawing_data.time_font, // Gabbro (Pebble Round 2)
   });
   // clang-format on
   // set the colors; the accent three are chosen per counting direction, and the first frame is
@@ -689,4 +700,10 @@ void drawing_initialize(Layer *layer) {
 }
 
 // Destroy the singleton drawing data
-void drawing_terminate(void) { animation_stop_all(); }
+void drawing_terminate(void) {
+  animation_stop_all();
+#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
+  // the only thing drawing_initialize allocates; the rest is system fonts it does not own
+  fonts_unload_custom_font(drawing_data.time_font);
+#endif
+}
