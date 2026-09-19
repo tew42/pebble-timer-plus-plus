@@ -1,6 +1,17 @@
 /build/
 /node_modules/
-# vendored verbatim from BrianEnders/pebble-rotary-kit; reformatting it would bury the two
-# local fixes in 300 lines of whitespace and make the patch unsendable upstream
+# RotaryKit, from BrianEnders/pebble-rotary-kit, kept in its upstream formatting.
+#
+# The original reason was that our copy was byte-identical to upstream apart from two bug fixes,
+# so reformatting would have buried them in 300 lines of whitespace and made the patch
+# unsendable. That is no longer true: four commits on this fork have rewritten a large part of
+# rotary_kit.c -- the gesture geometry, the wheel's acceleration, the hold and swipe handling --
+# so it is fork code now, not a vendored copy with a patch on top.
+#
+# It stays exempt anyway, for a weaker but still real reason: what remains shared with upstream
+# is easier to see in a diff which is not also a whitespace diff, and the two bug fixes are still
+# worth sending back. Reformatting it is a reasonable thing to decide to do; it should just be
+# decided, in a commit of its own which changes nothing else, rather than happening by accident
+# on the day someone removes these lines.
 src/c/rotary_kit.c
 src/c/rotary_kit.h

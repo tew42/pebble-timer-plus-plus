@@ -18,6 +18,17 @@ var clayConfig = require('./config.json');
 // phone. The watch would then go on using whatever it had stored until the page next happened to
 // be opened while the app was running. The phone is the side which always holds the last save, so
 // it is the side that can close the gap.
+//
+// It reads Clay's own storage key to do it, which looks like reaching inside the library and is
+// worth saying why it is not avoidable. Clay exposes no reader for what it has saved:
+// getSettings() parses the response the configuration page hands back when it closes, and is no
+// use here because no page has been opened. Clay's own generateUrl reads localStorage
+// 'clay-settings' directly for exactly the same reason. So this is the same door the library
+// uses, not a back one -- but it is an unversioned door, and package.json allows Clay minor
+// bumps, so if a future version renames the key this handler goes quiet. That is why the empty
+// case logs rather than returning in silence: on the watch side settings.c also gives up without
+// a word after three tries, and two silent halves make a feature which disappears with no sign
+// anywhere.
 Pebble.addEventListener('appmessage', function() {
     var stored = null;
     try {
@@ -26,7 +37,10 @@ Pebble.addEventListener('appmessage', function() {
         console.log('Timer++: the saved settings could not be read: ' + e);
     }
     if (!stored) {
-        return;  // nothing has ever been saved, so what the watch already has is the truth
+        // nothing has ever been saved, so what the watch already has is the truth -- or the key
+        // has moved, which looks identical from here and is why it is worth a line in the log
+        console.log('Timer++: nothing saved to answer the watch with');
+        return;
     }
     Pebble.sendAppMessage(Clay.prepareSettingsForAppMessage(stored), function() {
         console.log('Timer++: answered the watch with the saved settings');
