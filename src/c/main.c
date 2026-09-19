@@ -322,6 +322,13 @@ static void prv_back_retreat(void) {
   // as for every other press, and here it matters most: back is the press which leaves, and the
   // pop below is animated, so the event loop runs on for the length of it. A wait still standing
   // could fire behind the closing door and leave a stopwatch running in what gets stored.
+  //
+  // Open question, wanting a watch or an emulator to settle: back has no long click, so whether
+  // window_single_click_subscribe dispatches it on the press or on the release cannot be read off
+  // the source. On the release, this stand-down is as late as select's was before it was moved to
+  // the raw handler, and the same gap is open across the press -- with a worse ending, since back
+  // is the press which leaves and timer_persist_store would write the run. If it turns out to
+  // dispatch on the release, back wants the raw subscribe select now has.
   prv_instant_stand_down();
   // get time parts
   uint16_t hr, min, sec;
@@ -465,6 +472,13 @@ static void prv_select_raw_click_handler(ClickRecognizerRef recognizer, void *ct
   // Select carries a long click, so its single click handler only arrives on the release, and a
   // press which is still being held is already somebody being here.
   prv_idle_seen();
+  // The press-down edge, and the only early edge select gets: it carries a long click, so the
+  // system cannot dispatch prv_select_click_handler until the release, and prv_instant_stand_down
+  // lives inside prv_select_advance which only runs from there. That left the whole duration of
+  // the press open for the wait to fire underneath it, start the stopwatch, and have the release
+  // read !timer_is_paused() and pause a run the user never saw begin. Up and down have never had
+  // the problem: window_single_repeating_click_subscribe hands them their own down edge.
+  prv_instant_stand_down();
   // stop the buzzing on the way down, before the press has decided what it is
   prv_silence_alert();
   // animate and refresh

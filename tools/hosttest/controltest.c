@@ -123,8 +123,16 @@ static bool idle_fire(void) {
   return true;
 }
 
-static void press_select(void) {
+// Select's press-down edge, which is what prv_select_raw_click_handler has. Select carries a long
+// click, so the system cannot dispatch the single click handler until the release; anything which
+// must not wait that long happens here instead.
+static void select_down(void) {
   idle_seen();
+  instant_stand_down();
+  silence_if_vibrating();
+}
+// Select's release, where the single click handler arrives
+static void select_up(void) {
   if (rewind_if_alerting()) { return; }
   instant_stand_down();
   if (timer_is_paused()) {
@@ -136,6 +144,11 @@ static void press_select(void) {
   stored = ModeEditSec;
   field = FieldSec;
   timer_toggle_play_pause();
+}
+// the whole press, for the cases which do not care where the two edges fall
+static void press_select(void) {
+  select_down();
+  select_up();
 }
 // up and down while the clock runs: the same question in either direction
 static bool peeking;
@@ -671,6 +684,24 @@ int main(void) {
   left = false;
   press_back(); // back to the minutes, still in the app
   CHECK(!left && instant_ms, "a back which steps a field should keep the credit");
+
+  // A select press which straddles the expiry. Select carries a long click, so the system cannot
+  // dispatch its single click handler until the release; the wait is therefore stood down on the
+  // press-down edge, or it fires underneath the held button, starts the stopwatch, and the
+  // release reads !timer_is_paused() and pauses a run nobody saw begin.
+  settings_data.instant_start_sec = 5;
+  timer_reset();
+  LAUNCH(false);
+  fake_now_ms += 4900;
+  select_down();
+  fake_now_ms += 200; // the moment the wait would have fired passes with the button still down
+  CHECK(!instant_tick(), "the press should have stood the wait down on its way down");
+  select_up();
+  CHECK(timer_is_paused() && timer_get_value_ms() == 0,
+        "a press across the expiry should leave nothing running, got %lldms paused=%d",
+        (long long)timer_get_value_ms(), timer_is_paused());
+  CHECK(field == FieldSec, "and it should have advanced the field, as the press meant to");
+  CHECK(instant_ms, "with the credit still standing for the start it leads to");
 
   settings_data.instant_start_sec = SETTINGS_NEVER;
   #undef LAUNCH
