@@ -144,6 +144,22 @@ static Cadence prv_cadence(int64_t value_ms) {
   return (Cadence){.step_ms = MSEC_IN_SEC, .low_ms = 0, .high_ms = finest_high_ms};
 }
 
+// Whether two settings hold the same values
+// Field by field rather than memcmp, because Settings has a padding byte after the three uint8s
+// and memcmp reads it. That was safe here only by a chain of accidents: the structure is a
+// file-scope object so its padding starts zeroed, prv_persist_read copies named members out of
+// the blob rather than assigning the whole thing, and a struct assignment happens to carry
+// padding on every toolchain this builds with. Break any one of those -- most easily by reading
+// flash straight into settings_data, where the padding is whatever an older build wrote -- and
+// every inbound message looks like a change, which means a flash write and a redraw each time.
+// Comparing the fields costs nothing and depends on none of it.
+static bool prv_settings_equal(const Settings *a, const Settings *b) {
+  return a->ten_second_above_sec == b->ten_second_above_sec &&
+         a->minute_above_min == b->minute_above_min &&
+         a->instant_start_sec == b->instant_start_sec && a->timer_rgb == b->timer_rgb &&
+         a->chrono_rgb == b->chrono_rgb;
+}
+
 // Accept a threshold if it is in range or SETTINGS_NEVER, otherwise keep the existing one
 static uint8_t prv_validate(int32_t value, uint8_t min, uint8_t max, uint8_t current) {
   if (value == SETTINGS_NEVER || (value >= min && value <= max)) {
@@ -259,7 +275,7 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context) 
     settings_data.chrono_rgb = (uint32_t)value & 0xFFFFFF;
   }
   // the configuration page resends every key on each save, so only act on a genuine change
-  if (memcmp(&previous, &settings_data, sizeof(previous)) != 0) {
+  if (!prv_settings_equal(&previous, &settings_data)) {
     prv_persist_store();
     if (settings_on_change) {
       settings_on_change();

@@ -37,7 +37,7 @@
 //! credit bounded, which matters because the first press calls off the wait but keeps the credit.
 //! These must match the options in src/pkjs/config.json.
 #define SETTINGS_INSTANT_START_MIN_SEC 5
-#define SETTINGS_INSTANT_START_MAX_SEC 15
+#define SETTINGS_INSTANT_START_MAX_SEC 10
 
 //! Accent colours, as 0xRRGGBB, one for each counting direction. Both default to the green this
 //! app has always used, so out of the box nothing looks any different: drawing.c derives the
