@@ -1,8 +1,17 @@
 #include "pebble.h"
+#include <string.h>
 Tuple *dict_find(DictionaryIterator *i, uint32_t k) { (void)i; (void)k; return NULL; }
 int32_t persist_read_int(uint32_t k) { (void)k; return 0; }
 int persist_read_data(uint32_t k, void *b, size_t s) { (void)k; (void)b; (void)s; return 0; }
-int persist_write_data(uint32_t k, const void *b, size_t s) { (void)k; (void)b; return (int)s; }
+uint8_t stub_persist_last[64];
+size_t stub_persist_last_size;
+uint32_t stub_persist_last_key;
+int persist_write_data(uint32_t k, const void *b, size_t s) {
+  stub_persist_last_key = k;
+  stub_persist_last_size = (s < sizeof(stub_persist_last)) ? s : sizeof(stub_persist_last);
+  memcpy(stub_persist_last, b, stub_persist_last_size);
+  return (int)s;
+}
 int persist_write_int(uint32_t k, int32_t v) { (void)k; (void)v; return 4; }
 void app_message_register_inbox_received(void (*cb)(DictionaryIterator *, void *)) { (void)cb; }
 int stub_outbox_sends;

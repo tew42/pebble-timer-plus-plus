@@ -140,6 +140,39 @@ int main(void) {
         vibe_burst_count, within);
   printf("  %d bursts inside the window, none after\n", within);
 
+  // can_vibrate rides into flash with the rest of the structure, but has_vibrated and silenced
+  // are session state and nothing stored says when the timer finished. Carried forward, a timer
+  // elapsed and dismissed days ago came back armed and buzzed on the next launch.
+  printf("\nan alert is not carried into the next session:\n");
+  {
+    Timer blob;
+    // a timer which has elapsed has had its alert, whether or not anyone was listening
+    timer_reset();
+    timer_increment(3000, false);
+    timer_toggle_play_pause();
+    advance(4000);
+    CHECK(timer_is_alerting(), "the timer should be alerting before it is stored");
+    timer_persist_store();
+    memcpy(&blob, stub_persist_last, sizeof(blob));
+    CHECK(stub_persist_last_size == sizeof(Timer), "stored %u bytes, expected %u",
+          (unsigned)stub_persist_last_size, (unsigned)sizeof(Timer));
+    CHECK(!blob.can_vibrate, "an elapsed timer should not carry its alert into storage");
+
+    // while one still counting down is owed one, which is the late wakeup case
+    timer_reset();
+    timer_increment(MSEC_IN_MIN, false);
+    timer_toggle_play_pause();
+    advance(1000);
+    CHECK(!timer_is_chrono(), "expected a timer still counting down");
+    timer_persist_store();
+    memcpy(&blob, stub_persist_last, sizeof(blob));
+    CHECK(blob.can_vibrate, "a timer still counting down is still owed its alert");
+
+    // and the live timer is untouched by having been stored
+    CHECK(timer_data.can_vibrate, "storing should not disarm the timer it stored");
+  }
+  printf("  ok: elapsed is stored disarmed, still counting down keeps its alert\n");
+
   // The timer is two quantities and a flag: what it was set to, how much has run, whether the
   // clock moves. Editing works on the time the digits show, so it reads the same whichever way
   // they count -- which is what makes a held stopwatch editable at all.

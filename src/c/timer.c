@@ -301,7 +301,20 @@ void timer_reset(void) {
 void timer_persist_store(void) {
   // the version says which structure layout the blob below holds, and timer_persist_read checks it
   persist_write_int(PERSIST_VERSION_KEY, PERSIST_VERSION);
-  persist_write_data(PERSIST_TIMER_KEY, &timer_data, sizeof(timer_data));
+  // The alert belongs to the session the timer elapsed in. can_vibrate is a field of the
+  // structure and so rides into flash, but the two flags which bound it, has_vibrated and
+  // silenced, are session state, and nothing stored says when the timer finished. Carried
+  // forward, a timer elapsed and dismissed on Tuesday came back armed: the first refresh of the
+  // next launch found timer_is_alerting() true with has_vibrated false and buzzed for it, days
+  // later, with the alert window long past.
+  // A timer which has already elapsed has had its alert. One still counting down is owed one,
+  // and that is untouched here: it is not chrono, so it keeps the flag, which is exactly the
+  // late wakeup case the second half of timer_check_elapsed exists for.
+  Timer stored = timer_data;
+  if (timer_is_chrono()) {
+    stored.can_vibrate = false;
+  }
+  persist_write_data(PERSIST_TIMER_KEY, &stored, sizeof(stored));
 }
 
 // Read the timer from persistent storage

@@ -50,6 +50,12 @@ extern uint32_t stub_outbox_last_key;
 extern uint32_t stub_outbox_size;
 extern uint32_t stub_inbox_size;
 extern void (*stub_outbox_failed)(DictionaryIterator *, AppMessageResult, void *);
+// and the last blob handed to persist_write_data, so a test can look at what the app chose to
+// store without the stub having to model flash. Writes still go nowhere and reads still find
+// nothing: this only copies the bytes on their way past.
+extern uint8_t stub_persist_last[64];
+extern size_t stub_persist_last_size;
+extern uint32_t stub_persist_last_key;
 extern void (*stub_timer_cb)(void *);
 extern int stub_timer_cancels;
 extern bool stub_timer_pending;
