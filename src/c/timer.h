@@ -95,7 +95,10 @@ void timer_check_elapsed(void);
 //! @param carry True to take the next place up where the field runs past its top or bottom,
 //!   rather than wrapping inside it. Worth asking for here rather than adding the next place
 //!   afterwards: the wrap goes through zero, and a stopwatch run stops being one there.
-//! @return True if the carry was made
+//! @return True if the carry was made. Neither button asks: they set a field and let the value
+//!   say what happened. It is the operation's own answer, though, and not derivable from the
+//!   value alone once a wrap and a carry can land on the same number, so it is what timertest
+//!   asserts the carry rules against.
 bool timer_increment(int64_t increment, bool carry);
 
 //! Tell the timer that the clock has already run this much

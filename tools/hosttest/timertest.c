@@ -281,6 +281,31 @@ int main(void) {
         (long long)timer_get_value_ms());
   printf("  ok: 59 minutes plus one wraps, or carries into 1:00:00\n");
 
+  // The hours are the top place, so they have nothing to carry into and wrap inside themselves
+  // exactly as the minutes do. Worth pinning, because the reset which timer_increment does when
+  // a step lands on zero reads at a glance like the hours being special-cased into a wipe, and
+  // they are not: the minutes and seconds ride through the wrap untouched, and the reset only
+  // happens where the wrap genuinely arrives at nothing, which is what a clean zero is for.
+  printf("\nthe hours wrap inside their own place, like every other field:\n");
+  timer_reset();
+  for (int i = 0; i < 30; i++) { timer_increment(MSEC_IN_MIN, false); }
+  for (int i = 0; i < 99; i++) { timer_increment(MSEC_IN_HR, false); }
+  CHECK(timer_get_value_ms() == 99 * MSEC_IN_HR + 30 * MSEC_IN_MIN, "expected 99:30:00, got %lldms",
+        (long long)timer_get_value_ms());
+  CHECK(!timer_increment(MSEC_IN_HR, false) && timer_get_value_ms() == 30 * MSEC_IN_MIN,
+        "99:30 plus an hour should wrap to 00:30:00, got %lldms",
+        (long long)timer_get_value_ms());
+  CHECK(timer_get_length_ms() == 30 * MSEC_IN_MIN, "and the length should follow it, got %lldms",
+        (long long)timer_get_length_ms());
+  // and where the wrap does land on nothing, nothing is what it leaves
+  timer_reset();
+  for (int i = 0; i < 99; i++) { timer_increment(MSEC_IN_HR, false); }
+  timer_increment(MSEC_IN_HR, false);
+  CHECK(timer_get_value_ms() == 0 && timer_get_length_ms() == 0,
+        "99:00 plus an hour should be a clean nothing, got %lldms of %lldms",
+        (long long)timer_get_value_ms(), (long long)timer_get_length_ms());
+  printf("  ok: 99:30 wraps to 00:30, and 99:00 wraps to nothing\n");
+
   // the same from a stopwatch run: the carry has to keep it a run
   printf("\na run carries without becoming a timer:\n");
   start_chrono();
