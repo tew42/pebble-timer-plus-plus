@@ -47,6 +47,13 @@ typedef struct {
 } Timer;
 static Timer timer_data;
 
+// The blob written to PERSIST_TIMER_KEY is this structure's bytes, padding and all, and the
+// version above is the only thing standing between a change of layout and a blob read back as
+// the wrong shape. Nothing tied the two together, so this says it out loud: change the structure
+// and this fails the build, which is the moment to bump PERSIST_VERSION. Twenty four bytes is
+// two int64_t, two bool and six of tail padding, the same on the host and under AAPCS.
+_Static_assert(sizeof(Timer) == 24, "the persisted Timer changed shape; bump PERSIST_VERSION");
+
 // A split holds the shown time while the clock runs on. It is deliberately not part of the
 // structure above: it is a display state, so it neither belongs in persistent storage nor should
 // survive the app being closed.
@@ -319,13 +326,18 @@ void timer_persist_store(void) {
 
 // Read the timer from persistent storage
 void timer_persist_read(void) {
-  // the blob is read back verbatim, so one written by a build with a different structure layout
+  // The blob is read back verbatim, so one written by a build with a different structure layout
   // has to be discarded rather than reinterpreted. The version was written but never checked
   // before, which left changing the structure unsafe.
-  if (persist_read_int(PERSIST_VERSION_KEY) == PERSIST_VERSION &&
-      persist_exists(PERSIST_TIMER_KEY)) {
-    persist_read_data(PERSIST_TIMER_KEY, &timer_data, sizeof(timer_data));
-  } else {
+  //
+  // The length is checked too. persist_read_data returns how much it read, and a blob shorter
+  // than the structure leaves the tail of timer_data at whatever it held: zeros today, because
+  // this is the first thing prv_initialize calls and the structure is a zeroed static, but that
+  // is the call order being lucky rather than the read being safe. A short blob is a corrupt one
+  // whatever the version says, so it goes the same way as a missing one.
+  if (persist_read_int(PERSIST_VERSION_KEY) != PERSIST_VERSION ||
+      persist_read_data(PERSIST_TIMER_KEY, &timer_data, sizeof(timer_data)) !=
+          (int)sizeof(timer_data)) {
     timer_reset();
   }
 }
