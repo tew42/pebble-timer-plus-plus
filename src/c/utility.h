@@ -54,7 +54,7 @@ void graphics_fill_rect_grey_light(GContext *ctx, GRect rect);
 //! @param size The size of the memory to allocate
 //! @param file The name of the file it is called from
 //! @param line The line number it is called from
-void *malloc_check(uint16_t size, const char *file, int line);
+void *malloc_check(size_t size, const char *file, int line);
 
 //! Get current epoch in milliseconds
 //! @return The current epoch time in milliseconds

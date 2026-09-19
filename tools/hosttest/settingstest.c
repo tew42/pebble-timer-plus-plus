@@ -17,7 +17,7 @@
 
 static uint64_t fake_now_ms = 1700000000000ULL;
 uint64_t epoch(void) { return fake_now_ms; }
-void *malloc_check(uint16_t size, const char *f, int l) { (void)f; (void)l; return malloc(size); }
+void *malloc_check(size_t size, const char *f, int l) { (void)f; (void)l; return malloc(size); }
 
 #include "configopts.h"   // the page's own options, regenerated from config.json
 #include "settings.c"

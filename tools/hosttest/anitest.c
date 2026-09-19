@@ -15,7 +15,7 @@
 
 static uint64_t fake_now_ms = 1000000;
 uint64_t epoch(void) { return fake_now_ms; }
-void *malloc_check(uint16_t size, const char *file, int line) {
+void *malloc_check(size_t size, const char *file, int line) {
   (void)file; (void)line;
   void *p = malloc(size);
   if (!p) { printf("out of memory\n"); exit(2); }
