@@ -89,6 +89,14 @@ int32_t interpolation_integer(int32_t from, int32_t to, uint32_t percent, uint32
   if (percent >= percent_max) {
     return to;
   }
+  // Every caller in this app passes a literal enumerator, so an index past the end of the table
+  // is not reachable today. It is a call through a function pointer though, which is the one
+  // kind of out of bounds read worth making impossible by construction rather than by reading
+  // the call sites, and the cost of that is a single comparison on a path which already does
+  // trigonometry.
+  if ((size_t)curve >= ARRAY_LENGTH(interpolation_functions)) {
+    curve = CurveLinear;
+  }
   return interpolation_functions[curve](from, to, percent, percent_max);
 }
 

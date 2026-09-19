@@ -83,9 +83,16 @@ static void prv_draw_character(GContext *ctx, GPath *path, char character, int16
   uint8_t char_idx = prv_get_character_index(character);
   uint8_t start_offset = LECO_OFFSETS[char_idx];
   uint8_t end_offset = LECO_OFFSETS[char_idx + 1];
-  // populate the path data points
+  // Populate the path data points, within the room the caller actually has. point_data in
+  // prv_draw_text is LECO_MAX_POINTS long and the widest glyph is exactly that many points, so
+  // there is no headroom at all: a single glyph gaining a fifteenth point would write past the
+  // end of a stack array with nothing in the way. The tables and the bound are meant to stay in
+  // step, but nothing made them, and clamping costs one comparison per character.
   path->num_points = end_offset - start_offset;
-  for (uint8_t ii = 0, idx = start_offset; idx < end_offset; ii++, idx++) {
+  if (path->num_points > (uint32_t)LECO_MAX_POINTS) {
+    path->num_points = (uint32_t)LECO_MAX_POINTS;
+  }
+  for (uint8_t ii = 0, idx = start_offset; ii < path->num_points; ii++, idx++) {
     path->points[ii].x = LECO_POINTS_X[idx] * font_size / LECO_HEIGHT;
     path->points[ii].y = LECO_POINTS_Y[idx] * font_size / LECO_HEIGHT;
   }
