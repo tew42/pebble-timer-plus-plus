@@ -327,9 +327,11 @@ class Composer:
         The interiors are the capture's; only the angles are rescaled, since ours start from a
         different reading, and the fractions are the capture's own collapse.
 
-        The collapse carries the accent of the mode it is ending, which is what the code should do:
-        prv_chrono_accent() is chrono AND counting, so it drops the stopwatch's red a frame early.
-        The accent returns to green once the ring is down, which is the landing frame."""
+        The collapse carries the accent of the mode it is ending. That was aspirational when this
+        was written, since prv_chrono_accent() was chrono AND counting and so dropped the
+        stopwatch's red a frame early; the app has caught up, and prv_palette_update() now holds
+        the accent while the arc runs down. The accent returns to green once the ring is down,
+        which is the landing frame."""
         ph = self.L['phases']
         steps = list(zip(ph['collapse'], ph['collapse_fracs'])) + [(ph['rest'], 0.0)]
         out = []

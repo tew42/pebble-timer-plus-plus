@@ -118,14 +118,23 @@ threshold.
 
 Captured segments keep the durations they were actually displayed for (`decode.py` prints them),
 and the reset's angles are the fractions the capture's own collapse travelled, rescaled: ours start
-from a different reading, but the animation is a fixed 250 ms either way.
+from a different reading, but it is the same animation, so the same fractions describe it.
+
+That last part used to rest on the ring travel being a fixed 250 ms. It does not any more.
+`PROGRESS_ANI_DURATION` is eight frames of the animation service's design speed, which is 264 ms on
+six platforms and 224 ms on gabbro, so the duration differs per platform for the first time and the
+one sequence this tool builds for all five does not model that. It reaches nothing here, because
+the pacing comes from the capture rather than from the constant; a version which derived the
+collapse from the code instead would have to account for it.
 
 Two things are cuts rather than animations, both deliberate: the ~130 ms font-size animation
 between the counting and edit layouts, whose intermediate sizes would need `text_render`'s field
 positioning modelled at arbitrary sizes, and the same in reverse when the stopwatch starts.
 
-The reset after the stopwatch collapses in red. That is the app as `prv_chrono_accent()` should
-behave, not as it did when this was built.
+The reset after the stopwatch collapses in red. That was written as how the app *should* behave
+rather than how it did, and the app has since been made to do it: the accent is now held until the
+arc reaches zero. `prv_chrono_accent()` went with the change; `prv_palette_update()` and the
+`accent_chrono` member carry the decision now.
 
 ## What is checked
 
