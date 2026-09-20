@@ -11,15 +11,13 @@
 #pragma once
 #include <pebble.h>
 
-//! List of different interpolation curves
+//! The interpolation curves this app animates with
+//! Four more were inherited and never called: three quadratic and a sinusoidal in-out. They are
+//! easy to write back if an animation ever wants one, and cost code space on aplite meanwhile.
 typedef enum InterpolationCurve {
   CurveLinear,
-  CurveQuadEaseIn,
-  CurveQuadEaseOut,
-  CurveQuadEaseInOut,
   CurveSinEaseIn,
-  CurveSinEaseOut,
-  CurveSinEaseInOut
+  CurveSinEaseOut
 } InterpolationCurve;
 
 //! Interpolation for integer value
@@ -31,13 +29,3 @@ typedef enum InterpolationCurve {
 //! @return The interpolated value
 int32_t interpolation_integer(int32_t from, int32_t to, uint32_t percent, uint32_t percent_max,
                               InterpolationCurve curve);
-
-//! Interpolation for GPoint type
-//! @param from The beginning point
-//! @param to The ending point
-//! @param percent The percent of the way into the animation
-//! @param percent_max The maximum percent to end the animation at
-//! @param curve The interpolation curve to use while calculating the new value
-//! @return The interpolated point
-GPoint interpolation_gpoint(GPoint from, GPoint to, uint32_t percent, uint32_t percent_max,
-                            InterpolationCurve curve);

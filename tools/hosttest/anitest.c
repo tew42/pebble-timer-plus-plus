@@ -28,10 +28,6 @@ int32_t interpolation_integer(int32_t from, int32_t to, uint32_t percent, uint32
   if (percent >= percent_max) { return to; }
   return from + (int32_t)((int64_t)(to - from) * percent / percent_max);
 }
-GPoint interpolation_gpoint(GPoint from, GPoint to, uint32_t p, uint32_t pm, InterpolationCurve c) {
-  return GPoint(interpolation_integer(from.x, to.x, p, pm, c),
-                interpolation_integer(from.y, to.y, p, pm, c));
-}
 
 #include "animation.c"
 

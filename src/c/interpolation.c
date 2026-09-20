@@ -21,31 +21,6 @@ static int32_t prv_curve_linear(int32_t from, int32_t to, uint32_t percent, uint
   return from + (to - from) * (int32_t)percent / (int32_t)percent_max;
 }
 
-// Quadratic interpolation in
-static int32_t prv_curve_quad_ease_in(int32_t from, int32_t to, uint32_t percent,
-                                      uint32_t percent_max) {
-  int32_t t_percent = percent * 100 / percent_max;
-  return (to - from) * t_percent * t_percent / 10000 + from;
-}
-
-// Quadratic interpolation out
-static int32_t prv_curve_quad_ease_out(int32_t from, int32_t to, uint32_t percent,
-                                       uint32_t percent_max) {
-  int32_t t_percent = percent * 100 / percent_max;
-  return -(to - from) * t_percent * (t_percent - 200) / 10000 + from;
-}
-
-// Quadratic interpolation in out
-static int32_t prv_curve_quad_ease_in_out(int32_t from, int32_t to, uint32_t percent,
-                                          uint32_t percent_max) {
-  int32_t t_percent = percent * 200 / percent_max;
-  if (t_percent < 100) {
-    return (to - from) / 2 * t_percent * t_percent / 10000 + from;
-  }
-  t_percent -= 100;
-  return -(to - from) / 2 * (t_percent * (t_percent - 200) - 10000) / 10000 + from;
-}
-
 // Sinusoidal interpolation in
 static int32_t prv_curve_sin_ease_in(int32_t from, int32_t to, uint32_t percent,
                                      uint32_t percent_max) {
@@ -62,23 +37,6 @@ static int32_t prv_curve_sin_ease_out(int32_t from, int32_t to, uint32_t percent
          from;
 }
 
-// Sinusoidal interpolation in out
-static int32_t prv_curve_sin_ease_in_out(int32_t from, int32_t to, uint32_t percent,
-                                         uint32_t percent_max) {
-  return (-((to - from) / 2) *
-          (cos_lookup(TRIG_MAX_ANGLE * percent / percent_max / 2) - (TRIG_MAX_RATIO / 2)) / 2) /
-             TRIG_MAX_RATIO +
-         from;
-}
-
-// Array of interpolation function pointers
-typedef int32_t (*InterpolationFunction)(int32_t, int32_t, uint32_t, uint32_t);
-static InterpolationFunction interpolation_functions[] = {
-    prv_curve_linear,           prv_curve_quad_ease_in, prv_curve_quad_ease_out,
-    prv_curve_quad_ease_in_out, prv_curve_sin_ease_in,  prv_curve_sin_ease_out,
-    prv_curve_sin_ease_in_out,
-};
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // API Functions
 //
@@ -89,23 +47,16 @@ int32_t interpolation_integer(int32_t from, int32_t to, uint32_t percent, uint32
   if (percent >= percent_max) {
     return to;
   }
-  // Every caller in this app passes a literal enumerator, so an index past the end of the table
-  // is not reachable today. It is a call through a function pointer though, which is the one
-  // kind of out of bounds read worth making impossible by construction rather than by reading
-  // the call sites, and the cost of that is a single comparison on a path which already does
-  // trigonometry.
-  if ((size_t)curve >= ARRAY_LENGTH(interpolation_functions)) {
-    curve = CurveLinear;
+  // A switch rather than a table of function pointers: with three curves left the table was more
+  // machinery than dispatch, and its default arm now covers a curve outside the enum, which is
+  // what the explicit bounds check added in ca0de84 was there for. That check is gone with the
+  // table it guarded, not quietly dropped.
+  switch (curve) {
+  case CurveSinEaseIn:
+    return prv_curve_sin_ease_in(from, to, percent, percent_max);
+  case CurveSinEaseOut:
+    return prv_curve_sin_ease_out(from, to, percent, percent_max);
+  default:
+    return prv_curve_linear(from, to, percent, percent_max);
   }
-  return interpolation_functions[curve](from, to, percent, percent_max);
-}
-
-// Interpolate a GPoint
-GPoint interpolation_gpoint(GPoint from, GPoint to, uint32_t percent, uint32_t percent_max,
-                            InterpolationCurve curve) {
-  if (percent >= percent_max) {
-    return to;
-  }
-  return GPoint(interpolation_integer(from.x, to.x, percent, percent_max, curve),
-                interpolation_integer(from.y, to.y, percent, percent_max, curve));
 }
