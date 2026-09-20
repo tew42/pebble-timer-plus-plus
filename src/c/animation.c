@@ -12,7 +12,6 @@
 // @bugs No known bugs
 
 #include "animation.h"
-#include "utility.h"
 #include <string.h>
 
 // One slot per animated value. The drawing code animates five text fields, the focus field, the
@@ -75,9 +74,14 @@ static AniSlot *prv_slot_for(void *target) {
       spare = &ani_slots[ii];
     }
   }
-  // a value this file has never seen and nowhere left to remember it, which means the drawing
-  // code grew an animated value and ANI_SLOT_COUNT did not
-  ASSERT(spare);
+  if (!spare) {
+    // an animated value this file has never seen and nowhere left to remember it, which means the
+    // drawing code grew one and ANI_SLOT_COUNT did not. The value still gets where it belongs, it
+    // just arrives rather than travelling. Logged rather than asserted: NDEBUG is never set for an
+    // app build, so ASSERT's null call is live in the shipped binary, and a watchapp which stops
+    // dead is a worse answer than one which stops animating.
+    APP_LOG(APP_LOG_LEVEL_ERROR, "out of animation slots; raise ANI_SLOT_COUNT");
+  }
   return spare;
 }
 
@@ -100,17 +104,20 @@ static void prv_slot_cancel(AniSlot *slot) {
 }
 
 // Hand a value its new animation, in place of whatever it was running
-static void prv_slot_schedule(void *target, Animation *animation) {
+// False when there was no room to remember it, which leaves the caller to put the value where it
+// belongs the short way
+static bool prv_slot_schedule(void *target, Animation *animation) {
   AniSlot *slot = prv_slot_for(target);
   if (!slot) {
     animation_destroy(animation);
-    return;
+    return false;
   }
   prv_slot_cancel(slot);
   slot->target = target;
   slot->anim = animation;
   animation_set_handlers(animation, (AnimationHandlers){.stopped = prv_stopped}, slot);
   animation_schedule(animation);
+  return true;
 }
 
 // Settle an animation's endpoints, which create() cannot do for a custom implementation
@@ -125,9 +132,9 @@ static void prv_slot_schedule(void *target, Animation *animation) {
 // static, so that comparison is firmware against firmware.
 // property_animation_from() and _to() are told the size and memcpy it, asking nothing about types,
 // which is why the endpoints go in through them and the getter is never relied on for a value.
-static void prv_set_endpoints(PropertyAnimation *prop, void *from, void *to, size_t size) {
-  property_animation_from(prop, from, size, true);
-  property_animation_to(prop, to, size, true);
+static bool prv_set_endpoints(PropertyAnimation *prop, void *from, void *to, size_t size) {
+  return property_animation_from(prop, from, size, true) &&
+         property_animation_to(prop, to, size, true);
 }
 
 // Put a value where it belongs without travelling, for when there is nothing to travel with
@@ -148,8 +155,28 @@ static Animation *prv_int16_leg(int16_t *target, int16_t *from, int16_t to, uint
     return NULL;
   }
   int16_t start = from ? (*from) : (*target);
-  prv_set_endpoints(prop, &start, &to, sizeof(int16_t));
   Animation *animation = property_animation_get_animation(prop);
+  if (!prv_set_endpoints(prop, &start, &to, sizeof(int16_t))) {
+    animation_destroy(animation);
+    return NULL;
+  }
+  animation_set_duration(animation, duration);
+  animation_set_curve(animation, curve);
+  return animation;
+}
+
+// Build a rect animation, which always travels from wherever the rect happens to be
+static Animation *prv_rect_leg(GRect *target, GRect to, uint32_t duration, AnimationCurve curve) {
+  PropertyAnimation *prop = property_animation_create(&ani_rect_impl, target, NULL, NULL);
+  if (!prop) {
+    return NULL;
+  }
+  GRect start = (*target);
+  Animation *animation = property_animation_get_animation(prop);
+  if (!prv_set_endpoints(prop, &start, &to, sizeof(GRect))) {
+    animation_destroy(animation);
+    return NULL;
+  }
   animation_set_duration(animation, duration);
   animation_set_curve(animation, curve);
   return animation;
@@ -160,30 +187,19 @@ static Animation *prv_int16_leg(int16_t *target, int16_t *from, int16_t to, uint
 //
 
 // Move a GRect to where it belongs, replacing whatever was moving it
-// The only rect animation there is, so it builds its own; a rect always travels from wherever it
-// happens to be, which is read here rather than left to the getter, for the reason above.
 void animation_rect_start(GRect *target, GRect to, uint32_t duration, AnimationCurve curve) {
-  PropertyAnimation *prop = property_animation_create(&ani_rect_impl, target, NULL, NULL);
-  if (!prop) {
+  Animation *animation = prv_rect_leg(target, to, duration, curve);
+  if (!animation || !prv_slot_schedule(target, animation)) {
     prv_arrive(target, &to, sizeof(GRect));
-    return;
   }
-  GRect start = (*target);
-  prv_set_endpoints(prop, &start, &to, sizeof(GRect));
-  Animation *animation = property_animation_get_animation(prop);
-  animation_set_duration(animation, duration);
-  animation_set_curve(animation, curve);
-  prv_slot_schedule(target, animation);
 }
 
 // Move an integer to a new value, replacing whatever was moving it
 void animation_int16_start(int16_t *target, int16_t to, uint32_t duration, AnimationCurve curve) {
   Animation *animation = prv_int16_leg(target, NULL, to, duration, curve);
-  if (!animation) {
+  if (!animation || !prv_slot_schedule(target, animation)) {
     prv_arrive(target, &to, sizeof(int16_t));
-    return;
   }
-  prv_slot_schedule(target, animation);
 }
 
 // Send an integer out to a value and back to zero, as a single animation
@@ -205,7 +221,10 @@ void animation_int16_bounce(int16_t *target, int16_t peak, uint32_t out_ms, uint
     return;
   }
   animation_set_delay(bounce, delay_ms);
-  prv_slot_schedule(target, bounce);
+  if (!prv_slot_schedule(target, bounce)) {
+    const int16_t home = 0;
+    prv_arrive(target, &home, sizeof(int16_t));
+  }
 }
 
 // Cancel whatever is animating a value, by its pointer
