@@ -25,6 +25,23 @@
 // [value] / [width or height] * 1000. Your original CIRCLE_RADIUS value
 // was 63 for a circle you want to fix inside the x axis, so 63 / 144 * 1000 = 438.
 
+// Animation durations, in frames
+// The animation service works to a design speed of one frame every 33ms, and on gabbro every
+// 28ms: its panel is spec-limited to about 21Hz, so it shows fewer and larger steps, and at the
+// slower figure those read as sluggish. Durations here are whole frames of that, so an animation
+// ends on a frame rather than partway into one, and gabbro's come out shorter in wall time for
+// the same reason the firmware's own do.
+// Mirrored rather than included: the firmware calls its constant internal, so it may not reach
+// the shipped SDK headers. It is a design speed either way, not a promise about what is painted
+// -- gabbro schedules its frames 48ms apart, so a two frame animation there is one or two of
+// them, as it already was at the 30ms this app used to keep its own time by.
+#ifdef PBL_PLATFORM_GABBRO
+#define ANI_FRAME_MS 28
+#else
+#define ANI_FRAME_MS 33
+#endif
+#define ANI_FRAMES(n) ((n) * ANI_FRAME_MS)
+
 // Progress ring
 #ifdef PBL_ROUND
 // This is a lower value to simulate the original padding that the fixed 63px radius had
@@ -45,7 +62,7 @@
 #define RING_ANGLE_TRIG(a) ((int32_t)(a) * (TRIG_MAX_ANGLE / RING_ANGLE_MAX))
 _Static_assert(RING_ANGLE_MAX <= INT16_MAX,
                "a full turn must fit the type the angles are stored in");
-#define PROGRESS_ANI_DURATION 250
+#define PROGRESS_ANI_DURATION ANI_FRAMES(8)
 // The box the digits are sized to fit, as a square centred on the origin and half as tall. The
 // two differ only in how far inside the ring they sit: editing gives the header and footer room.
 #define MAIN_TEXT_BOUNDS_FOR(r) GRect(-(r), -(r) / 2, (r) * 2, (r))
@@ -54,15 +71,15 @@ _Static_assert(RING_ANGLE_MAX <= INT16_MAX,
 // Main Text
 #define TEXT_FIELD_COUNT 5
 #define TEXT_FIELD_EDIT_SPACING scl_y(42)
-#define TEXT_FIELD_ANI_DURATION 140
+#define TEXT_FIELD_ANI_DURATION ANI_FRAMES(4)
 // Focus Layer
 #define FOCUS_FIELD_BORDER scl_y(30)
 #define FOCUS_FIELD_SHRINK_INSET scl_y(18)
-#define FOCUS_FIELD_SHRINK_DURATION 80
-#define FOCUS_FIELD_ANI_DURATION 150
+#define FOCUS_FIELD_SHRINK_DURATION ANI_FRAMES(3)
+#define FOCUS_FIELD_ANI_DURATION ANI_FRAMES(5)
 #define FOCUS_BOUNCE_ANI_HEIGHT scl_y(48)
-#define FOCUS_BOUNCE_ANI_DURATION 70
-#define FOCUS_BOUNCE_ANI_SETTLE_DURATION 140
+#define FOCUS_BOUNCE_ANI_DURATION ANI_FRAMES(2)
+#define FOCUS_BOUNCE_ANI_SETTLE_DURATION ANI_FRAMES(4)
 // Header Text (different font on Emery and Gabbro)
 #if defined(PBL_PLATFORM_APLITE) || defined(PBL_PLATFORM_BASALT) || defined(PBL_PLATFORM_CHALK) || \
     defined(PBL_PLATFORM_DIORITE) || defined(PBL_PLATFORM_FLINT)
