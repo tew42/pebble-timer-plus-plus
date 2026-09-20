@@ -33,14 +33,11 @@
 #define CIRCLE_RADIUS scl_y(375)
 #endif
 #define PROGRESS_ANI_DURATION 250
-#define MAIN_TEXT_CIRCLE_RADIUS (CIRCLE_RADIUS - scl_y(42))
-#define MAIN_TEXT_BOUNDS                                                                           \
-  GRect(-MAIN_TEXT_CIRCLE_RADIUS, -MAIN_TEXT_CIRCLE_RADIUS / 2, MAIN_TEXT_CIRCLE_RADIUS * 2,       \
-        MAIN_TEXT_CIRCLE_RADIUS)
-#define MAIN_TEXT_CIRCLE_RADIUS_EDIT (CIRCLE_RADIUS - scl_y(101))
-#define MAIN_TEXT_BOUNDS_EDIT                                                                      \
-  GRect(-MAIN_TEXT_CIRCLE_RADIUS_EDIT, -MAIN_TEXT_CIRCLE_RADIUS_EDIT / 2,                          \
-        MAIN_TEXT_CIRCLE_RADIUS_EDIT * 2, MAIN_TEXT_CIRCLE_RADIUS_EDIT)
+// The box the digits are sized to fit, as a square centred on the origin and half as tall. The
+// two differ only in how far inside the ring they sit: editing gives the header and footer room.
+#define MAIN_TEXT_BOUNDS_FOR(r) GRect(-(r), -(r) / 2, (r) * 2, (r))
+#define MAIN_TEXT_BOUNDS MAIN_TEXT_BOUNDS_FOR(CIRCLE_RADIUS - scl_y(42))
+#define MAIN_TEXT_BOUNDS_EDIT MAIN_TEXT_BOUNDS_FOR(CIRCLE_RADIUS - scl_y(101))
 // Main Text
 #define TEXT_FIELD_COUNT 5
 #define TEXT_FIELD_EDIT_SPACING scl_y(42)
@@ -152,16 +149,23 @@ static void prv_focus_layer_update_state(GRect bounds, const GRect fields[TEXT_F
 
 // Draw the focus layer
 // The shrink which hints that select is held is an inset applied here, not a change of the
-// field itself, so holding the button can never move the field or fight an animation on it
-static void prv_render_focus_layer(GContext *ctx) {
-  const GRect bounds =
-      grect_inset(drawing_data.focus_field, GEdgeInsets1((int16_t)drawing_data.focus_inset));
+// Fill a rect with the ring's own tone
+// One bit hardware has no third colour to fill with, so it dithers instead. Written once because
+// both callers had it, differing only in that one set the fill colour outside the #ifdef and so
+// set it on the path which ignores it: graphics_fill_rect_grey blits a pattern.
+static void prv_fill_ring_tone(GContext *ctx, GRect rect) {
 #ifdef PBL_BW
-  graphics_fill_rect_grey(ctx, bounds);
+  graphics_fill_rect_grey(ctx, rect);
 #else
   graphics_context_set_fill_color(ctx, drawing_data.ring_color);
-  graphics_fill_rect(ctx, bounds, 0, GCornerNone);
+  graphics_fill_rect(ctx, rect, 0, GCornerNone);
 #endif
+}
+
+// field itself, so holding the button can never move the field or fight an animation on it
+static void prv_render_focus_layer(GContext *ctx) {
+  prv_fill_ring_tone(ctx, grect_inset(drawing_data.focus_field,
+                                      GEdgeInsets1((int16_t)drawing_data.focus_inset)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -308,7 +312,7 @@ static void prv_main_text_update_state(Layer *layer, bool snap) {
 }
 
 // Draw main text onto drawing context
-static void prv_render_main_text(GContext *ctx, GRect bounds) {
+static void prv_render_main_text(GContext *ctx) {
   // convert to strings
   char buff[TEXT_FIELD_COUNT][6] = {{'\0'}};
   prv_format_text_fields(buff);
@@ -585,12 +589,7 @@ void drawing_render(Layer *layer, GContext *ctx) {
   prv_palette_update();
   // draw background
   // this is actually the ring, which is then covered up with the background
-  graphics_context_set_fill_color(ctx, drawing_data.ring_color);
-#ifdef PBL_BW
-  graphics_fill_rect_grey(ctx, bounds);
-#else
-  graphics_fill_rect(ctx, bounds, 0, GCornerNone);
-#endif
+  prv_fill_ring_tone(ctx, bounds);
   prv_render_progress_ring(ctx, bounds);
   // draw main circle
   graphics_context_set_fill_color(ctx, drawing_data.mid_color);
@@ -600,7 +599,7 @@ void drawing_render(Layer *layer, GContext *ctx) {
   // draw main text (drawn as filled and stroked path)
   graphics_context_set_stroke_color(ctx, FORE_COLOR);
   graphics_context_set_fill_color(ctx, FORE_COLOR);
-  prv_render_main_text(ctx, bounds);
+  prv_render_main_text(ctx);
   // draw header and footer text
   graphics_context_set_text_color(ctx, FORE_COLOR);
   prv_render_header_text(ctx, bounds);
