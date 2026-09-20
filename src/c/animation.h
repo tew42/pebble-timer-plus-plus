@@ -1,45 +1,52 @@
 //! @file animation.h
-//! @brief Animation framework to animate pointer values
+//! @brief The app's animations, on the firmware's animation service
 //!
-//! Animation framework to animate a pointer's value. Includes automatic
-//! detection of multiple animations per pointer, and destroys the oldest one.
-//! Animations also auto-destruct when complete
+//! A thin layer over PropertyAnimation. Each animated value is addressed by its own pointer and
+//! carries one animation at a time, so the drawing code can start a move without holding a handle
+//! and cancel one without remembering what it started.
 //!
 //! @author Eric D. Phillips
+//! @author Thomas Winkler (tew42) (moved onto the firmware's animation service)
 //! @date September 1, 2015
 //! @bugs No known bugs
 
 #pragma once
-#include "interpolation.h"
 #include <pebble.h>
 
-//! Animate a GRect by its pointer
-//! @param prt A pointer to the GRect to animate
-//! @param to The GRect to animate the pointer to
-//! @param duration The length of time over which to animate the GRect
-//! @param delay The length of time to wait before running the animation
-//! @param interpolation The interpolation mode to use for the animation
-void animation_grect_start(GRect *ptr, GRect to, uint32_t duration, uint32_t delay,
-                           InterpolationCurve interpolation);
+//! Move a GRect to where it belongs, replacing whatever was moving it
+//! @param target The GRect to animate, which is also its identity: one animation at a time
+//! @param to The GRect to animate it to
+//! @param duration The length of time over which to move it
+//! @param curve The easing to move it with
+void animation_rect_start(GRect *target, GRect to, uint32_t duration, AnimationCurve curve);
 
-//! Animate an integer by its pointer
-//! @param ptr A pointer to the integer to animate
-//! @param to The value to animate the pointer value to
-//! @param duration The length of time over which to animate the value
-//! @param delay The length of time to wait before running the animation
-//! @param interpolation The interpolation mode to use for the animation
-void animation_int16_start(int16_t *ptr, int16_t to, uint32_t duration, uint32_t delay,
-                           InterpolationCurve interpolation);
+//! Send a GRect out to one place and back to another, as a single animation
+//! The two legs run in sequence, so the return starts exactly where the departure ended. That
+//! meeting point is passed in rather than read back: the service settles an animation's endpoints
+//! as it creates it, and at that moment the first leg has not moved anything yet.
+//! @param target The GRect to animate, which is also its identity
+//! @param via Where the first leg ends, and so where the second begins
+//! @param to Where the second leg ends
+//! @param out_ms The length of the first leg
+//! @param back_ms The length of the second leg
+//! @param delay_ms The length of time to wait before the first leg starts
+void animation_rect_bounce(GRect *target, GRect via, GRect to, uint32_t out_ms, uint32_t back_ms,
+                           uint32_t delay_ms);
 
-//! Cancel every animation on a value, by its pointer
-//! A value can carry more than one at a time, the bounce being two with the second delayed behind
-//! the first, and one left behind is one which fires later against whatever has replaced it.
-//! @param ptr A pointer for which to cancel all animations
-void animation_stop(void *ptr);
+//! Move an integer to a new value, replacing whatever was moving it
+//! @param target The value to animate, which is also its identity
+//! @param to The value to animate it to
+//! @param duration The length of time over which to move it
+//! @param curve The easing to move it with
+void animation_int16_start(int16_t *target, int16_t to, uint32_t duration, AnimationCurve curve);
 
-//! Cancel all running animations
+//! Cancel whatever is animating a value, by its pointer
+//! @param target A pointer to the value to leave where it is
+void animation_stop(void *target);
+
+//! Cancel every animation this app started
 void animation_stop_all(void);
 
-//! Register animation update callback
-//! @param callback A pointer to the function to call when updating
-void animation_register_update_callback(void *callback);
+//! Point the animations at the layer they refresh as they run
+//! @param layer The layer to mark dirty on every frame of every animation
+void animation_initialize(Layer *layer);

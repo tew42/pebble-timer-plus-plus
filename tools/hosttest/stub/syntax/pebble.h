@@ -64,6 +64,69 @@ typedef struct {
 } WindowHandlers;
 void window_set_window_handlers(Window *window, WindowHandlers handlers);
 
+// animations
+// Mirrored from the firmware's own applib/ui/animation.h and property_animation.h so the syntax
+// pass type-checks what animation.c hands the service. Declarations only; nothing here runs.
+typedef struct Animation Animation;
+typedef struct PropertyAnimation PropertyAnimation;
+typedef int32_t AnimationProgress;
+typedef enum {
+  AnimationCurveLinear = 0,
+  AnimationCurveEaseIn = 1,
+  AnimationCurveEaseOut = 2,
+  AnimationCurveEaseInOut = 3,
+} AnimationCurve;
+typedef void (*AnimationStartedHandler)(Animation *animation, void *context);
+typedef void (*AnimationStoppedHandler)(Animation *animation, bool finished, void *context);
+typedef struct {
+  AnimationStartedHandler started;
+  AnimationStoppedHandler stopped;
+} AnimationHandlers;
+typedef void (*AnimationSetupImplementation)(Animation *animation);
+typedef void (*AnimationUpdateImplementation)(Animation *animation,
+                                              const AnimationProgress distance_normalized);
+typedef void (*AnimationTeardownImplementation)(Animation *animation);
+typedef struct {
+  AnimationSetupImplementation setup;
+  AnimationUpdateImplementation update;
+  AnimationTeardownImplementation teardown;
+} AnimationImplementation;
+bool animation_destroy(Animation *animation);
+Animation *animation_sequence_create(Animation *animation_a, Animation *animation_b,
+                                     Animation *animation_c, ...);
+bool animation_set_delay(Animation *animation, uint32_t delay_ms);
+bool animation_set_duration(Animation *animation, uint32_t duration_ms);
+bool animation_set_curve(Animation *animation, AnimationCurve curve);
+bool animation_set_handlers(Animation *animation, AnimationHandlers callbacks, void *context);
+bool animation_schedule(Animation *animation);
+bool animation_unschedule(Animation *animation);
+typedef GRect GRectReturn;
+typedef void (*Int16Setter)(void *subject, int16_t int16);
+typedef int16_t (*Int16Getter)(void *subject);
+typedef void (*GRectSetter)(void *subject, GRect grect);
+typedef GRectReturn (*GRectGetter)(void *subject);
+typedef struct {
+  union {
+    Int16Setter int16;
+    GRectSetter grect;
+  } setter;
+  union {
+    Int16Getter int16;
+    GRectGetter grect;
+  } getter;
+} PropertyAnimationAccessors;
+typedef struct {
+  AnimationImplementation base;
+  PropertyAnimationAccessors accessors;
+} PropertyAnimationImplementation;
+PropertyAnimation *property_animation_create(const PropertyAnimationImplementation *implementation,
+                                             void *subject, void *from_value, void *to_value);
+Animation *property_animation_get_animation(PropertyAnimation *property_animation);
+void property_animation_update_int16(PropertyAnimation *property_animation,
+                                     const uint32_t distance_normalized);
+void property_animation_update_grect(PropertyAnimation *property_animation,
+                                     const uint32_t distance_normalized);
+
 // clicks
 typedef struct ClickRecognizer *ClickRecognizerRef;
 typedef void (*ClickHandler)(ClickRecognizerRef recognizer, void *context);

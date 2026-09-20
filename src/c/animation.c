@@ -1,255 +1,192 @@
 // @file animation.c
-// @brief Animation framework to animate pointer values
+// @brief The app's animations, on the firmware's animation service
 //
-// Animation framework to animate a pointer's value. Includes automatic
-// detection of multiple animations per pointer, and destroys the oldest one.
-// Animations also auto-destruct when complete
+// PropertyAnimation does the interpolating, the easing and the frame scheduling. What is left
+// here is the app's own idea of ownership: an animated value is named by its pointer and carries
+// one animation at a time, so starting a move cancels whatever the value was doing and nothing
+// has to keep a handle around to say so.
 //
 // @author Eric D. Phillips
+// @author Thomas Winkler (tew42) (moved onto the firmware's animation service)
 // @date September 1, 2015
 // @bugs No known bugs
 
 #include "animation.h"
 #include "utility.h"
 
-// Animation constants
-#define ANIMATION_TICK_INTERVAL 30 //< Number of milliseconds to pause between animation ticks
+// One slot per animated value. The drawing code animates five text fields, the focus field, the
+// focus inset and the ring angle, which is exactly this many; a slot is claimed the first time a
+// value animates and belongs to it from then on.
+#define ANI_SLOT_COUNT 8
 
-// Animation pointer type
-typedef struct AnimationNode {
-  void (*step_func)(struct AnimationNode *); //< Function to call when stepping animation
-  void *target;                              //< Pointer to value being animated
-  void *from;                                //< Pointer to value to animate from
-  void *to;                                  //< Pointer to value to animate to
-  uint64_t start_time;                       //< Millisecond epoch of when animation was started
-  uint32_t duration;                         //< Duration of animation in milliseconds
-  uint32_t delay;                            //< Time to wait before animating
-  InterpolationCurve interpolation;          //< The interpolation mode to use with this animation
-  struct AnimationNode *next;                //< Pointer to next node in linked list
-} AnimationNode;
+// What one animated value is running
+typedef struct {
+  void *target;    //< The value this slot belongs to, or NULL while the slot is unclaimed
+  Animation *anim; //< What is animating it, or NULL if nothing is
+} AniSlot;
 
-// Animation framework data
-static AnimationNode *head_node = NULL;   //< Head node in linked list containing all animations
-static AppTimer *ani_timer = NULL;        //< AppTimer for stepping all animations
-static void (*ani_callback)(void) = NULL; //< Animation update callback
-
-// Functions
-static void prv_animation_timer_start(void);
-static void prv_list_remove_node(AnimationNode *node);
+// Animation data
+static AniSlot ani_slots[ANI_SLOT_COUNT]; //< One per animated value, claimed on first use
+static Layer *ani_layer = NULL;           //< Marked dirty on every frame of every animation
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Private Functions
 //
 
-// Step a GRect animation
-static void prv_animation_step_grect(AnimationNode *node) {
-  // set from grect on first call, allowing another animation to change the target value
-  // while this animation is delayed
-  if (!node->from) {
-    node->from = MALLOC(sizeof(GRect));
-    (*(GRect *)node->from) = (*(GRect *)node->target);
+// The subject of every animation here is the animated value itself, so the accessors are barely
+// more than the dereference. Marking the layer dirty from the setter is what makes an animation
+// visible at all: the service moves numbers and has no idea anything is drawn with them.
+static void prv_set_rect(void *subject, GRect value) {
+  (*(GRect *)subject) = value;
+  layer_mark_dirty(ani_layer);
+}
+
+static GRect prv_get_rect(void *subject) { return (*(GRect *)subject); }
+
+static void prv_set_int16(void *subject, int16_t value) {
+  (*(int16_t *)subject) = value;
+  layer_mark_dirty(ani_layer);
+}
+
+static int16_t prv_get_int16(void *subject) { return (*(int16_t *)subject); }
+
+// The update functions are the firmware's own; only the accessors are ours
+static const PropertyAnimationImplementation ani_rect_impl = {
+    .base = {.update = (AnimationUpdateImplementation)property_animation_update_grect},
+    .accessors = {.setter = {.grect = prv_set_rect},
+                  .getter = {.grect = (GRectGetter)prv_get_rect}},
+};
+
+static const PropertyAnimationImplementation ani_int16_impl = {
+    .base = {.update = (AnimationUpdateImplementation)property_animation_update_int16},
+    .accessors = {.setter = {.int16 = prv_set_int16}, .getter = {.int16 = prv_get_int16}},
+};
+
+// Find the slot a value animates in, claiming a free one if this is its first
+static AniSlot *prv_slot_for(void *target) {
+  AniSlot *spare = NULL;
+  for (uint8_t ii = 0; ii < ANI_SLOT_COUNT; ii++) {
+    if (ani_slots[ii].target == target) {
+      return &ani_slots[ii];
+    }
+    if (!spare && !ani_slots[ii].target) {
+      spare = &ani_slots[ii];
+    }
   }
-  // step value
-  GRect from = (*(GRect *)node->from);
-  GRect to = (*(GRect *)node->to);
-  uint32_t percent_max = node->duration;
-  uint32_t percent = epoch() - (node->start_time + node->delay);
-  (*(GRect *)node->target).origin.x =
-      interpolation_integer(from.origin.x, to.origin.x, percent, percent_max, node->interpolation);
-  (*(GRect *)node->target).origin.y =
-      interpolation_integer(from.origin.y, to.origin.y, percent, percent_max, node->interpolation);
-  (*(GRect *)node->target).size.w =
-      interpolation_integer(from.size.w, to.size.w, percent, percent_max, node->interpolation);
-  (*(GRect *)node->target).size.h =
-      interpolation_integer(from.size.h, to.size.h, percent, percent_max, node->interpolation);
-  // continue animation
-  if (percent >= percent_max) {
-    prv_list_remove_node(node);
+  // a value this file has never seen and nowhere left to remember it, which means the drawing
+  // code grew an animated value and ANI_SLOT_COUNT did not
+  ASSERT(spare);
+  return spare;
+}
+
+// Let go of an animation's handle once it has stopped, however it stopped
+// A scheduled animation destroys itself when it ends, being unscheduled included, so this is the
+// last moment the handle means anything and there is nothing here left to free.
+static void prv_stopped(Animation *animation, bool finished, void *context) {
+  AniSlot *slot = (AniSlot *)context;
+  if (slot->anim == animation) {
+    slot->anim = NULL;
   }
 }
 
-// Step a int16 animation
-static void prv_animation_step_int16(AnimationNode *node) {
-  // set from value on first call, allowing another animation to change the target value
-  // while this animation is delayed
-  if (!node->from) {
-    node->from = MALLOC(sizeof(int16_t));
-    (*(int16_t *)node->from) = (*(int16_t *)node->target);
+// Cancel whatever a slot is running, which clears the slot through prv_stopped
+static void prv_slot_cancel(AniSlot *slot) {
+  if (slot->anim) {
+    animation_unschedule(slot->anim);
   }
-  // step value
-  int16_t from = (*(int16_t *)node->from);
-  int16_t to = (*(int16_t *)node->to);
-  uint32_t percent_max = node->duration;
-  uint32_t percent = epoch() - (node->start_time + node->delay);
-  (*(int16_t *)node->target) =
-      (int16_t)interpolation_integer(from, to, percent, percent_max, node->interpolation);
-  // continue animation
-  if (percent >= percent_max) {
-    prv_list_remove_node(node);
-  }
+  slot->anim = NULL;
 }
 
-// Add node to end of linked list
-static void prv_list_add_node(AnimationNode *node) {
-  if (!head_node) {
-    head_node = node;
+// Hand a value its new animation, in place of whatever it was running
+static void prv_slot_schedule(void *target, Animation *animation) {
+  AniSlot *slot = prv_slot_for(target);
+  if (!slot) {
+    animation_destroy(animation);
     return;
   }
-  AnimationNode *cur_node = head_node;
-  while (cur_node->next) {
-    cur_node = cur_node->next;
-  }
-  cur_node->next = node;
+  prv_slot_cancel(slot);
+  slot->target = target;
+  slot->anim = animation;
+  animation_set_handlers(animation, (AnimationHandlers){.stopped = prv_stopped}, slot);
+  animation_schedule(animation);
 }
 
-// Unlink and destroy a single node
-// A finished animation retires itself through this rather than animation_stop(), which unlinks
-// the first node on the target and so need not be the one that finished
-static void prv_list_remove_node(AnimationNode *node) {
-  AnimationNode *cur_node = head_node;
-  AnimationNode *pre_node = NULL;
-  while (cur_node) {
-    if (cur_node == node) {
-      if (pre_node) {
-        pre_node->next = cur_node->next;
-      } else {
-        head_node = cur_node->next;
-      }
-      free(cur_node->from);
-      free(cur_node->to);
-      free(cur_node);
-      return;
-    }
-    pre_node = cur_node;
-    cur_node = cur_node->next;
+// Build one leg of a rect animation, which is the whole of most of them
+// A NULL `from` starts the leg wherever the value is at the moment it is built, which the service
+// reads for itself through the getter.
+static Animation *prv_rect_leg(GRect *target, GRect *from, GRect to, uint32_t duration,
+                               AnimationCurve curve) {
+  PropertyAnimation *prop = property_animation_create(&ani_rect_impl, target, from, &to);
+  if (!prop) {
+    return NULL;
   }
-}
-
-// Animation timer callback
-static void prv_animation_timer_callback(void *data) {
-  ani_timer = NULL;
-  // loop over list and step each animation
-  AnimationNode *cur_node = head_node;
-  while (cur_node) {
-    // save next pointer before stepping, since a step which completes frees its own node
-    AnimationNode *next_node = cur_node->next;
-    if (epoch() > cur_node->start_time + (uint64_t)cur_node->delay) {
-      (*cur_node->step_func)(cur_node);
-    }
-    cur_node = next_node;
-  }
-  // continue animation
-  if (head_node) {
-    prv_animation_timer_start();
-  }
-  // raise animation update callback
-  if (ani_callback) {
-    ani_callback();
-  }
-}
-
-// Start animation timer if not running
-static void prv_animation_timer_start(void) {
-  if (!ani_timer) {
-    ani_timer = app_timer_register(ANIMATION_TICK_INTERVAL, &prv_animation_timer_callback, NULL);
-  }
+  Animation *animation = property_animation_get_animation(prop);
+  animation_set_duration(animation, duration);
+  animation_set_curve(animation, curve);
+  return animation;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // API Functions
 //
 
-// Animate a GRect by its pointer
-void animation_grect_start(GRect *ptr, GRect to, uint32_t duration, uint32_t delay,
-                           InterpolationCurve interpolation) {
-  // create and add new node
-  AnimationNode *new_node = (AnimationNode *)MALLOC(sizeof(AnimationNode));
-  new_node->step_func = &prv_animation_step_grect;
-  new_node->target = ptr;
-  new_node->from = NULL; // assigned on first "step" callback in case of delayed animation
-  new_node->to = MALLOC(sizeof(GRect));
-  (*(GRect *)new_node->to) = to;
-  new_node->start_time = epoch();
-  new_node->duration = duration;
-  new_node->delay = delay;
-  new_node->interpolation = interpolation;
-  new_node->next = NULL;
-  prv_list_add_node(new_node);
-  // start animation timer if not running
-  prv_animation_timer_start();
-}
-
-// Animate an integer by its pointer
-void animation_int16_start(int16_t *ptr, int16_t to, uint32_t duration, uint32_t delay,
-                           InterpolationCurve interpolation) {
-  // create and add new node
-  AnimationNode *new_node = (AnimationNode *)MALLOC(sizeof(AnimationNode));
-  new_node->step_func = &prv_animation_step_int16;
-  new_node->target = ptr;
-  new_node->from = NULL; // assigned on first "step" callback in case of delayed animation
-  new_node->to = MALLOC(sizeof(int16_t));
-  (*(int16_t *)new_node->to) = to;
-  new_node->start_time = epoch();
-  new_node->duration = duration;
-  new_node->delay = delay;
-  new_node->interpolation = interpolation;
-  new_node->next = NULL;
-  prv_list_add_node(new_node);
-  // start animation timer if not running
-  prv_animation_timer_start();
-}
-
-// Cancel an animation by its pointer
-// For cancelling from outside; a finished animation retires itself with prv_list_remove_node()
-// A value can carry more than one animation at a time -- the bounce is two, the second delayed
-// behind the first -- so stopping one has to mean all of them. Leaving the rest behind lets a
-// delayed animation nobody expected any more fire later and drag the value off to a place the
-// layout it was computed from has since left.
-void animation_stop(void *ptr) {
-  AnimationNode *cur_node = head_node;
-  AnimationNode *pre_node = NULL;
-  while (cur_node) {
-    if (cur_node->target != ptr) {
-      pre_node = cur_node;
-      cur_node = cur_node->next;
-      continue;
-    }
-    // link surrounding nodes, then carry on down the list from the one after this
-    AnimationNode *next_node = cur_node->next;
-    if (pre_node) {
-      pre_node->next = next_node;
-    } else {
-      head_node = next_node;
-    }
-    // destroy node
-    free(cur_node->from);
-    free(cur_node->to);
-    free(cur_node);
-    cur_node = next_node;
+// Move a GRect to where it belongs, replacing whatever was moving it
+void animation_rect_start(GRect *target, GRect to, uint32_t duration, AnimationCurve curve) {
+  Animation *animation = prv_rect_leg(target, NULL, to, duration, curve);
+  if (animation) {
+    prv_slot_schedule(target, animation);
   }
 }
 
-// Cancel all running animations
+// Send a GRect out to one place and back to another, as a single animation
+void animation_rect_bounce(GRect *target, GRect via, GRect to, uint32_t out_ms, uint32_t back_ms,
+                           uint32_t delay_ms) {
+  Animation *out = prv_rect_leg(target, NULL, via, out_ms, AnimationCurveEaseIn);
+  Animation *back = prv_rect_leg(target, &via, to, back_ms, AnimationCurveEaseOut);
+  Animation *bounce = (out && back) ? animation_sequence_create(out, back, NULL) : NULL;
+  if (!bounce) {
+    // nothing has run yet, so the value is still where it was, which is all a bounce owes it
+    if (out) {
+      animation_destroy(out);
+    }
+    if (back) {
+      animation_destroy(back);
+    }
+    return;
+  }
+  animation_set_delay(bounce, delay_ms);
+  prv_slot_schedule(target, bounce);
+}
+
+// Move an integer to a new value, replacing whatever was moving it
+void animation_int16_start(int16_t *target, int16_t to, uint32_t duration, AnimationCurve curve) {
+  PropertyAnimation *prop = property_animation_create(&ani_int16_impl, target, NULL, &to);
+  if (!prop) {
+    return;
+  }
+  Animation *animation = property_animation_get_animation(prop);
+  animation_set_duration(animation, duration);
+  animation_set_curve(animation, curve);
+  prv_slot_schedule(target, animation);
+}
+
+// Cancel whatever is animating a value, by its pointer
+void animation_stop(void *target) {
+  for (uint8_t ii = 0; ii < ANI_SLOT_COUNT; ii++) {
+    if (ani_slots[ii].target == target) {
+      prv_slot_cancel(&ani_slots[ii]);
+    }
+  }
+}
+
+// Cancel every animation this app started
+// One slot at a time rather than animation_unschedule_all(), which would also take the window
+// transition the system runs as the app closes, and that one is not ours to cancel
 void animation_stop_all(void) {
-  // stop timer
-  if (ani_timer) {
-    app_timer_cancel(ani_timer);
+  for (uint8_t ii = 0; ii < ANI_SLOT_COUNT; ii++) {
+    prv_slot_cancel(&ani_slots[ii]);
   }
-  ani_timer = NULL;
-  // destroy all animations
-  AnimationNode *cur_node = head_node;
-  AnimationNode *tmp_node = NULL;
-  while (cur_node) {
-    // index node
-    tmp_node = cur_node;
-    cur_node = cur_node->next;
-    // destroy node
-    free(tmp_node->from);
-    free(tmp_node->to);
-    free(tmp_node);
-  }
-  head_node = NULL;
 }
 
-// Register animation update callback
-void animation_register_update_callback(void *callback) { ani_callback = callback; }
+// Point the animations at the layer they refresh as they run
+void animation_initialize(Layer *layer) { ani_layer = layer; }

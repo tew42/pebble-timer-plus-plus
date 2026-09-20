@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build and run the whole host harness. Not part of the app: it compiles the real settings.c,
-# timer.c, animation.c and text_render.c against stub/pebble.h so the logic can be exercised
-# without an ARM toolchain.
+# timer.c and text_render.c against stub/pebble.h so the logic can be exercised without an ARM
+# toolchain.
 set -u
 ROOT=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
 # the compiler flags and the test binaries are all relative, so work from this directory
@@ -23,13 +23,12 @@ rm -f glyphtest
 gcc $CF -DNDEBUG=1 -o glyphtest glyphtest.c stub/stub.c "$R/text_render.c" || { echo "BUILD FAIL glyphtest"; fail=1; }
 rm -f layouttest
 gcc $CF -DNDEBUG=1 -o layouttest layouttest.c stub/stub.c "$R/text_render.c" || { echo "BUILD FAIL layouttest"; fail=1; }
-rm -f anitest
-gcc $CF -fsanitize=address -g -o anitest anitest.c stub/stub.c || { echo "BUILD FAIL anitest"; fail=1; }
-for t in test ringtest convention flicker shadetest timertest clocktest controltest settingstest rotarytest glyphtest layouttest anitest; do
+for t in test ringtest convention flicker shadetest timertest clocktest controltest settingstest rotarytest glyphtest layouttest; do
   if ./"$t" >/tmp/$t.log 2>&1; then echo "  ok   $t"; else echo "  FAIL $t"; tail -20 /tmp/$t.log; fail=1; fi
 done
 if node jstest.js >/tmp/jstest.log 2>&1; then echo "  ok   jstest"; else echo "  FAIL jstest"; cat /tmp/jstest.log; fail=1; fi
-# main.c and drawing.c cannot be run here, but they can be compiled: syntax only, every platform
+# main.c, drawing.c and animation.c cannot be run here, but they can be compiled: syntax only,
+# on every platform
 bash syntax.sh "$ROOT" || fail=1
 [ $fail -eq 0 ] && echo "harness green" || echo "HARNESS FAILURES"
 exit $fail

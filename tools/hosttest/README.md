@@ -2,16 +2,16 @@
 
 There is no ARM toolchain or watch in most working environments, and the Pebble SDK build only
 tells you that something compiled. This harness compiles the app's real logic — `timer.c`,
-`settings.c`, `animation.c`, `text_render.c`, `rotary_kit.c` — against a stub `pebble.h` and runs
-it on the host, so the arithmetic can be exercised rather than just type-checked.
+`settings.c`, `text_render.c`, `rotary_kit.c` — against a stub `pebble.h` and runs it on the host,
+so the arithmetic can be exercised rather than just type-checked.
 
 ```sh
 bash tools/hosttest/run.sh          # from anywhere; the repo root is found from the script
 bash tools/hosttest/run.sh /path/to/checkout   # or point it at one
 ```
 
-Everything it builds is gitignored. A green run is every test plus a syntax pass over `main.c` and
-`drawing.c` for all seven platforms.
+Everything it builds is gitignored. A green run is every test plus a syntax pass over `main.c`,
+`drawing.c` and `animation.c` for all seven platforms.
 
 ## What each test covers
 
@@ -24,11 +24,15 @@ Everything it builds is gitignored. A green run is every test plus a syntax pass
 | `clocktest` | the footer's projected finish time |
 | `ringtest`, `shadetest`, `flicker`, `convention` | the progress ring's geometry and shading |
 | `glyphtest`, `layouttest` | `text_render.c`'s glyphs and layout |
-| `anitest` | the animation framework's node lifetime |
 | `jstest` | the Clay configuration page, and that its options match `settings.h`'s bounds |
-| `syntax.sh` | `main.c` and `drawing.c` compiled for every platform, both sides of `PBL_TOUCH` |
+| `syntax.sh` | `main.c`, `drawing.c` and `animation.c` compiled for every platform, both sides of `PBL_TOUCH` |
 
-## Two things it cannot do
+## Three things it cannot do
+
+The animations are not tested at all. `animation.c` is now a thin layer over the firmware's
+animation service, and there is no service to run on the host: `anitest` used to assert on the
+hand-rolled framework's node lifetimes, and went with it. The syntax pass type-checks every call
+it makes; what those calls then do is only visible on a watch.
 
 The stub is **not** the SDK. It models the API surface the app uses, so it catches wrong
 arithmetic and wrong control flow, but it cannot catch a call that the real SDK would reject — a

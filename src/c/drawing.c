@@ -123,12 +123,12 @@ static struct {
 // statement about where things belong, so anything still travelling towards an older one -- the
 // tail of a bounce, most often -- has nothing left to say.
 static void prv_place_field(GRect *field, GRect to, uint32_t duration, bool snap) {
-  animation_stop(field);
   if (snap) {
+    animation_stop(field);
     (*field) = to;
     return;
   }
-  animation_grect_start(field, to, duration, 0, CurveSinEaseOut);
+  animation_rect_start(field, to, duration, AnimationCurveEaseOut);
 }
 
 // Which of the five text fields the buttons are pointed at
@@ -335,12 +335,6 @@ static void prv_render_main_text(GContext *ctx) {
   }
 }
 
-// Animation update callback
-static void prv_animation_update_callback(void) {
-  // refresh
-  layer_mark_dirty(drawing_data.layer);
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Progress Ring
 //
@@ -443,8 +437,8 @@ static void prv_render_progress_ring(GContext *ctx, GRect bounds) {
                        TRIG_MAX_ANGLE);
   if (band_angle != solid_angle) {
     graphics_fill_rect_grey_light(ctx, screen);
-    graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius,
-                         RING_ANGLE_TRIG(band_angle), TRIG_MAX_ANGLE);
+    graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius, RING_ANGLE_TRIG(band_angle),
+                         TRIG_MAX_ANGLE);
   }
 #else
   if (band_angle != solid_angle) {
@@ -558,40 +552,38 @@ void drawing_start_bounce_animation(bool upward) {
   // get the currently selected elements
   // only animate the position of one focus layer, stacking gives appearance of stretching
   GRect *txt_rect = &drawing_data.text_fields[prv_selected_field_index()];
-  // animate text
-  GRect rect_to = (*txt_rect);
-  rect_to.origin.y = drawing_data.text_fields[1].origin.y;
-  rect_to.origin.y += (upward ? -1 : 1) * FOCUS_BOUNCE_ANI_HEIGHT;
-  animation_grect_start(txt_rect, rect_to, FOCUS_BOUNCE_ANI_DURATION, 0, CurveSinEaseIn);
-  rect_to.origin.y = drawing_data.text_fields[1].origin.y;
-  animation_grect_start(txt_rect, rect_to, FOCUS_BOUNCE_ANI_SETTLE_DURATION,
-                        FOCUS_BOUNCE_ANI_DURATION, CurveSinEaseOut);
-  // the focus layer sits on that same field, which txt_rect already points at
-  GRect focus_bounds = *txt_rect;
-  focus_bounds.origin.y = drawing_data.text_fields[3].origin.y;
-  focus_bounds = grect_inset(focus_bounds, GEdgeInsets1(-FOCUS_FIELD_BORDER));
-  // animate focus layer
-  rect_to = focus_bounds;
-  rect_to.origin.y += (upward ? -1 : 0) * FOCUS_BOUNCE_ANI_HEIGHT;
-  rect_to.size.h += FOCUS_BOUNCE_ANI_HEIGHT;
-  animation_grect_start(&drawing_data.focus_field, rect_to, FOCUS_BOUNCE_ANI_DURATION,
-                        FOCUS_BOUNCE_ANI_DURATION, CurveSinEaseIn);
-  // return to original position
-  animation_grect_start(&drawing_data.focus_field, focus_bounds, FOCUS_BOUNCE_ANI_SETTLE_DURATION,
-                        FOCUS_BOUNCE_ANI_DURATION * 2, CurveSinEaseOut);
+  // where the digits go and come back to
+  GRect txt_home = (*txt_rect);
+  txt_home.origin.y = drawing_data.text_fields[1].origin.y;
+  GRect txt_bounced = txt_home;
+  txt_bounced.origin.y += (upward ? -1 : 1) * FOCUS_BOUNCE_ANI_HEIGHT;
+  // the focus layer sits on that same field, which txt_rect already points at, and only one of
+  // its edges travels: it stretches after the digits rather than following them
+  GRect focus_home = *txt_rect;
+  focus_home.origin.y = drawing_data.text_fields[3].origin.y;
+  focus_home = grect_inset(focus_home, GEdgeInsets1(-FOCUS_FIELD_BORDER));
+  GRect focus_stretched = focus_home;
+  focus_stretched.origin.y += (upward ? -1 : 0) * FOCUS_BOUNCE_ANI_HEIGHT;
+  focus_stretched.size.h += FOCUS_BOUNCE_ANI_HEIGHT;
+  // every rect is settled before anything starts, so neither bounce reads a value the other is
+  // already moving; the box leaves a beat after the digits do
+  animation_rect_bounce(txt_rect, txt_bounced, txt_home, FOCUS_BOUNCE_ANI_DURATION,
+                        FOCUS_BOUNCE_ANI_SETTLE_DURATION, 0);
+  animation_rect_bounce(&drawing_data.focus_field, focus_stretched, focus_home,
+                        FOCUS_BOUNCE_ANI_DURATION, FOCUS_BOUNCE_ANI_SETTLE_DURATION,
+                        FOCUS_BOUNCE_ANI_DURATION);
 }
 
 // Shrink the focus layer while select is held, hinting at the reset the hold will perform
 void drawing_start_reset_animation(void) {
-  animation_stop(&drawing_data.focus_inset);
   animation_int16_start(&drawing_data.focus_inset, FOCUS_FIELD_SHRINK_INSET,
-                        FOCUS_FIELD_SHRINK_DURATION, 0, CurveLinear);
+                        FOCUS_FIELD_SHRINK_DURATION, AnimationCurveLinear);
 }
 
 // Return the focus layer to full size, once the hold has ended or performed its reset
 void drawing_stop_reset_animation(void) {
-  animation_stop(&drawing_data.focus_inset);
-  animation_int16_start(&drawing_data.focus_inset, 0, FOCUS_FIELD_SHRINK_DURATION, 0, CurveLinear);
+  animation_int16_start(&drawing_data.focus_inset, 0, FOCUS_FIELD_SHRINK_DURATION,
+                        AnimationCurveLinear);
 }
 
 // Render everything to the screen
@@ -646,16 +638,17 @@ void drawing_update_animated(void) {
   }
   // drawing_update() has already snapped the ring, so wind it back and travel there instead
   drawing_data.progress_angle = from_angle;
-  animation_int16_start(&drawing_data.progress_angle, to_angle, PROGRESS_ANI_DURATION, 0,
-                        CurveSinEaseOut);
+  animation_int16_start(&drawing_data.progress_angle, to_angle, PROGRESS_ANI_DURATION,
+                        AnimationCurveEaseOut);
 }
 
 // Initialize the singleton drawing data
 void drawing_initialize(Layer *layer) {
   // get properties
   GRect bounds = layer_get_bounds(layer);
-  // set the layer
+  // set the layer, which is also the one the animations refresh as they run
   drawing_data.layer = layer;
+  animation_initialize(layer);
   // set visual states
   drawing_data.progress_angle = 0;
   drawing_data.band_angle = 0;
@@ -705,8 +698,6 @@ void drawing_initialize(Layer *layer) {
   drawing_data.ring_color = GColorWhite;
   drawing_data.band_color = GColorWhite;
   prv_palette_update();
-  // set animation update callback
-  animation_register_update_callback(&prv_animation_update_callback);
 }
 
 // Destroy the singleton drawing data

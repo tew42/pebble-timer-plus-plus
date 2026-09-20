@@ -1,10 +1,10 @@
 #!/bin/bash
-# Syntax-check the two files the rest of the harness cannot compile. main.c and drawing.c pull in
-# the whole Pebble API, so they were only ever checked by the SDK build -- which is how a missing
-# struct member and a call above its declaration got as far as a push. stub/syntax holds
-# declarations for what they use, and every platform variant they branch on gets a pass, since the
-# one bit and the round cases take different code, and PBL_TOUCH decides whether the click
-# wheel is compiled in at all.
+# Syntax-check the three files the rest of the harness cannot compile. main.c, drawing.c and
+# animation.c pull in the whole Pebble API, so they were only ever checked by the SDK build --
+# which is how a missing struct member and a call above its declaration got as far as a push.
+# stub/syntax holds declarations for what they use, and every platform variant they branch on gets
+# a pass, since the one bit and the round cases take different code, and PBL_TOUCH decides whether
+# the click wheel is compiled in at all.
 set -u
 R=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/src/c
 cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
@@ -12,7 +12,7 @@ CF="-std=c99 -Wall -Wextra -Werror -Wno-unused-parameter -Istub/syntax -I. -Istu
 fail=0
 check() { # name, then defines
   local name=$1; shift
-  for f in main.c drawing.c; do
+  for f in main.c drawing.c animation.c; do
     if ! gcc $CF "$@" -fsyntax-only "$R/$f" 2>/tmp/syntax_${name}_$f.log; then
       echo "  FAIL $name: $f"; sed -n '1,12p' /tmp/syntax_${name}_$f.log; fail=1
     fi
