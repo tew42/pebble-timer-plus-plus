@@ -290,22 +290,12 @@ static void prv_idle_expire(void *data) {
   window_stack_pop(false);
 }
 
-// Get the current control mode of the timer
-// Not stored: the timer knows whether the clock is moving and this file knows where the buttons
-// are pointed, and keeping a third copy of the answer only let the three disagree
-ControlMode main_get_control_mode(void) {
-  if (!timer_is_paused()) {
-    return ControlModeCounting;
-  }
-  switch (main_data.field) {
-  case FieldHr:
-    return ControlModeEditHr;
-  case FieldMin:
-    return ControlModeEditMin;
-  default:
-    return ControlModeEditSec;
-  }
-}
+// Get the field the buttons are pointed at
+// This file knows where the buttons are pointed and the timer knows whether the clock is moving.
+// They used to be handed out as one ControlMode, which meant every caller asking "is it counting"
+// went through this file to have it ask the timer, and the two questions could only be asked
+// together. They are separate questions with separate owners, so they are asked separately now.
+Field main_get_field(void) { return main_data.field; }
 
 // Background layer update procedure
 static void prv_layer_update_proc_handler(Layer *layer, GContext *ctx) {
@@ -730,7 +720,7 @@ static void prv_initialize(void) {
   timer_persist_read();
   settings_initialize(prv_settings_updated);
   // point the buttons at the coarsest field the stored time uses; whether that shows at all is
-  // the timer's business, and main_get_control_mode() asks it
+  // the timer's business, and whoever draws it asks timer_is_paused()
   uint16_t hr, min, sec;
   timer_get_time_parts(&hr, &min, &sec);
   main_data.field = hr ? FieldHr : FieldMin;

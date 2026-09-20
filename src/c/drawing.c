@@ -70,7 +70,8 @@ typedef enum {
 
 // Main drawing state description, used to determine changes in state
 typedef struct {
-  ControlMode control_mode; //< The timer control mode at that state
+  bool paused;              //< Whether the clock was stopped at that state
+  Field field;              //< Which field the buttons were pointed at, while stopped
   uint8_t hr_digits;        //< The number of digits used by the hours
   uint8_t min_digits;       //< The number of digits used by the minutes
 } DrawState;
@@ -122,7 +123,7 @@ static void prv_focus_layer_update_state(Layer *layer, GRect hr_bounds, GRect mi
   // get properties
   GRect bounds = layer_get_bounds(layer);
   // check current control mode
-  if (main_get_control_mode() == ControlModeCounting) {
+  if (!timer_is_paused()) {
     // calculate the bounds for the focus layer off the screen
     bounds.origin.x = bounds.size.w;
     bounds.origin.y = bounds.size.h / 2 - sec_bounds.size.h / 4;
@@ -132,9 +133,9 @@ static void prv_focus_layer_update_state(Layer *layer, GRect hr_bounds, GRect mi
     prv_place_field(&drawing_data.focus_field, bounds, FOCUS_FIELD_ANI_DURATION, snap);
   } else {
     // get final bounds when in editing mode
-    if (main_get_control_mode() == ControlModeEditHr) {
+    if (main_get_field() == FieldHr) {
       bounds = hr_bounds;
-    } else if (main_get_control_mode() == ControlModeEditMin) {
+    } else if (main_get_field() == FieldMin) {
       bounds = min_bounds;
     } else {
       bounds = sec_bounds;
@@ -211,7 +212,7 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
   } else {
     // in timer mode, get time
     time_t end_time = epoch() / MSEC_IN_SEC;
-    if (main_get_control_mode() != ControlModeCounting && !timer_is_chrono()) {
+    if (timer_is_paused() && !timer_is_chrono()) {
       // a length which has been dialled inside an open instant start window will begin credited,
       // so it finishes that much sooner than the digits on their own would say
       end_time += (timer_get_display_ms() - main_instant_credit_ms()) / MSEC_IN_SEC;
@@ -235,7 +236,7 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
 // Get how many trailing seconds digits the display is holding back
 // Editing, a split and a peek all show an exact time, so none of them masks anything.
 static uint8_t prv_masked_second_digits(void) {
-  if (main_get_control_mode() != ControlModeCounting || timer_is_split() || main_is_peeking()) {
+  if (timer_is_paused() || timer_is_split() || main_is_peeking()) {
     return 0;
   }
   return settings_masked_second_digits(timer_get_display_ms());
@@ -244,7 +245,7 @@ static uint8_t prv_masked_second_digits(void) {
 // Format the timer value into the individual text fields (hr : min : sec)
 // `buff` must be zeroed by the caller; fields which are not drawn are left empty
 static void prv_format_text_fields(char buff[TEXT_FIELD_COUNT][6]) {
-  const bool edit_mode = main_get_control_mode() != ControlModeCounting;
+  const bool edit_mode = timer_is_paused();
   uint16_t hr, min, sec;
   timer_get_time_parts(&hr, &min, &sec);
   if (hr) {
@@ -265,7 +266,7 @@ static void prv_format_text_fields(char buff[TEXT_FIELD_COUNT][6]) {
 static void prv_main_text_update_state(Layer *layer, bool snap) {
   // get properties
   GRect bounds = layer_get_bounds(layer);
-  bool edit_mode = main_get_control_mode() != ControlModeCounting;
+  bool edit_mode = timer_is_paused();
   // convert to strings
   char buff[TEXT_FIELD_COUNT][6] = {{'\0'}};
   prv_format_text_fields(buff);
@@ -482,15 +483,16 @@ static void prv_progress_ring_update(void) {
 
 // Compare two different TextStates, return true if conditions are met for a refresh
 static bool prv_draw_state_equal(DrawState a, DrawState b) {
-  if (a.control_mode != b.control_mode) {
+  if (a.paused != b.paused) {
     return false;
   }
-  if (a.control_mode == ControlModeCounting) {
+  if (!a.paused) {
     // counting sizes every field to its own digits, so each place matters
     return a.hr_digits == b.hr_digits && a.min_digits == b.min_digits;
   }
-  // editing pads every field to a fixed width, so only whether the hours are there matters
-  return (a.hr_digits != 0) == (b.hr_digits != 0);
+  // editing pads every field to a fixed width, so only whether the hours are there matters --
+  // and which of them the focus layer is sitting on, which is not a question counting asks
+  return a.field == b.field && (a.hr_digits != 0) == (b.hr_digits != 0);
 }
 
 // Create a state description
@@ -499,7 +501,8 @@ static DrawState prv_draw_state_create(void) {
   uint16_t hr, min, sec;
   timer_get_time_parts(&hr, &min, &sec);
   return (DrawState){
-      .control_mode = main_get_control_mode(),
+      .paused = timer_is_paused(),
+      .field = main_get_field(),
       .hr_digits = (uint8_t)(hr > 0) + (uint8_t)(hr > 9) + (uint8_t)(hr > 99),
       .min_digits = (uint8_t)(min > 0) + (uint8_t)(min > 9),
   };
@@ -531,9 +534,9 @@ void drawing_start_bounce_animation(bool upward) {
   // get the currently selected elements
   // only animate the position of one focus layer, stacking gives appearance of stretching
   GRect *txt_rect;
-  if (main_get_control_mode() == ControlModeEditHr) {
+  if (main_get_field() == FieldHr) {
     txt_rect = &drawing_data.text_fields[0];
-  } else if (main_get_control_mode() == ControlModeEditMin) {
+  } else if (main_get_field() == FieldMin) {
     txt_rect = &drawing_data.text_fields[2];
   } else {
     txt_rect = &drawing_data.text_fields[4];
@@ -548,9 +551,9 @@ void drawing_start_bounce_animation(bool upward) {
                         FOCUS_BOUNCE_ANI_DURATION, CurveSinEaseOut);
   // get focus layer desired bounds
   GRect focus_bounds = drawing_data.text_fields[0];
-  if (main_get_control_mode() == ControlModeEditMin) {
+  if (main_get_field() == FieldMin) {
     focus_bounds = drawing_data.text_fields[2];
-  } else if (main_get_control_mode() == ControlModeEditSec) {
+  } else if (main_get_field() == FieldSec) {
     focus_bounds = drawing_data.text_fields[4];
   }
   focus_bounds.origin.y = drawing_data.text_fields[3].origin.y;
@@ -657,7 +660,7 @@ void drawing_initialize(Layer *layer) {
   }
   drawing_data.focus_inset = 0;
   drawing_data.focus_field.origin = grect_center_point(&bounds);
-  if (main_get_control_mode() == ControlModeCounting) {
+  if (!timer_is_paused()) {
     drawing_data.focus_field.origin.x = bounds.size.w;
   }
   drawing_data.focus_field.size = GSizeZero;

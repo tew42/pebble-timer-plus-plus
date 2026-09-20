@@ -32,19 +32,12 @@
 // Which field the buttons are pointed at while the time is being set
 typedef enum { FieldHr, FieldMin, FieldSec } Field;
 
-// Current control mode
-// Derived rather than stored: the timer says whether the clock is moving, and the field above
-// says where the buttons are pointed. See main_get_control_mode().
-typedef enum {
-  ControlModeEditHr,
-  ControlModeEditMin,
-  ControlModeEditSec,
-  ControlModeCounting
-} ControlMode;
-
-//! Get the current control mode of the app
-//! @return The current ControlMode
-ControlMode main_get_control_mode(void);
+//! Get the field the buttons are pointed at
+//! Only meaningful while the clock is stopped, which is the caller's own question to ask of
+//! timer_is_paused(). Nothing points the buttons at a field while the time is running, and what
+//! is drawn then does not depend on where they were last pointed.
+//! @return The selected Field
+Field main_get_field(void);
 
 //! Get the credit an instant start would give the clock if it started this instant
 //! Zero unless the instant start window is open, which it is while the app sits at zero having
