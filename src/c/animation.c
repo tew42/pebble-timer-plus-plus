@@ -68,21 +68,21 @@ static void prv_animation_step_grect(AnimationNode *node) {
   }
 }
 
-// Step a int32 animation
-static void prv_animation_step_int32(AnimationNode *node) {
+// Step a int16 animation
+static void prv_animation_step_int16(AnimationNode *node) {
   // set from value on first call, allowing another animation to change the target value
   // while this animation is delayed
   if (!node->from) {
-    node->from = MALLOC(sizeof(int32_t));
-    (*(int32_t *)node->from) = (*(int32_t *)node->target);
+    node->from = MALLOC(sizeof(int16_t));
+    (*(int16_t *)node->from) = (*(int16_t *)node->target);
   }
   // step value
-  int32_t from = (*(int32_t *)node->from);
-  int32_t to = (*(int32_t *)node->to);
+  int16_t from = (*(int16_t *)node->from);
+  int16_t to = (*(int16_t *)node->to);
   uint32_t percent_max = node->duration;
   uint32_t percent = epoch() - (node->start_time + node->delay);
-  (*(int32_t *)node->target) =
-      interpolation_integer(from, to, percent, percent_max, node->interpolation);
+  (*(int16_t *)node->target) =
+      (int16_t)interpolation_integer(from, to, percent, percent_max, node->interpolation);
   // continue animation
   if (percent >= percent_max) {
     prv_list_remove_node(node);
@@ -180,15 +180,15 @@ void animation_grect_start(GRect *ptr, GRect to, uint32_t duration, uint32_t del
 }
 
 // Animate an integer by its pointer
-void animation_int32_start(int32_t *ptr, int32_t to, uint32_t duration, uint32_t delay,
+void animation_int16_start(int16_t *ptr, int16_t to, uint32_t duration, uint32_t delay,
                            InterpolationCurve interpolation) {
   // create and add new node
   AnimationNode *new_node = (AnimationNode *)MALLOC(sizeof(AnimationNode));
-  new_node->step_func = &prv_animation_step_int32;
+  new_node->step_func = &prv_animation_step_int16;
   new_node->target = ptr;
   new_node->from = NULL; // assigned on first "step" callback in case of delayed animation
-  new_node->to = MALLOC(sizeof(int32_t));
-  (*(int32_t *)new_node->to) = to;
+  new_node->to = MALLOC(sizeof(int16_t));
+  (*(int16_t *)new_node->to) = to;
   new_node->start_time = epoch();
   new_node->duration = duration;
   new_node->delay = delay;

@@ -32,6 +32,19 @@
 #else
 #define CIRCLE_RADIUS scl_y(375)
 #endif
+// The unit the ring's own angles are counted in. TRIG_MAX_ANGLE is 65536 of them to a revolution,
+// which does not fit an int16_t; a quarter of it does, with room to spare. Both are arbitrary
+// scalars for one full turn, so only the number changes. What it costs is two bits of precision
+// before the value is multiplied back up -- at most 4 trig units, about a twentieth of a pixel of
+// arc on the largest ring here -- against 16384 distinguishable positions for an animation to
+// travel through, where the ring has room to show a few hundred.
+// Only the progress angle is on this scale. The radius arithmetic in prv_render_progress_ring
+// goes through atan2_lookup and sin_lookup, which speak the firmware's 65536 and nothing else,
+// and the TRIG_MAX_ANGLE end-stops handed to graphics_fill_radial are trig units already.
+#define RING_ANGLE_MAX (TRIG_MAX_ANGLE / 4)
+#define RING_ANGLE_TRIG(a) ((int32_t)(a) * (TRIG_MAX_ANGLE / RING_ANGLE_MAX))
+_Static_assert(RING_ANGLE_MAX <= INT16_MAX,
+               "a full turn must fit the type the angles are stored in");
 #define PROGRESS_ANI_DURATION 250
 // The box the digits are sized to fit, as a square centred on the origin and half as tall. The
 // two differ only in how far inside the ring they sit: editing gives the header and footer room.
@@ -82,16 +95,16 @@ typedef struct {
 // Main data
 static struct {
   Layer *layer;                        //< The main layer being drawn on, used to force a refresh
-  int32_t progress_angle;              //< Angle of the progress ring up to the last refresh
-  int32_t band_angle;                  //< Angle the ring reaches by the next refresh
-  int32_t exact_angle;                 //< Angle the ring would reach with nothing masked
+  int16_t progress_angle;              //< Angle of the progress ring up to the last refresh
+  int16_t band_angle;                  //< Angle the ring reaches by the next refresh
+  int16_t exact_angle;                 //< Angle the ring would reach with nothing masked
   bool show_band;                      //< Whether the refresh interval is worth showing
   DrawState draw_state;                //< An arbitrary description of the main drawing state
   bool laid_out;                       //< Whether a layout has been computed at all yet
   GRect text_fields[TEXT_FIELD_COUNT]; //< The number of text fields (hr : min : sec)
   GRect focus_field;                   //< The selection field layer
   GFont time_font;                     //< The digits font, where the platform carries one
-  int32_t focus_inset;                 //< Shrinks the selection field while select is held
+  int16_t focus_inset;                 //< Shrinks the selection field while select is held
   GColor mid_color;                    //< Color of center
   GColor ring_color;                   //< Color of ring
   GColor band_color;                   //< Color of the ring within the current refresh interval
@@ -164,8 +177,8 @@ static void prv_fill_ring_tone(GContext *ctx, GRect rect) {
 
 // field itself, so holding the button can never move the field or fight an animation on it
 static void prv_render_focus_layer(GContext *ctx) {
-  prv_fill_ring_tone(ctx, grect_inset(drawing_data.focus_field,
-                                      GEdgeInsets1((int16_t)drawing_data.focus_inset)));
+  prv_fill_ring_tone(ctx,
+                     grect_inset(drawing_data.focus_field, GEdgeInsets1(drawing_data.focus_inset)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -419,25 +432,29 @@ static void prv_render_progress_ring(GContext *ctx, GRect bounds) {
   bounds.origin.y += bounds.size.h / 2 - radius;
   bounds.size.w = bounds.size.h = radius * 2;
   // the screen is already filled with the ring, so the ring is drawn by covering what is past it
-  const int32_t solid_angle = drawing_data.progress_angle;
-  const int32_t band_angle = drawing_data.show_band ? drawing_data.band_angle : solid_angle;
+  const int16_t solid_angle = drawing_data.progress_angle;
+  const int16_t band_angle = drawing_data.show_band ? drawing_data.band_angle : solid_angle;
   graphics_context_set_fill_color(ctx, BACK_COLOR);
 #ifdef PBL_BW
   // one bit has no third tone to fill a wedge with, so cover from the solid arc, lay a lighter
   // dither over everything (a no-op on the arc, whose pattern already contains it) and cover
   // again past the band, leaving the interval a quarter tone between the ring and the background
-  graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius, solid_angle, TRIG_MAX_ANGLE);
+  graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius, RING_ANGLE_TRIG(solid_angle),
+                       TRIG_MAX_ANGLE);
   if (band_angle != solid_angle) {
     graphics_fill_rect_grey_light(ctx, screen);
-    graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius, band_angle, TRIG_MAX_ANGLE);
+    graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius,
+                         RING_ANGLE_TRIG(band_angle), TRIG_MAX_ANGLE);
   }
 #else
   if (band_angle != solid_angle) {
     graphics_context_set_fill_color(ctx, drawing_data.band_color);
-    graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius, solid_angle, band_angle);
+    graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius,
+                         RING_ANGLE_TRIG(solid_angle), RING_ANGLE_TRIG(band_angle));
     graphics_context_set_fill_color(ctx, BACK_COLOR);
   }
-  graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius, band_angle, TRIG_MAX_ANGLE);
+  graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius, RING_ANGLE_TRIG(band_angle),
+                       TRIG_MAX_ANGLE);
 #endif
 }
 
@@ -474,14 +491,14 @@ static void prv_progress_ring_update(void) {
   }
   // the interval is only worth showing while the seconds it covers are masked
   drawing_data.show_band = masked > 0;
-  drawing_data.band_angle = TRIG_MAX_ANGLE * high_ms / span_ms;
+  drawing_data.band_angle = (int16_t)(RING_ANGLE_MAX * high_ms / span_ms);
   // where the arc would end if the digits were exact, which is inside the interval and where an
   // animated move starts from: the shading stands for a value the move has settled
-  drawing_data.exact_angle = TRIG_MAX_ANGLE * offset_ms / span_ms;
+  drawing_data.exact_angle = (int16_t)(RING_ANGLE_MAX * offset_ms / span_ms);
   // a scheduled refresh never animates, so the ring moves only when the digits do; jumps the user
   // caused go through drawing_update_animated() instead
   animation_stop(&drawing_data.progress_angle);
-  drawing_data.progress_angle = TRIG_MAX_ANGLE * low_ms / span_ms;
+  drawing_data.progress_angle = (int16_t)(RING_ANGLE_MAX * low_ms / span_ms);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -567,14 +584,14 @@ void drawing_start_bounce_animation(bool upward) {
 // Shrink the focus layer while select is held, hinting at the reset the hold will perform
 void drawing_start_reset_animation(void) {
   animation_stop(&drawing_data.focus_inset);
-  animation_int32_start(&drawing_data.focus_inset, FOCUS_FIELD_SHRINK_INSET,
+  animation_int16_start(&drawing_data.focus_inset, FOCUS_FIELD_SHRINK_INSET,
                         FOCUS_FIELD_SHRINK_DURATION, 0, CurveLinear);
 }
 
 // Return the focus layer to full size, once the hold has ended or performed its reset
 void drawing_stop_reset_animation(void) {
   animation_stop(&drawing_data.focus_inset);
-  animation_int32_start(&drawing_data.focus_inset, 0, FOCUS_FIELD_SHRINK_DURATION, 0, CurveLinear);
+  animation_int16_start(&drawing_data.focus_inset, 0, FOCUS_FIELD_SHRINK_DURATION, 0, CurveLinear);
 }
 
 // Render everything to the screen
@@ -620,16 +637,16 @@ void drawing_update(void) {
 // gone by the first frame, since the move has settled what the masked digits stood for. Nothing
 // about the shading animates, and the arc never has to cross it.
 void drawing_update_animated(void) {
-  const int32_t from_angle =
+  const int16_t from_angle =
       drawing_data.show_band ? drawing_data.exact_angle : drawing_data.progress_angle;
   drawing_update();
-  const int32_t to_angle = drawing_data.progress_angle;
+  const int16_t to_angle = drawing_data.progress_angle;
   if (from_angle == to_angle) {
     return; // nowhere to travel, and an animation which moves nothing still costs its frames
   }
   // drawing_update() has already snapped the ring, so wind it back and travel there instead
   drawing_data.progress_angle = from_angle;
-  animation_int32_start(&drawing_data.progress_angle, to_angle, PROGRESS_ANI_DURATION, 0,
+  animation_int16_start(&drawing_data.progress_angle, to_angle, PROGRESS_ANI_DURATION, 0,
                         CurveSinEaseOut);
 }
 

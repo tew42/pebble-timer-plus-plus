@@ -28,7 +28,7 @@ void animation_grect_start(GRect *ptr, GRect to, uint32_t duration, uint32_t del
 //! @param duration The length of time over which to animate the value
 //! @param delay The length of time to wait before running the animation
 //! @param interpolation The interpolation mode to use for the animation
-void animation_int32_start(int32_t *ptr, int32_t to, uint32_t duration, uint32_t delay,
+void animation_int16_start(int16_t *ptr, int16_t to, uint32_t duration, uint32_t delay,
                            InterpolationCurve interpolation);
 
 //! Cancel every animation on a value, by its pointer

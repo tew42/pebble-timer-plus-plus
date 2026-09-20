@@ -1,9 +1,10 @@
 #include "settings.c"
-#define TRIG_MAX_ANGLE 0x10000
+// the ring's own angle unit, a quarter of the firmware's 65536 so it fits an int16_t
+#define RING_ANGLE_MAX (0x10000 / 4)
 static int failures = 0;
 #define CHECK(c, ...) do { if (!(c)) { printf("  FAIL: "); printf(__VA_ARGS__); printf("\n"); failures++; } } while (0)
 
-typedef struct { int32_t solid, band, exact; bool show; int64_t low_ms, high_ms; } Ring;
+typedef struct { int16_t solid, band, exact; bool show; int64_t low_ms, high_ms; } Ring;
 
 // Mirrors timer_get_display_ms(): counting down rounds up, counting up rounds down
 static int64_t display_of(int64_t v, bool chrono) {
@@ -25,9 +26,9 @@ static Ring ring_at(int64_t value_ms, bool chrono, int64_t length_ms, bool exact
   if (!chrono && step_ms > MSEC_IN_SEC) { low_ms -= MSEC_IN_SEC; }
   const int64_t high_ms = (low_ms + step_ms < span_ms) ? low_ms + step_ms : span_ms;
   if (low_ms < 0) { low_ms = 0; }
-  return (Ring){.solid = TRIG_MAX_ANGLE * low_ms / span_ms,
-                .band = TRIG_MAX_ANGLE * high_ms / span_ms,
-                .exact = TRIG_MAX_ANGLE * offset_ms / span_ms,
+  return (Ring){.solid = (int16_t)(RING_ANGLE_MAX * low_ms / span_ms),
+                .band = (int16_t)(RING_ANGLE_MAX * high_ms / span_ms),
+                .exact = (int16_t)(RING_ANGLE_MAX * offset_ms / span_ms),
                 .show = masked > 0,
                 .low_ms = low_ms,
                 .high_ms = high_ms};
@@ -99,7 +100,7 @@ int main(void) {
   printf("\ndegenerate cases:\n");
   settings_data.ten_second_above_sec = 20; settings_data.minute_above_min = 1;
   Ring r = ring_at(90000, true, 0, false); // stopwatch, 1:30 elapsed, minute updates apply
-  CHECK(r.show && r.solid == 0 && r.band == TRIG_MAX_ANGLE,
+  CHECK(r.show && r.solid == 0 && r.band == RING_ANGLE_MAX,
         "stopwatch on minute updates should band the whole ring, got [%d,%d] show=%d",
         r.solid, r.band, r.show);
   printf("  stopwatch + minute updates -> whole ring banded: solid=%d band=%d\n", r.solid, r.band);
@@ -111,8 +112,8 @@ int main(void) {
   // a chrono band ending on the minute must be a full circle, not a wrap to zero
   settings_data.ten_second_above_sec = 20; settings_data.minute_above_min = SETTINGS_NEVER;
   r = ring_at(57000, true, 0, false);
-  CHECK(r.band == TRIG_MAX_ANGLE, "chrono band ending on the minute wrapped to %d", r.band);
-  printf("  chrono band ending on the minute -> %d (TRIG_MAX_ANGLE), no wrap\n", r.band);
+  CHECK(r.band == RING_ANGLE_MAX, "chrono band ending on the minute wrapped to %d", r.band);
+  printf("  chrono band ending on the minute -> %d (RING_ANGLE_MAX), no wrap\n", r.band);
 
   // 5. while the timer is being set or paused the ring is exact and unbanded, and it follows
   // every second as it is dialled in
@@ -124,7 +125,7 @@ int main(void) {
         "0:3_ should cover (29000,39000], got [%lld,%lld]", (long long)b.low_ms,
         (long long)b.high_ms);
   printf("  covers [%lld,%lld] -> cutoff at %d/%d = %d degrees, not 180\n", (long long)b.low_ms,
-         (long long)b.high_ms, b.solid, TRIG_MAX_ANGLE, b.solid * 360 / TRIG_MAX_ANGLE);
+         (long long)b.high_ms, b.solid, RING_ANGLE_MAX, b.solid * 360 / RING_ANGLE_MAX);
   char l1a[32], l1b[32]; digits(29001, false, l1a); digits(29000, false, l1b);
   CHECK(strcmp(l1a, "0:3_") == 0 && strcmp(l1b, "0:2_") == 0,
         "the label should switch at 29000: 29001->%s 29000->%s", l1a, l1b);
@@ -136,7 +137,7 @@ int main(void) {
   for (int64_t v = 65000; v >= 60000; v -= 1000) {
     Ring e = ring_at(v, false, 65000, true);
     CHECK(!e.show, "edit mode showed a band at %llds", (long long)v / 1000);
-    CHECK(e.solid == TRIG_MAX_ANGLE * v / 65000, "edit ring quantised at %llds: %d",
+    CHECK(e.solid == RING_ANGLE_MAX * v / 65000, "edit ring quantised at %llds: %d",
           (long long)v / 1000, e.solid);
     if (e.solid == prev) { held++; }
     prev = e.solid;
@@ -155,7 +156,7 @@ int main(void) {
   CHECK(split.low_ms == 34000 && split.high_ms == 35000,
         "a split at 1:34 should cover [34000,35000), got [%lld,%lld]", (long long)split.low_ms,
         (long long)split.high_ms);
-  CHECK(split.solid == (int32_t)((int64_t)TRIG_MAX_ANGLE * 34000 / MSEC_IN_MIN),
+  CHECK(split.solid == (int16_t)((int64_t)RING_ANGLE_MAX * 34000 / MSEC_IN_MIN),
         "the split ring sits at %d, not on the second it shows", split.solid);
   char sp[32]; digits(94000, true, sp);
   printf("  running %s banded [%lld,%lld], split exact at [%lld,%lld]\n", sp,

@@ -152,17 +152,17 @@ int main(void) {
   printf("\nanimating the inset leaves the field where it belongs:\n");
   animation_stop_all();
   head_node = NULL;
-  int32_t inset = 0;
+  int16_t inset = 0;
   box = GRect(144, 60, 40, 10);
   fake_now_ms = 5000000;
-  animation_int32_start(&inset, 18, 80, 0, CurveLinear);
+  animation_int16_start(&inset, 18, 80, 0, CurveLinear);
   prv_tick_to(5000000 + 90);
   CHECK(inset == 18, "the shrink reached %d, not 18", inset);
   CHECK(box.origin.x == 144 && box.size.w == 40, "the field moved to x=%d, %d wide",
         box.origin.x, box.size.w);
   // and releasing the button returns it, with nothing left queued to fire later
   animation_stop(&inset);
-  animation_int32_start(&inset, 0, 80, 0, CurveLinear);
+  animation_int16_start(&inset, 0, 80, 0, CurveLinear);
   prv_tick_to(5000000 + 200);
   CHECK(inset == 0, "the release left the inset at %d", inset);
   CHECK(prv_list_length() == 0, "%d animations still queued after the release",
