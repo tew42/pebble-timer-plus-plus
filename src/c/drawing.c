@@ -177,8 +177,6 @@ static void prv_focus_layer_update_state(GRect bounds, const GRect fields[TEXT_F
   prv_place_field(&drawing_data.focus_field, to, FOCUS_FIELD_ANI_DURATION, snap);
 }
 
-// Draw the focus layer
-// The shrink which hints that select is held is an inset applied here, not a change of the
 // Fill a rect with the ring's own tone
 // One bit hardware has no third colour to fill with, so it dithers instead. Written once because
 // both callers had it, differing only in that one set the fill colour outside the #ifdef and so
@@ -192,7 +190,9 @@ static void prv_fill_ring_tone(GContext *ctx, GRect rect) {
 #endif
 }
 
-// field itself, so holding the button can never move the field or fight an animation on it
+// Draw the focus layer
+// The shrink which hints that select is held is an inset applied here, not a change of the field
+// itself, so holding the button can never move the field or fight an animation on it
 static void prv_render_focus_layer(GContext *ctx) {
   prv_fill_ring_tone(ctx,
                      grect_inset(drawing_data.focus_field, GEdgeInsets1(drawing_data.focus_inset)));
