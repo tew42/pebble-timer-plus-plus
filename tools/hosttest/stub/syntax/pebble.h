@@ -126,6 +126,10 @@ void property_animation_update_int16(PropertyAnimation *property_animation,
                                      const uint32_t distance_normalized);
 void property_animation_update_grect(PropertyAnimation *property_animation,
                                      const uint32_t distance_normalized);
+bool property_animation_from(PropertyAnimation *property_animation, void *value, size_t size,
+                             bool set);
+bool property_animation_to(PropertyAnimation *property_animation, void *value, size_t size,
+                           bool set);
 
 // clicks
 typedef struct ClickRecognizer *ClickRecognizerRef;

@@ -13,6 +13,7 @@
 
 #include "animation.h"
 #include "utility.h"
+#include <string.h>
 
 // One slot per animated value. The drawing code animates five text fields, the focus field, the
 // focus inset, the ring angle and the two bounce displacements, which is exactly this many; a slot
@@ -112,15 +113,42 @@ static void prv_slot_schedule(void *target, Animation *animation) {
   animation_schedule(animation);
 }
 
+// Settle an animation's endpoints, which create() cannot do for a custom implementation
+// property_animation_create() works out which of the six value types an animation carries by
+// comparing its update function against its own, and an app can never win that comparison: every
+// exported function reaches the app as a trampoline in the app's own binary which branches through
+// the firmware's jump table, so the pointer stored here is the trampoline's and the pointer
+// compared against is the firmware's. Nothing matches, no branch runs, and both endpoints keep the
+// 0xff that create() fills them with first -- every field reads -1, so a rect ends up one pixel
+// wide at a negative origin and the digits and the focus box stop being drawn at all. The
+// firmware's own layer-frame animation escapes it only because its implementation is a firmware
+// static, so that comparison is firmware against firmware.
+// property_animation_from() and _to() are told the size and memcpy it, asking nothing about types,
+// which is why the endpoints go in through them and the getter is never relied on for a value.
+static void prv_set_endpoints(PropertyAnimation *prop, void *from, void *to, size_t size) {
+  property_animation_from(prop, from, size, true);
+  property_animation_to(prop, to, size, true);
+}
+
+// Put a value where it belongs without travelling, for when there is nothing to travel with
+// Running out of room for an animation must not cost the value its destination: a rect left at an
+// older layout is one the digits were never sized for, and stops being drawn at all.
+static void prv_arrive(void *target, const void *to, size_t size) {
+  animation_stop(target);
+  memcpy(target, to, size);
+  layer_mark_dirty(ani_layer);
+}
+
 // Build one leg of an int16 animation, which is the whole of a plain move and half of a bounce
-// A NULL `from` starts the leg wherever the value is at the moment it is built, which the service
-// reads for itself through the getter.
+// A NULL `from` starts the leg wherever the value is at the moment it is built
 static Animation *prv_int16_leg(int16_t *target, int16_t *from, int16_t to, uint32_t duration,
                                 AnimationCurve curve) {
-  PropertyAnimation *prop = property_animation_create(&ani_int16_impl, target, from, &to);
+  PropertyAnimation *prop = property_animation_create(&ani_int16_impl, target, NULL, NULL);
   if (!prop) {
     return NULL;
   }
+  int16_t start = from ? (*from) : (*target);
+  prv_set_endpoints(prop, &start, &to, sizeof(int16_t));
   Animation *animation = property_animation_get_animation(prop);
   animation_set_duration(animation, duration);
   animation_set_curve(animation, curve);
@@ -132,13 +160,16 @@ static Animation *prv_int16_leg(int16_t *target, int16_t *from, int16_t to, uint
 //
 
 // Move a GRect to where it belongs, replacing whatever was moving it
-// The only rect animation there is, so it builds its own: a rect is only ever sent somewhere from
-// wherever it happens to be, which is what a NULL `from` asks the service to read for itself.
+// The only rect animation there is, so it builds its own; a rect always travels from wherever it
+// happens to be, which is read here rather than left to the getter, for the reason above.
 void animation_rect_start(GRect *target, GRect to, uint32_t duration, AnimationCurve curve) {
-  PropertyAnimation *prop = property_animation_create(&ani_rect_impl, target, NULL, &to);
+  PropertyAnimation *prop = property_animation_create(&ani_rect_impl, target, NULL, NULL);
   if (!prop) {
+    prv_arrive(target, &to, sizeof(GRect));
     return;
   }
+  GRect start = (*target);
+  prv_set_endpoints(prop, &start, &to, sizeof(GRect));
   Animation *animation = property_animation_get_animation(prop);
   animation_set_duration(animation, duration);
   animation_set_curve(animation, curve);
@@ -148,9 +179,11 @@ void animation_rect_start(GRect *target, GRect to, uint32_t duration, AnimationC
 // Move an integer to a new value, replacing whatever was moving it
 void animation_int16_start(int16_t *target, int16_t to, uint32_t duration, AnimationCurve curve) {
   Animation *animation = prv_int16_leg(target, NULL, to, duration, curve);
-  if (animation) {
-    prv_slot_schedule(target, animation);
+  if (!animation) {
+    prv_arrive(target, &to, sizeof(int16_t));
+    return;
   }
+  prv_slot_schedule(target, animation);
 }
 
 // Send an integer out to a value and back to zero, as a single animation
@@ -160,13 +193,15 @@ void animation_int16_bounce(int16_t *target, int16_t peak, uint32_t out_ms, uint
   Animation *back = prv_int16_leg(target, &peak, 0, back_ms, AnimationCurveEaseOut);
   Animation *bounce = (out && back) ? animation_sequence_create(out, back, NULL) : NULL;
   if (!bounce) {
-    // nothing has run yet, so the value is still where it was, which is all a bounce owes it
+    // a bounce ends where it started, so one which cannot run has simply already finished
     if (out) {
       animation_destroy(out);
     }
     if (back) {
       animation_destroy(back);
     }
+    const int16_t home = 0;
+    prv_arrive(target, &home, sizeof(int16_t));
     return;
   }
   animation_set_delay(bounce, delay_ms);
