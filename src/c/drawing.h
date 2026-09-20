@@ -11,7 +11,12 @@
 #pragma once
 #include <pebble.h>
 
-//! Create bounce animation for focus layer
+//! Hop the selected digits, and stretch the focus box after them
+//! Both are displacements the render adds on top, not changes to the rects the layout owns, so a
+//! layout which is moving those rects carries on doing it while the hop rides over it. The next
+//! draw state change sends the hop home again, over the same durations that layout uses.
+//! It stays with the field which was selected when it started, which is why it has to be asked
+//! for after the refresh that takes the press into account, not before.
 //! @param upward Animate the bounce upward or downward
 void drawing_start_bounce_animation(bool upward);
 

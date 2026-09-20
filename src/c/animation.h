@@ -20,25 +20,25 @@
 //! @param curve The easing to move it with
 void animation_rect_start(GRect *target, GRect to, uint32_t duration, AnimationCurve curve);
 
-//! Send a GRect out to one place and back to another, as a single animation
-//! The two legs run in sequence, so the return starts exactly where the departure ended. That
-//! meeting point is passed in rather than read back: the service settles an animation's endpoints
-//! as it creates it, and at that moment the first leg has not moved anything yet.
-//! @param target The GRect to animate, which is also its identity
-//! @param via Where the first leg ends, and so where the second begins
-//! @param to Where the second leg ends
-//! @param out_ms The length of the first leg
-//! @param back_ms The length of the second leg
-//! @param delay_ms The length of time to wait before the first leg starts
-void animation_rect_bounce(GRect *target, GRect via, GRect to, uint32_t out_ms, uint32_t back_ms,
-                           uint32_t delay_ms);
-
 //! Move an integer to a new value, replacing whatever was moving it
 //! @param target The value to animate, which is also its identity
 //! @param to The value to animate it to
 //! @param duration The length of time over which to move it
 //! @param curve The easing to move it with
 void animation_int16_start(int16_t *target, int16_t to, uint32_t duration, AnimationCurve curve);
+
+//! Send an integer out to a value and back to zero, as a single animation
+//! The two legs run in sequence, so the return starts exactly where the departure ended. That
+//! meeting point is passed in rather than read back: the service settles an animation's endpoints
+//! as it creates it, and at that moment the first leg has not moved anything yet. The return's
+//! own end is always zero, which is what makes this a displacement rather than a position.
+//! @param target The value to animate, which is also its identity
+//! @param peak Where the first leg ends, and so where the second begins
+//! @param out_ms The length of the first leg
+//! @param back_ms The length of the second leg
+//! @param delay_ms The length of time to wait before the first leg starts
+void animation_int16_bounce(int16_t *target, int16_t peak, uint32_t out_ms, uint32_t back_ms,
+                            uint32_t delay_ms);
 
 //! Cancel whatever is animating a value, by its pointer
 //! @param target A pointer to the value to leave where it is

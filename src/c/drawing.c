@@ -123,6 +123,9 @@ static struct {
   GFont time_font;                     //< The digits font, where the platform carries one
   int16_t focus_inset;                 //< Shrinks the selection field while select is held
   bool reset_hint;                     //< Whether that shrink is up, so it is put away once
+  int16_t bounce_digits;               //< How far the hopping digits are displaced, zero at rest
+  int16_t bounce_box;                  //< The same for the focus box, which trails them by a beat
+  uint8_t bounce_index;                //< Which field the hop belongs to, pinned as it starts
   GColor mid_color;                    //< Color of center
   GColor ring_color;                   //< Color of ring
   GColor band_color;                   //< Color of the ring within the current refresh interval
@@ -137,9 +140,8 @@ static struct {
 // A layout has somewhere to travel from only when the fields it is made of are the same ones: when
 // the hours appear or go, the rect they need has no width to grow from and the rects beside them
 // change size as well as place, which reads as a glitch rather than as a move.
-// Either way the new layout replaces whatever was moving these rects before. A layout is a
-// statement about where things belong, so anything still travelling towards an older one -- the
-// tail of a bounce, most often -- has nothing left to say.
+// Either way the new layout replaces whatever was moving these rects before: a layout is a
+// statement about where things belong, so a move towards an older one has nothing left to say.
 static void prv_place_field(GRect *field, GRect to, uint32_t duration, bool snap) {
   if (snap) {
     animation_stop(field);
@@ -193,10 +195,22 @@ static void prv_fill_ring_tone(GContext *ctx, GRect rect) {
 
 // Draw the focus layer
 // The shrink which hints that select is held is an inset applied here, not a change of the field
-// itself, so holding the button can never move the field or fight an animation on it
+// itself, so holding the button can never move the field or fight an animation on it. The bounce
+// is the same idea one step further: the box grows by the hop's displacement rather than being
+// sent somewhere, so the layout underneath it stays free to move it.
 static void prv_render_focus_layer(GContext *ctx) {
-  prv_fill_ring_tone(ctx,
-                     grect_inset(drawing_data.focus_field, GEdgeInsets1(drawing_data.focus_inset)));
+  // The edge in the direction of travel moves and the other stays pinned, which is what makes the
+  // box stretch after the digits rather than follow them. Sound only while the displacement holds
+  // one sign, which it does: the legs run zero to peak and back, on curves which never overshoot.
+  // The hop goes on before the inset, because grect_inset flattens a rect it would have to give a
+  // negative extent, and the box starts life with no size at all.
+  GRect box = drawing_data.focus_field;
+  const int16_t hop = drawing_data.bounce_box;
+  if (hop < 0) {
+    box.origin.y += hop;
+  }
+  box.size.h += (hop < 0) ? -hop : hop;
+  prv_fill_ring_tone(ctx, grect_inset(box, GEdgeInsets1(drawing_data.focus_inset)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -349,7 +363,14 @@ static void prv_render_main_text(GContext *ctx) {
   prv_format_text_fields(buff);
   // draw the main text elements in their respective bounds
   for (uint8_t ii = 0; ii < TEXT_FIELD_COUNT; ii++) {
-    text_render_draw_scalable_text(ctx, buff[ii], drawing_data.text_fields[ii]);
+    GRect field = drawing_data.text_fields[ii];
+    if (ii == drawing_data.bounce_index) {
+      // the hop, applied here rather than written into the rect the layout owns. Only the origin
+      // moves, so the size text_render fits its glyphs to is the settled one and the digits keep
+      // their size all the way out and back.
+      field.origin.y += drawing_data.bounce_digits;
+    }
+    text_render_draw_scalable_text(ctx, buff[ii], field);
   }
 }
 
@@ -557,6 +578,27 @@ static void prv_update_draw_state(Layer *layer) {
                     (cur_draw_state.hr_digits != 0) != (drawing_data.draw_state.hr_digits != 0);
   drawing_data.laid_out = true;
   drawing_data.draw_state = cur_draw_state;
+  // A layout is a statement about where things belong, so a hop still in the air over an older one
+  // has nothing left to say. It used to be retired without anyone saying so: the hop lived in the
+  // rect, so sending the rect to its new place undid the hop and performed the layout in the one
+  // move. Out of the rect, it has to be sent home in its own right -- over the same durations and
+  // with the same easing the rects are given here, which is what makes the two add back up to the
+  // single move it was: the digits take prv_main_text_update_state's duration and the box takes
+  // prv_focus_layer_update_state's, and a change to either has to be made here as well.
+  // Unconditional on purpose: a displacement resting at zero is no proof there is no bounce, since
+  // the box's leg waits out its delay there, and a guard would leave that leg queued to fire
+  // against a layout it was never aimed at.
+  if (snap) {
+    animation_stop(&drawing_data.bounce_digits);
+    animation_stop(&drawing_data.bounce_box);
+    drawing_data.bounce_digits = 0;
+    drawing_data.bounce_box = 0;
+  } else {
+    animation_int16_start(&drawing_data.bounce_digits, 0, TEXT_FIELD_ANI_DURATION,
+                          AnimationCurveEaseOut);
+    animation_int16_start(&drawing_data.bounce_box, 0, FOCUS_FIELD_ANI_DURATION,
+                          AnimationCurveEaseOut);
+  }
   // update text state
   prv_main_text_update_state(layer, snap);
 }
@@ -565,31 +607,26 @@ static void prv_update_draw_state(Layer *layer) {
 // API Implementation
 //
 
-// Create bounce animation for focus layer
+// Hop the selected digits, and stretch the focus box after them
+// Neither rect is touched. Both are displacements the render adds on, so a layout which happens to
+// be moving the digits underneath goes on doing it and the hop rides over the top, where the two
+// used to have to fight over the one rect and the hop won it.
 void drawing_start_bounce_animation(bool upward) {
-  // get the currently selected elements
-  // only animate the position of one focus layer, stacking gives appearance of stretching
-  GRect *txt_rect = &drawing_data.text_fields[prv_selected_field_index()];
-  // where the digits go and come back to
-  GRect txt_home = (*txt_rect);
-  txt_home.origin.y = drawing_data.text_fields[1].origin.y;
-  GRect txt_bounced = txt_home;
-  txt_bounced.origin.y += (upward ? -1 : 1) * FOCUS_BOUNCE_ANI_HEIGHT;
-  // the focus layer sits on that same field, which txt_rect already points at, and only one of
-  // its edges travels: it stretches after the digits rather than following them
-  GRect focus_home = *txt_rect;
-  focus_home.origin.y = drawing_data.text_fields[3].origin.y;
-  focus_home = grect_inset(focus_home, GEdgeInsets1(-FOCUS_FIELD_BORDER));
-  GRect focus_stretched = focus_home;
-  focus_stretched.origin.y += (upward ? -1 : 0) * FOCUS_BOUNCE_ANI_HEIGHT;
-  focus_stretched.size.h += FOCUS_BOUNCE_ANI_HEIGHT;
-  // every rect is settled before anything starts, so neither bounce reads a value the other is
-  // already moving; the box leaves a beat after the digits do
-  animation_rect_bounce(txt_rect, txt_bounced, txt_home, FOCUS_BOUNCE_ANI_DURATION,
-                        FOCUS_BOUNCE_ANI_SETTLE_DURATION, 0);
-  animation_rect_bounce(&drawing_data.focus_field, focus_stretched, focus_home,
-                        FOCUS_BOUNCE_ANI_DURATION, FOCUS_BOUNCE_ANI_SETTLE_DURATION,
-                        FOCUS_BOUNCE_ANI_DURATION);
+  const uint8_t index = prv_selected_field_index();
+  if (index != drawing_data.bounce_index) {
+    // one displacement serves whichever field is being hopped, so a hop aimed at a new field
+    // starts from nothing rather than from whatever the last one left decaying on its way home
+    animation_stop(&drawing_data.bounce_digits);
+    drawing_data.bounce_digits = 0;
+    drawing_data.bounce_index = index;
+  }
+  // y grows downwards, so a hop upwards is a negative displacement; the box takes the same one a
+  // beat later, and grows into it rather than moving, which is what reads as a stretch
+  const int16_t peak = (int16_t)((upward ? -1 : 1) * FOCUS_BOUNCE_ANI_HEIGHT);
+  animation_int16_bounce(&drawing_data.bounce_digits, peak, FOCUS_BOUNCE_ANI_DURATION,
+                         FOCUS_BOUNCE_ANI_SETTLE_DURATION, 0);
+  animation_int16_bounce(&drawing_data.bounce_box, peak, FOCUS_BOUNCE_ANI_DURATION,
+                         FOCUS_BOUNCE_ANI_SETTLE_DURATION, FOCUS_BOUNCE_ANI_DURATION);
 }
 
 // Shrink the focus layer while select is held, hinting at the reset the hold will perform
@@ -686,6 +723,9 @@ void drawing_initialize(Layer *layer) {
   }
   drawing_data.focus_inset = 0;
   drawing_data.reset_hint = false;
+  drawing_data.bounce_digits = 0;
+  drawing_data.bounce_box = 0;
+  drawing_data.bounce_index = 0;
   drawing_data.focus_field.origin = grect_center_point(&bounds);
   if (!timer_is_paused()) {
     drawing_data.focus_field.origin.x = bounds.size.w;

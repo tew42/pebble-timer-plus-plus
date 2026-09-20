@@ -15,9 +15,10 @@
 #include "utility.h"
 
 // One slot per animated value. The drawing code animates five text fields, the focus field, the
-// focus inset and the ring angle, which is exactly this many; a slot is claimed the first time a
-// value animates and belongs to it from then on.
-#define ANI_SLOT_COUNT 8
+// focus inset, the ring angle and the two bounce displacements, which is exactly this many; a slot
+// is claimed the first time a value animates and belongs to it from then on. The count is an
+// inventory, so a new animated value has to be added to both it and this list.
+#define ANI_SLOT_COUNT 10
 
 // What one animated value is running
 typedef struct {
@@ -111,12 +112,12 @@ static void prv_slot_schedule(void *target, Animation *animation) {
   animation_schedule(animation);
 }
 
-// Build one leg of a rect animation, which is the whole of most of them
+// Build one leg of an int16 animation, which is the whole of a plain move and half of a bounce
 // A NULL `from` starts the leg wherever the value is at the moment it is built, which the service
 // reads for itself through the getter.
-static Animation *prv_rect_leg(GRect *target, GRect *from, GRect to, uint32_t duration,
-                               AnimationCurve curve) {
-  PropertyAnimation *prop = property_animation_create(&ani_rect_impl, target, from, &to);
+static Animation *prv_int16_leg(int16_t *target, int16_t *from, int16_t to, uint32_t duration,
+                                AnimationCurve curve) {
+  PropertyAnimation *prop = property_animation_create(&ani_int16_impl, target, from, &to);
   if (!prop) {
     return NULL;
   }
@@ -131,18 +132,32 @@ static Animation *prv_rect_leg(GRect *target, GRect *from, GRect to, uint32_t du
 //
 
 // Move a GRect to where it belongs, replacing whatever was moving it
+// The only rect animation there is, so it builds its own: a rect is only ever sent somewhere from
+// wherever it happens to be, which is what a NULL `from` asks the service to read for itself.
 void animation_rect_start(GRect *target, GRect to, uint32_t duration, AnimationCurve curve) {
-  Animation *animation = prv_rect_leg(target, NULL, to, duration, curve);
+  PropertyAnimation *prop = property_animation_create(&ani_rect_impl, target, NULL, &to);
+  if (!prop) {
+    return;
+  }
+  Animation *animation = property_animation_get_animation(prop);
+  animation_set_duration(animation, duration);
+  animation_set_curve(animation, curve);
+  prv_slot_schedule(target, animation);
+}
+
+// Move an integer to a new value, replacing whatever was moving it
+void animation_int16_start(int16_t *target, int16_t to, uint32_t duration, AnimationCurve curve) {
+  Animation *animation = prv_int16_leg(target, NULL, to, duration, curve);
   if (animation) {
     prv_slot_schedule(target, animation);
   }
 }
 
-// Send a GRect out to one place and back to another, as a single animation
-void animation_rect_bounce(GRect *target, GRect via, GRect to, uint32_t out_ms, uint32_t back_ms,
-                           uint32_t delay_ms) {
-  Animation *out = prv_rect_leg(target, NULL, via, out_ms, AnimationCurveEaseIn);
-  Animation *back = prv_rect_leg(target, &via, to, back_ms, AnimationCurveEaseOut);
+// Send an integer out to a value and back to zero, as a single animation
+void animation_int16_bounce(int16_t *target, int16_t peak, uint32_t out_ms, uint32_t back_ms,
+                            uint32_t delay_ms) {
+  Animation *out = prv_int16_leg(target, NULL, peak, out_ms, AnimationCurveEaseIn);
+  Animation *back = prv_int16_leg(target, &peak, 0, back_ms, AnimationCurveEaseOut);
   Animation *bounce = (out && back) ? animation_sequence_create(out, back, NULL) : NULL;
   if (!bounce) {
     // nothing has run yet, so the value is still where it was, which is all a bounce owes it
@@ -156,18 +171,6 @@ void animation_rect_bounce(GRect *target, GRect via, GRect to, uint32_t out_ms, 
   }
   animation_set_delay(bounce, delay_ms);
   prv_slot_schedule(target, bounce);
-}
-
-// Move an integer to a new value, replacing whatever was moving it
-void animation_int16_start(int16_t *target, int16_t to, uint32_t duration, AnimationCurve curve) {
-  PropertyAnimation *prop = property_animation_create(&ani_int16_impl, target, NULL, &to);
-  if (!prop) {
-    return;
-  }
-  Animation *animation = property_animation_get_animation(prop);
-  animation_set_duration(animation, duration);
-  animation_set_curve(animation, curve);
-  prv_slot_schedule(target, animation);
 }
 
 // Cancel whatever is animating a value, by its pointer
