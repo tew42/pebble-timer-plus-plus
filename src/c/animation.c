@@ -34,33 +34,39 @@ static Layer *ani_layer = NULL;           //< Marked dirty on every frame of eve
 // Private Functions
 //
 
-// The subject of every animation here is the animated value itself, so the accessors are barely
-// more than the dereference. Marking the layer dirty from the setter is what makes an animation
-// visible at all: the service moves numbers and has no idea anything is drawn with them.
-static void prv_set_rect(void *subject, GRect value) {
-  (*(GRect *)subject) = value;
-  layer_mark_dirty(ani_layer);
+// Ask for a repaint, which is what makes an animation visible at all: the service moves numbers
+// and has no idea anything is drawn with them. Guarded because layer_mark_dirty dereferences
+// without checking, and nothing but call order keeps a setter from running before
+// animation_initialize or after the layer is destroyed.
+static void prv_refresh(void) {
+  if (ani_layer) {
+    layer_mark_dirty(ani_layer);
+  }
 }
 
-static GRect prv_get_rect(void *subject) { return (*(GRect *)subject); }
+// The subject of every animation here is the animated value itself, so the setters are barely more
+// than the dereference. There are no getters on purpose: the firmware would only ever call one to
+// work out an endpoint for itself, which it cannot do for an implementation an app supplied, so
+// prv_set_endpoints does that job and a getter here would be a function nothing calls.
+static void prv_set_rect(void *subject, GRect value) {
+  (*(GRect *)subject) = value;
+  prv_refresh();
+}
 
 static void prv_set_int16(void *subject, int16_t value) {
   (*(int16_t *)subject) = value;
-  layer_mark_dirty(ani_layer);
+  prv_refresh();
 }
 
-static int16_t prv_get_int16(void *subject) { return (*(int16_t *)subject); }
-
-// The update functions are the firmware's own; only the accessors are ours
+// The update functions are the firmware's own; only the setters are ours
 static const PropertyAnimationImplementation ani_rect_impl = {
     .base = {.update = (AnimationUpdateImplementation)property_animation_update_grect},
-    .accessors = {.setter = {.grect = prv_set_rect},
-                  .getter = {.grect = (GRectGetter)prv_get_rect}},
+    .accessors = {.setter = {.grect = prv_set_rect}},
 };
 
 static const PropertyAnimationImplementation ani_int16_impl = {
     .base = {.update = (AnimationUpdateImplementation)property_animation_update_int16},
-    .accessors = {.setter = {.int16 = prv_set_int16}, .getter = {.int16 = prv_get_int16}},
+    .accessors = {.setter = {.int16 = prv_set_int16}},
 };
 
 // Find the slot a value animates in, claiming a free one if this is its first
@@ -95,7 +101,13 @@ static void prv_stopped(Animation *animation, bool finished, void *context) {
   }
 }
 
-// Cancel whatever a slot is running, which clears the slot through prv_stopped
+// Cancel whatever a slot is running
+// The slot is cleared here rather than left to prv_stopped, and that is load-bearing twice over.
+// A handler only runs for an animation which has drawn at least one frame, so cancelling one still
+// waiting out its delay -- which the box's leg of a bounce spends two frames doing -- calls nothing
+// at all. And an Animation * is a handle the service looks up rather than a pointer it follows, so
+// unscheduling one which has already gone is a quiet no-op instead of a use after free. Together
+// those are why this can be unconditional, and why it must not be reduced to trusting the handler.
 static void prv_slot_cancel(AniSlot *slot) {
   if (slot->anim) {
     animation_unschedule(slot->anim);
@@ -116,7 +128,14 @@ static bool prv_slot_schedule(void *target, Animation *animation) {
   slot->target = target;
   slot->anim = animation;
   animation_set_handlers(animation, (AnimationHandlers){.stopped = prv_stopped}, slot);
-  animation_schedule(animation);
+  if (!animation_schedule(animation)) {
+    // Nothing reaches this today -- the handle is seconds old, it has no parent, and nothing has
+    // begun destroying it -- but a refusal must not leave the slot holding an animation which is
+    // never going to run, and the caller has a value still waiting to be put somewhere.
+    animation_destroy(animation);
+    slot->anim = NULL;
+    return false;
+  }
   return true;
 }
 
@@ -143,7 +162,7 @@ static bool prv_set_endpoints(PropertyAnimation *prop, void *from, void *to, siz
 static void prv_arrive(void *target, const void *to, size_t size) {
   animation_stop(target);
   memcpy(target, to, size);
-  layer_mark_dirty(ani_layer);
+  prv_refresh();
 }
 
 // Build one leg of an int16 animation, which is the whole of a plain move and half of a bounce
