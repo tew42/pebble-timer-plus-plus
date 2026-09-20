@@ -61,8 +61,8 @@
 #endif
 // Fonts
 typedef enum {
-  ScalableFontLabel,
-  ScalableFontTime,
+  ScalableFontLabel,  //< The header word: Timer, Chrono, Split, Peek, Alarm
+  ScalableFontFooter, //< The footer: the projected end clock, or a held split's fraction
 } ScalableFontIds;
 
 // The two colours which never change. They were struct fields written once at initialisation and
@@ -232,7 +232,7 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
     }
   }
   // draw text
-  graphics_draw_text(ctx, buff, scl_get_font(ScalableFontTime), bounds, GTextOverflowModeFill,
+  graphics_draw_text(ctx, buff, scl_get_font(ScalableFontFooter), bounds, GTextOverflowModeFill,
                      GTextAlignmentCenter, NULL);
 }
 
@@ -676,7 +676,7 @@ void drawing_initialize(Layer *layer) {
     .e = font_gothic_28_bold, // Emery (Pebble Time 2*)
     .g = font_gothic_28_bold, // Gabbro (Pebble Round 2)
   });
-  scl_set_fonts(ScalableFontTime, {
+  scl_set_fonts(ScalableFontFooter, {
     .o = font_gothic_28_bold, // Everything else
     .e = drawing_data.time_font, // Emery (Pebble Time 2*)
     .g = drawing_data.time_font, // Gabbro (Pebble Round 2)
