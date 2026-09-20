@@ -641,8 +641,14 @@ static void on_swipe(RotarySwipeDirection direction, void *context) {
   vibes_enqueue_custom_pattern(swipe_vibe);
   if (direction == RotarySwipeDirection_Right) {
     prv_back_retreat();
-  } else if (!prv_rewind_alert()) {
-    // as prv_select_click_handler: at the alert, select hands the time back rather than advancing
+  } else if (prv_rewind_alert()) {
+    // as prv_select_click_handler: at the alert, select hands the time back rather than advancing,
+    // and it returns having refreshed already -- with the ring animated back rather than snapped
+    // there. The drawing_update() below would stop that arc and put the ring where it was going
+    // before a frame of it had been drawn, so the button path returns here and so does this one.
+    layer_mark_dirty(main_data.layer);
+    return;
+  } else {
     prv_select_advance();
   }
   drawing_update();
