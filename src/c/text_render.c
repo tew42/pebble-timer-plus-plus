@@ -83,11 +83,9 @@ static void prv_draw_character(GContext *ctx, GPath *path, char character, int16
   uint8_t char_idx = prv_get_character_index(character);
   uint8_t start_offset = LECO_OFFSETS[char_idx];
   uint8_t end_offset = LECO_OFFSETS[char_idx + 1];
-  // Populate the path data points, within the room the caller actually has. point_data in
-  // prv_draw_text is LECO_MAX_POINTS long and the widest glyph is exactly that many points, so
-  // there is no headroom at all: a single glyph gaining a fifteenth point would write past the
-  // end of a stack array with nothing in the way. The tables and the bound are meant to stay in
-  // step, but nothing made them, and clamping costs one comparison per character.
+  // The widest glyph is exactly LECO_MAX_POINTS points, so the caller's array has no headroom:
+  // one glyph gaining a point would write past the end of it. Clamp rather than trust the tables
+  // and the bound to stay in step.
   path->num_points = end_offset - start_offset;
   if (path->num_points > (uint32_t)LECO_MAX_POINTS) {
     path->num_points = (uint32_t)LECO_MAX_POINTS;
@@ -179,11 +177,10 @@ void text_render_draw_scalable_text(GContext *ctx, char *buff, GRect bounds) {
   if (buff == NULL || buff[0] == '\0' || bounds.size.w <= 0 || bounds.size.h <= 0) {
     return;
   }
-  // calculate the maximum font size which stays within this rectangle
-  int16_t total_width = prv_unscaled_text_width(buff);
-  int16_t font_size_w = LECO_HEIGHT * bounds.size.w / total_width;
-  int16_t font_size_h = bounds.size.h;
-  int16_t font_size = (font_size_h < font_size_w) ? font_size_h : font_size_w;
+  // the largest size which stays within this rectangle, which is the same question
+  // text_render_get_max_font_size answers and used to be answered again here
+  const int16_t font_size = text_render_get_max_font_size(buff, bounds);
+  const int16_t total_width = prv_unscaled_text_width(buff);
   // center the text
   GPoint position;
   position.x = bounds.origin.x + (bounds.size.w - total_width * font_size / LECO_HEIGHT) / 2;

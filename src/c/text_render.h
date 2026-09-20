@@ -28,6 +28,8 @@ GRect text_render_get_content_bounds(char *buff, int16_t font_size);
 int16_t text_render_get_max_font_size(char *buff, GRect size);
 
 //! Renders the LECO font onto a drawing context at a certain font size
+//! No app caller: the app draws through text_render_draw_scalable_text, which sizes the text
+//! to a rectangle. This is the seam glyphtest rasterizes through, at a size of its own.
 //! @param ctx The GContext onto which to draw the text
 //! @param buff The text buffer to draw
 //! @param font_size The font size at which to draw the text
