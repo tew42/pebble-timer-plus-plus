@@ -117,34 +117,33 @@ static void prv_place_field(GRect *field, GRect to, uint32_t duration, bool snap
   animation_grect_start(field, to, duration, 0, CurveSinEaseOut);
 }
 
-// Update focus layer drawing state
-static void prv_focus_layer_update_state(Layer *layer, GRect hr_bounds, GRect min_bounds,
-                                         GRect sec_bounds, bool snap) {
-  // get properties
-  GRect bounds = layer_get_bounds(layer);
-  // check current control mode
-  if (!timer_is_paused()) {
-    // calculate the bounds for the focus layer off the screen
-    bounds.origin.x = bounds.size.w;
-    bounds.origin.y = bounds.size.h / 2 - sec_bounds.size.h / 4;
-    bounds.size.w = sec_bounds.size.w;
-    bounds.size.h = sec_bounds.size.h / 2;
-    // animate the focus layer
-    prv_place_field(&drawing_data.focus_field, bounds, FOCUS_FIELD_ANI_DURATION, snap);
-  } else {
-    // get final bounds when in editing mode
-    if (main_get_field() == FieldHr) {
-      bounds = hr_bounds;
-    } else if (main_get_field() == FieldMin) {
-      bounds = min_bounds;
-    } else {
-      bounds = sec_bounds;
-    }
-    // add border
-    bounds = grect_inset(bounds, GEdgeInsets1(-FOCUS_FIELD_BORDER));
-    // animate the focus field to those bounds
-    prv_place_field(&drawing_data.focus_field, bounds, FOCUS_FIELD_ANI_DURATION, snap);
+// Which of the five text fields the buttons are pointed at
+// The separators sit between them, so the three the user can select are 0, 2 and 4. Shared
+// because the focus layer and the bounce both need it, and the two had written it out
+// separately.
+static uint8_t prv_selected_field_index(void) {
+  switch (main_get_field()) {
+  case FieldHr:
+    return 0;
+  case FieldMin:
+    return 2;
+  default:
+    return 4;
   }
+}
+
+// Update focus layer drawing state
+static void prv_focus_layer_update_state(GRect bounds, const GRect fields[TEXT_FIELD_COUNT],
+                                         bool snap) {
+  GRect to;
+  if (!timer_is_paused()) {
+    // parked off the right edge, half the height of the seconds and centred on them
+    to = GRect(bounds.size.w, bounds.size.h / 2 - fields[4].size.h / 4, fields[4].size.w,
+               fields[4].size.h / 2);
+  } else {
+    to = grect_inset(fields[prv_selected_field_index()], GEdgeInsets1(-FOCUS_FIELD_BORDER));
+  }
+  prv_place_field(&drawing_data.focus_field, to, FOCUS_FIELD_ANI_DURATION, snap);
 }
 
 // Draw the focus layer
@@ -301,7 +300,7 @@ static void prv_main_text_update_state(Layer *layer, bool snap) {
   }
 
   // update the focus layers
-  prv_focus_layer_update_state(layer, field_bounds[0], field_bounds[2], field_bounds[4], snap);
+  prv_focus_layer_update_state(bounds, field_bounds, snap);
 }
 
 // Draw main text onto drawing context
@@ -533,14 +532,7 @@ static void prv_update_draw_state(Layer *layer) {
 void drawing_start_bounce_animation(bool upward) {
   // get the currently selected elements
   // only animate the position of one focus layer, stacking gives appearance of stretching
-  GRect *txt_rect;
-  if (main_get_field() == FieldHr) {
-    txt_rect = &drawing_data.text_fields[0];
-  } else if (main_get_field() == FieldMin) {
-    txt_rect = &drawing_data.text_fields[2];
-  } else {
-    txt_rect = &drawing_data.text_fields[4];
-  }
+  GRect *txt_rect = &drawing_data.text_fields[prv_selected_field_index()];
   // animate text
   GRect rect_to = (*txt_rect);
   rect_to.origin.y = drawing_data.text_fields[1].origin.y;
@@ -549,13 +541,8 @@ void drawing_start_bounce_animation(bool upward) {
   rect_to.origin.y = drawing_data.text_fields[1].origin.y;
   animation_grect_start(txt_rect, rect_to, FOCUS_BOUNCE_ANI_SETTLE_DURATION,
                         FOCUS_BOUNCE_ANI_DURATION, CurveSinEaseOut);
-  // get focus layer desired bounds
-  GRect focus_bounds = drawing_data.text_fields[0];
-  if (main_get_field() == FieldMin) {
-    focus_bounds = drawing_data.text_fields[2];
-  } else if (main_get_field() == FieldSec) {
-    focus_bounds = drawing_data.text_fields[4];
-  }
+  // the focus layer sits on that same field, which txt_rect already points at
+  GRect focus_bounds = *txt_rect;
   focus_bounds.origin.y = drawing_data.text_fields[3].origin.y;
   focus_bounds = grect_inset(focus_bounds, GEdgeInsets1(-FOCUS_FIELD_BORDER));
   // animate focus layer
