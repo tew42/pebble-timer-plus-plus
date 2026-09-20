@@ -68,6 +68,12 @@ typedef enum {
   ScalableFontTime,
 } ScalableFontIds;
 
+// The two colours which never change. They were struct fields written once at initialisation and
+// never again, which made them read as part of the palette. The palette is the accent three in
+// the structure below, which prv_palette_update really does change per counting direction.
+#define FORE_COLOR GColorBlack
+#define BACK_COLOR PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack)
+
 // Main drawing state description, used to determine changes in state
 typedef struct {
   bool paused;              //< Whether the clock was stopped at that state
@@ -89,11 +95,9 @@ static struct {
   GRect focus_field;                   //< The selection field layer
   GFont time_font;                     //< The digits font, where the platform carries one
   int32_t focus_inset;                 //< Shrinks the selection field while select is held
-  GColor fore_color;                   //< Color of text
   GColor mid_color;                    //< Color of center
   GColor ring_color;                   //< Color of ring
   GColor band_color;                   //< Color of the ring within the current refresh interval
-  GColor back_color;                   //< Color behind ring
   bool accent_chrono;                  //< Whether the accent in force is the counting up one
 } drawing_data;
 
@@ -393,7 +397,7 @@ static void prv_palette_update(void) {
   const GColor accent = GColorFromHEX(settings_accent_rgb(drawing_data.accent_chrono));
   drawing_data.ring_color = accent;
   drawing_data.mid_color = prv_shade(accent, 2);
-  drawing_data.band_color = prv_band_shade(accent, drawing_data.back_color);
+  drawing_data.band_color = prv_band_shade(accent, BACK_COLOR);
 #endif
 }
 
@@ -413,7 +417,7 @@ static void prv_render_progress_ring(GContext *ctx, GRect bounds) {
   // the screen is already filled with the ring, so the ring is drawn by covering what is past it
   const int32_t solid_angle = drawing_data.progress_angle;
   const int32_t band_angle = drawing_data.show_band ? drawing_data.band_angle : solid_angle;
-  graphics_context_set_fill_color(ctx, drawing_data.back_color);
+  graphics_context_set_fill_color(ctx, BACK_COLOR);
 #ifdef PBL_BW
   // one bit has no third tone to fill a wedge with, so cover from the solid arc, lay a lighter
   // dither over everything (a no-op on the arc, whose pattern already contains it) and cover
@@ -427,7 +431,7 @@ static void prv_render_progress_ring(GContext *ctx, GRect bounds) {
   if (band_angle != solid_angle) {
     graphics_context_set_fill_color(ctx, drawing_data.band_color);
     graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius, solid_angle, band_angle);
-    graphics_context_set_fill_color(ctx, drawing_data.back_color);
+    graphics_context_set_fill_color(ctx, BACK_COLOR);
   }
   graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius, band_angle, TRIG_MAX_ANGLE);
 #endif
@@ -594,11 +598,11 @@ void drawing_render(Layer *layer, GContext *ctx) {
   // draw focus layer
   prv_render_focus_layer(ctx);
   // draw main text (drawn as filled and stroked path)
-  graphics_context_set_stroke_color(ctx, drawing_data.fore_color);
-  graphics_context_set_fill_color(ctx, drawing_data.fore_color);
+  graphics_context_set_stroke_color(ctx, FORE_COLOR);
+  graphics_context_set_fill_color(ctx, FORE_COLOR);
   prv_render_main_text(ctx, bounds);
   // draw header and footer text
-  graphics_context_set_text_color(ctx, drawing_data.fore_color);
+  graphics_context_set_text_color(ctx, FORE_COLOR);
   prv_render_header_text(ctx, bounds);
   prv_render_footer_text(ctx, bounds);
 }
@@ -679,10 +683,8 @@ void drawing_initialize(Layer *layer) {
     .g = drawing_data.time_font, // Gabbro (Pebble Round 2)
   });
   // clang-format on
-  // set the colors; the accent three are chosen per counting direction, and the first frame is
-  // rendered before any refresh runs, so seed them here too
-  drawing_data.fore_color = GColorBlack;
-  drawing_data.back_color = PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack);
+  // seed the accent three; they are chosen per counting direction, and the first frame is
+  // rendered before any refresh runs
   drawing_data.mid_color = GColorWhite;
   drawing_data.ring_color = GColorWhite;
   drawing_data.band_color = GColorWhite;
