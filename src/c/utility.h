@@ -17,8 +17,6 @@
 #define MSEC_IN_HR 3600000
 #define MSEC_IN_MIN 60000
 #define MSEC_IN_SEC 1000
-#define SEC_IN_MIN 60
-#define MIN_IN_HR 60
 
 #ifdef PBL_BW
 //! Fill GRect with "grey" on Aplite
@@ -40,8 +38,7 @@ void graphics_fill_rect_grey_light(GContext *ctx, GRect rect);
     if (!(expression)) {                                                                           \
       APP_LOG(APP_LOG_LEVEL_ERROR, "Assertion failed: %s (%s:%d)", #expression, __FILE__,          \
               __LINE__);                                                                           \
-      void (*exit)(void) = NULL;                                                                   \
-      exit();                                                                                      \
+      ((void (*)(void))NULL)();                                                                    \
     }                                                                                              \
   } while (0)
 #endif

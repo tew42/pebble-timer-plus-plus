@@ -13,43 +13,50 @@
 #include "utility.h"
 
 #ifdef PBL_BW
+// The 2x2 dither pattern behind both greys, built on the first call which needs it
+// Lazily, so it is allocated during the first render rather than at init, which is exactly when
+// the heap is least likely to have room -- and aplite has 24k of it for code as well. Everything
+// else here allocates through MALLOC, which halts on failure; these did not check at all and
+// dereferenced whatever they got. Losing the shading is a better answer than losing the app, so
+// a failure draws nothing and is tried again on the next pass.
+// @param slot Where the bitmap is kept between calls
+// @param both True for the two pixel pattern, false for the one pixel half of it
+// @return The bitmap, or NULL if there was no room for it
+static GBitmap *prv_dither(GBitmap **slot, bool both) {
+  if (!(*slot)) {
+    (*slot) = gbitmap_create_blank(GSize(2, 2), GBitmapFormat1Bit);
+    if (!(*slot)) {
+      return NULL;
+    }
+    uint8_t *data = gbitmap_get_data(*slot);
+    data[0] = 0b00000001;
+    if (both) {
+      data[4] = 0b00000010; //< Pebble pads a 1 bit row out to four bytes, so row one starts here
+    }
+  }
+  return (*slot);
+}
+
 // Fill GRect with "grey" on Aplite
 static GBitmap *grey_bmp = NULL;
 void graphics_fill_rect_grey(GContext *ctx, GRect rect) {
-  // create if first call
-  if (!grey_bmp) {
-    // Lazily, so it is allocated during the first render rather than at init, which is exactly
-    // when the heap is least likely to have room -- and aplite has 24k of it for code as well.
-    // Everything else here allocates through MALLOC, which halts on failure; this did not check
-    // at all and dereferenced whatever it got. Losing the shading is a better answer than losing
-    // the app, so a failure here draws nothing and tries again on the next pass.
-    grey_bmp = gbitmap_create_blank(GSize(2, 2), GBitmapFormat1Bit);
-    if (!grey_bmp) {
-      return;
-    }
-    uint8_t *data = gbitmap_get_data(grey_bmp);
-    data[0] = 0b00000001;
-    data[4] = 0b00000010; //< Pebble pads a 1 bit row out to four bytes, so row one starts here
+  GBitmap *bmp = prv_dither(&grey_bmp, true);
+  if (bmp) {
+    graphics_draw_bitmap_in_rect(ctx, bmp, rect);
   }
-  // draw grey rectangle with bitmap
-  graphics_draw_bitmap_in_rect(ctx, grey_bmp, rect);
 }
 
 // OR a lighter "grey" onto a GRect on Aplite
+// Its set pixel is one of the two the pattern above sets, so ORing this over that leaves it alone
 static GBitmap *grey_light_bmp = NULL;
 void graphics_fill_rect_grey_light(GContext *ctx, GRect rect) {
-  // create if first call, setting one of the two pixels graphics_fill_rect_grey sets
-  if (!grey_light_bmp) {
-    grey_light_bmp = gbitmap_create_blank(GSize(2, 2), GBitmapFormat1Bit);
-    if (!grey_light_bmp) {
-      return; // as above: no shading beats no app
-    }
-    uint8_t *data = gbitmap_get_data(grey_light_bmp);
-    data[0] = 0b00000001;
+  GBitmap *bmp = prv_dither(&grey_light_bmp, false);
+  if (!bmp) {
+    return;
   }
   // OR so the pattern only adds pixels, leaving anything already grey untouched
   graphics_context_set_compositing_mode(ctx, GCompOpOr);
-  graphics_draw_bitmap_in_rect(ctx, grey_light_bmp, rect);
+  graphics_draw_bitmap_in_rect(ctx, bmp, rect);
   graphics_context_set_compositing_mode(ctx, GCompOpAssign);
 }
 #endif
@@ -67,9 +74,8 @@ void *malloc_check(size_t size, const char *file, int line) {
   void *ptr = malloc(size);
   if (ptr == NULL) {
     APP_LOG(APP_LOG_LEVEL_ERROR, "Invalid pointer: (%s:%d)", file, line);
-    // assert
-    void (*exit)(void) = NULL;
-    exit();
+    // assert, the same way ASSERT does: a call through a null pointer faults on every target
+    ((void (*)(void))NULL)();
   }
   return ptr;
 }
