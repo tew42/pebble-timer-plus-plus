@@ -83,6 +83,7 @@ static struct {
   int32_t exact_angle;                 //< Angle the ring would reach with nothing masked
   bool show_band;                      //< Whether the refresh interval is worth showing
   DrawState draw_state;                //< An arbitrary description of the main drawing state
+  bool laid_out;                       //< Whether a layout has been computed at all yet
   GRect text_fields[TEXT_FIELD_COUNT]; //< The number of text fields (hr : min : sec)
   GRect focus_field;                   //< The selection field layer
   GFont time_font;                     //< The digits font, where the platform carries one
@@ -480,15 +481,16 @@ static void prv_progress_ring_update(void) {
 //
 
 // Compare two different TextStates, return true if conditions are met for a refresh
-static bool prv_text_state_compare(DrawState text_state_1, DrawState text_state_2) {
-  return text_state_1.control_mode == text_state_2.control_mode && // if control modes are different
-         ((text_state_1.control_mode != ControlModeCounting &&     // if in edit mode
-           ((text_state_1.hr_digits && text_state_2.hr_digits) ||
-            (!text_state_1.hr_digits && !text_state_2.hr_digits))) ||
-          (text_state_1.control_mode == ControlModeCounting && // if in counting mode
-           text_state_1.hr_digits == text_state_2.hr_digits &&
-           text_state_1.min_digits == text_state_2.min_digits)) &&
-         text_state_2.hr_digits < 3; // on first start hr is set to 99 to force refresh
+static bool prv_draw_state_equal(DrawState a, DrawState b) {
+  if (a.control_mode != b.control_mode) {
+    return false;
+  }
+  if (a.control_mode == ControlModeCounting) {
+    // counting sizes every field to its own digits, so each place matters
+    return a.hr_digits == b.hr_digits && a.min_digits == b.min_digits;
+  }
+  // editing pads every field to a fixed width, so only whether the hours are there matters
+  return (a.hr_digits != 0) == (b.hr_digits != 0);
 }
 
 // Create a state description
@@ -506,16 +508,18 @@ static DrawState prv_draw_state_create(void) {
 // Check for draw state changes and update drawing accordingly
 static void prv_update_draw_state(Layer *layer) {
   // check for changes in the states of things
-  DrawState cur_draw_state = prv_draw_state_create();
-  if (!prv_text_state_compare(cur_draw_state, drawing_data.draw_state)) {
-    // the hours coming or going changes which fields there are, and the first layout of all has
-    // nothing to move from either: both arrive rather than travel
-    const bool snap = drawing_data.draw_state.hr_digits > 2 ||
-                      (cur_draw_state.hr_digits != 0) != (drawing_data.draw_state.hr_digits != 0);
-    drawing_data.draw_state = cur_draw_state;
-    // update text state
-    prv_main_text_update_state(layer, snap);
+  const DrawState cur_draw_state = prv_draw_state_create();
+  if (drawing_data.laid_out && prv_draw_state_equal(cur_draw_state, drawing_data.draw_state)) {
+    return;
   }
+  // the hours coming or going changes which fields there are, and the first layout of all has
+  // nothing to move from either: both arrive rather than travel
+  const bool snap = !drawing_data.laid_out ||
+                    (cur_draw_state.hr_digits != 0) != (drawing_data.draw_state.hr_digits != 0);
+  drawing_data.laid_out = true;
+  drawing_data.draw_state = cur_draw_state;
+  // update text state
+  prv_main_text_update_state(layer, snap);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -657,10 +661,8 @@ void drawing_initialize(Layer *layer) {
     drawing_data.focus_field.origin.x = bounds.size.w;
   }
   drawing_data.focus_field.size = GSizeZero;
-  // set initial draw state to something which guaranties a refresh
-  drawing_data.draw_state = (DrawState){
-      .hr_digits = 99,
-  };
+  // nothing has been laid out yet, so the first update arrives rather than travels
+  drawing_data.laid_out = false;
   // set fonts
   GFont font_gothic_24_bold = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
   GFont font_gothic_28_bold = fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD);
