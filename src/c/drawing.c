@@ -122,6 +122,7 @@ static struct {
   GRect focus_field;                   //< The selection field layer
   GFont time_font;                     //< The digits font, where the platform carries one
   int16_t focus_inset;                 //< Shrinks the selection field while select is held
+  bool reset_hint;                     //< Whether that shrink is up, so it is put away once
   GColor mid_color;                    //< Color of center
   GColor ring_color;                   //< Color of ring
   GColor band_color;                   //< Color of the ring within the current refresh interval
@@ -593,12 +594,20 @@ void drawing_start_bounce_animation(bool upward) {
 
 // Shrink the focus layer while select is held, hinting at the reset the hold will perform
 void drawing_start_reset_animation(void) {
+  drawing_data.reset_hint = true;
   animation_int16_start(&drawing_data.focus_inset, FOCUS_FIELD_SHRINK_INSET,
                         FOCUS_FIELD_SHRINK_DURATION, AnimationCurveLinear);
 }
 
 // Return the focus layer to full size, once the hold has ended or performed its reset
 void drawing_stop_reset_animation(void) {
+  // A hold which reaches the reset puts the hint away itself, and the release which follows asks
+  // again; the second ask has nothing to undo. Tracked rather than read off the inset, because a
+  // press let go inside the first frame leaves that at zero with the shrink still on its way out.
+  if (!drawing_data.reset_hint) {
+    return;
+  }
+  drawing_data.reset_hint = false;
   animation_int16_start(&drawing_data.focus_inset, 0, FOCUS_FIELD_SHRINK_DURATION,
                         AnimationCurveLinear);
 }
@@ -676,6 +685,7 @@ void drawing_initialize(Layer *layer) {
     drawing_data.text_fields[ii].size = GSizeZero;
   }
   drawing_data.focus_inset = 0;
+  drawing_data.reset_hint = false;
   drawing_data.focus_field.origin = grect_center_point(&bounds);
   if (!timer_is_paused()) {
     drawing_data.focus_field.origin.x = bounds.size.w;
