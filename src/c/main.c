@@ -36,11 +36,12 @@
 #define SYSTEM_ENTRANCE_ANIMATION_MS 400
 // Wakeup scheduling
 // A wakeup is refused within a minute either side of another app's, so stepping clear of one
-// blocked slot can take two steps of a minute. Nothing can be scheduled within thirty seconds of
-// now either, and the lead below leaves a little margin on top of that for teardown to finish.
+// blocked slot can take two steps of a minute. The margin below is for this app to finish closing
+// before a wakeup it asked for can land, and is not a rule of the service's: the only times
+// wakeup_schedule refuses outright are one in the past and one inside another app's minute.
 #define WAKEUP_STEP_S 60
 #define WAKEUP_STEPS 2
-#define WAKEUP_MIN_LEAD_S 35
+#define WAKEUP_TEARDOWN_S 5
 
 // Main data structure
 static struct {
@@ -786,26 +787,29 @@ static void prv_initialize(void) {
 // that in its return value rather than by failing loudly, so an unchecked call can leave a timer
 // with no wakeup at all. Step away from a blocked slot and ask again.
 // Earlier is tried before later: waking early means the app is already running when the timer
-// elapses, so the alert is still on time, where a later wakeup delays the alert itself. Nothing
-// can be scheduled within thirty seconds of now, which sets how early it is worth asking.
+// elapses, so the alert is still on time, where a later wakeup delays the alert itself.
+// Nothing is ruled out before asking, because the service is the only thing which knows what it
+// will take. An earlier version filtered every candidate against a minimum lead of its own, on the
+// belief that a wakeup could not be scheduled within thirty seconds of now. No such rule exists --
+// sys_wakeup_schedule refuses a time in the past and a slot inside another app's minute, and
+// nothing else -- so the filter did no good and real harm: a timer with less than that left had
+// every candidate skipped unasked and was sent to a slot after its own elapse, which is how a
+// twenty second timer came to alert thirty-five seconds later.
 static void prv_schedule_wakeup(time_t elapse_time) {
-  const time_t earliest = (time_t)(epoch() / MSEC_IN_SEC) + WAKEUP_MIN_LEAD_S;
   for (uint8_t step = 0; step <= WAKEUP_STEPS; step++) {
-    const time_t at = elapse_time - step * WAKEUP_STEP_S;
-    if (at >= earliest && wakeup_schedule(at, 0, true) >= 0) {
+    if (wakeup_schedule(elapse_time - step * WAKEUP_STEP_S, 0, true) >= 0) {
       return;
     }
   }
-  // Every candidate at or before the elapse is taken or too soon to ask for, but the floor itself
-  // has not been offered and is still sooner than anything past the elapse. Waking early costs
-  // nothing -- the app is simply already running when the timer finishes -- so it is worth one
-  // ask before settling for a late alert. It is the only candidate there is when the timer has
-  // less than the lead left, which is the case the loop above can never help with: every point it
-  // proposes is at or before an elapse which is itself too soon.
-  if (elapse_time != earliest && wakeup_schedule(earliest, 0, true) >= 0) {
+  // Everything at or before the elapse is taken or already past. A moment from now is still
+  // sooner than anything beyond the elapse, and waking early costs nothing -- the app is simply
+  // already running when the timer finishes -- so it is worth one ask before settling for a late
+  // alert.
+  const time_t soon = (time_t)(epoch() / MSEC_IN_SEC) + WAKEUP_TEARDOWN_S;
+  if (soon < elapse_time && wakeup_schedule(soon, 0, true) >= 0) {
     return;
   }
-  // every earlier slot is taken or too soon, so a late alert is all that is left
+  // every earlier slot is taken or past, so a late alert is all that is left
   for (uint8_t step = 1; step <= WAKEUP_STEPS; step++) {
     if (wakeup_schedule(elapse_time + step * WAKEUP_STEP_S, 0, true) >= 0) {
       return;

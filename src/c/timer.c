@@ -306,8 +306,6 @@ void timer_reset(void) {
 
 // Save the timer to persistent storage
 void timer_persist_store(void) {
-  // the version says which structure layout the blob below holds, and timer_persist_read checks it
-  persist_write_int(PERSIST_VERSION_KEY, PERSIST_VERSION);
   // The alert belongs to the session the timer elapsed in. can_vibrate is a field of the
   // structure and so rides into flash, but the two flags which bound it, has_vibrated and
   // silenced, are session state, and nothing stored says when the timer finished. Carried
@@ -322,6 +320,13 @@ void timer_persist_store(void) {
     stored.can_vibrate = false;
   }
   persist_write_data(PERSIST_TIMER_KEY, &stored, sizeof(stored));
+  // The version says which structure layout the blob above holds, and timer_persist_read checks it
+  // before trusting a byte of it. It is written second on purpose: the two writes are each atomic
+  // on their own but not as a pair, so the version is the commit marker and has to be the last
+  // thing to land. Written first, a store which lost the blob after getting the version through
+  // would leave a stale blob wearing the current version's number, and the read would believe it.
+  // settings.c already stores its pair this way round.
+  persist_write_int(PERSIST_VERSION_KEY, PERSIST_VERSION);
 }
 
 // Read the timer from persistent storage
