@@ -205,6 +205,90 @@ function customFunction() {
     return new Function('return (' + src.slice(start, end) + ')')();
 }
 
+// A stand-in for the page's DOM, built out of the real palette in config.json.
+//
+// The labelling code in the custom function reaches for the document, which Node has not got, so
+// the harness has to bring one. It is a stand-in and worth naming as such: it answers only the
+// handful of calls the labelling makes, and a stub written to fit the code it tests can catch
+// that code changing but never that it was right to begin with. What established that was a
+// browser -- the real Clay page, built from this config and this custom function, rendered in
+// Chromium with every swatch measured against its own cell. This keeps the result from rotting.
+//
+// The backgrounds it reports are the uncorrected hex, which is what Clay paints while the colour
+// items set "sunlight": false. Turn that on and the page shades the swatches through Clay's
+// sunlight map, and this would have to learn it before the lettering test meant anything.
+function fakeDom(layouts) {
+    function matches(node, selector) {
+        var ok = true;
+        selector.replace(/\.([\w-]+)|\[([\w-]+)\]/g, function(whole, cls, attr) {
+            if (cls && (' ' + node.className + ' ').indexOf(' ' + cls + ' ') < 0) { ok = false; }
+            if (attr && typeof node.attrs[attr] === 'undefined') { ok = false; }
+            return '';
+        });
+        return ok;
+    }
+    function descendants(node, out) {
+        node.children.forEach(function(child) { out.push(child); descendants(child, out); });
+        return out;
+    }
+    function element(className, attrs) {
+        return {
+            className: className, title: '', textContent: '', hex: null,
+            attrs: attrs || {}, children: [], listeners: [], style: {cssText: ''},
+            getAttribute: function(name) { return this.attrs[name]; },
+            addEventListener: function(type, handler) {
+                if (type === 'click') { this.listeners.push(handler); }
+            },
+            tap: function() {
+                var self = this;
+                this.listeners.forEach(function(handler) { handler({currentTarget: self}); });
+            },
+            insertBefore: function(child, before) {
+                var at = this.children.indexOf(before);
+                this.children.splice(at < 0 ? this.children.length : at, 0, child);
+                return child;
+            },
+            querySelectorAll: function(selector) {
+                return descendants(this, []).filter(function(n) { return matches(n, selector); });
+            },
+            querySelector: function(selector) {
+                return this.querySelectorAll(selector)[0] || null;
+            }
+        };
+    }
+    var pickers = layouts.map(function(layout) {
+        var picker = element('component component-color');
+        picker.children.push(element('label'));
+        var wrap = element('picker-wrap');
+        layout.swatches.forEach(function(hex) {
+            var box = element('color-box selectable' +
+                              (hex === layout.selected ? ' selected' : ''),
+                              {'data-value': String(parseInt(hex, 16))});
+            box.hex = hex;
+            wrap.children.push(box);
+        });
+        picker.children.push(wrap);
+        return picker;
+    });
+    var root = element('root');
+    root.children = pickers;
+    return {
+        document: {
+            querySelectorAll: function(selector) { return root.querySelectorAll(selector); },
+            createElement: function() { return element(''); }
+        },
+        window: {
+            getComputedStyle: function(node) {
+                var channels = [0, 2, 4].map(function(i) {
+                    return parseInt((node.hex || '000000').substr(i, 2), 16);
+                });
+                return {backgroundColor: 'rgb(' + channels.join(', ') + ')'};
+            }
+        },
+        pickers: pickers
+    };
+}
+
 // A stand-in for the built page. Clay's `val` manipulator returns a number when the item sets
 // serializeValueAs "integer" and the option string otherwise, and its set() only fires "change"
 // when the value really changes -- both worth reproducing, the second because it is what stops
@@ -234,8 +318,30 @@ function buildPage(customFn, ten, min, asNumber) {
         getItemByMessageKey: function(key) { return items[key]; },
         on: function(event, handler) { if (event === 'AFTER_BUILD') { afterBuild.push(handler); } }
     });
-    afterBuild.forEach(function(handler) { handler(); });
-    return { values: values, sets: sets };
+    // the custom function is compiled in global scope, exactly as the page compiles it, so the
+    // document it labels has to be reachable from there rather than passed in
+    var dom = fakeDom(colorLayouts());
+    global.document = dom.document;
+    global.window = dom.window;
+    try {
+        afterBuild.forEach(function(handler) { handler(); });
+    } finally {
+        delete global.document;
+        delete global.window;
+    }
+    return { values: values, sets: sets, dom: dom };
+}
+
+// The two palettes as the page will lay them out, straight from config.json
+function colorLayouts() {
+    return ['timerColor', 'chronoColor'].map(function(key) {
+        var item = itemFor(key);
+        var swatches = [];
+        (item.layout || []).forEach(function(row) {
+            row.forEach(function(hex) { if (hex) { swatches.push(hex); } });
+        });
+        return { swatches: swatches, selected: item.defaultValue };
+    });
 }
 
 var customFn;
@@ -288,6 +394,63 @@ if (customFn) {
                         '; ' + corrected + ' redundant ones switched the 10s setting to Never');
         }
     });
+}
+
+// Every swatch says which colour it is, because a good many of the accents on offer differ by a
+// single two-bit channel and a phone screen does not make that plain.
+if (customFn) {
+    var labelled = buildPage(customFn, NEVER, NEVER, false);
+    labelled.dom.pickers.forEach(function(picker, index) {
+        var key = ['timerColor', 'chronoColor'][index];
+        var boxes = picker.querySelectorAll('.color-box[data-value]');
+        var inks = {};
+        if (!boxes.length) { fail(key + ': not one swatch was labelled'); return; }
+        boxes.forEach(function(box) {
+            // the label is the swatch's own hex, recovered from the decimal Clay writes on it,
+            // so a dropped leading zero shows up here rather than on the phone
+            if (box.textContent !== box.hex) {
+                fail(key + ': swatch ' + box.hex + ' is labelled "' + box.textContent + '"');
+            }
+            if (!box.title || box.title === box.hex) {
+                fail(key + ': swatch ' + box.hex + ' is offered but has no name');
+            }
+            var ink = /color:(#[0-9a-f]{3,6})/.exec(box.style.cssText);
+            if (!ink) {
+                fail(key + ': swatch ' + box.hex + ' got no lettering colour');
+            } else {
+                inks[ink[1]] = (inks[ink[1]] || 0) + 1;
+                // the two unarguable ones: yellow cannot carry white, blue cannot carry black
+                if (box.hex === 'ffff00' && ink[1] !== '#000') {
+                    fail(key + ': yellow is lettered ' + ink[1]);
+                }
+                if (box.hex === '0000ff' && ink[1] !== '#fff') {
+                    fail(key + ': blue is lettered ' + ink[1]);
+                }
+            }
+        });
+        if (Object.keys(inks).length < 2) {
+            fail(key + ': every swatch was lettered ' + Object.keys(inks)[0] +
+                 ', so the lettering does not follow the swatch');
+        }
+        var readout = picker.querySelector('.description');
+        if (!readout) {
+            fail(key + ': the picker has no readout naming the choice');
+            return;
+        }
+        var opens = '  #' + itemFor(key).defaultValue;
+        if (readout.textContent.slice(-opens.length) !== opens) {
+            fail(key + ': the readout opens at "' + readout.textContent + '", not the default');
+        }
+        var other = boxes[boxes.length - 1];
+        other.tap();
+        if (readout.textContent !== other.title + '  #' + other.hex) {
+            fail(key + ': choosing ' + other.hex + ' left the readout at "' +
+                 readout.textContent + '"');
+        }
+    });
+    if (!failures) {
+        console.log('every swatch carries its hex and its name, and the readout follows the pick');
+    }
 }
 
 console.log(failures ? failures + ' FAILURES' : 'configuration page holds');
