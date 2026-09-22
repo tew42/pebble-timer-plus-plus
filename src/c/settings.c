@@ -66,6 +66,18 @@ static void (*settings_on_change)(void) = NULL;
 static AppTimer *request_timer = NULL;
 static uint8_t requests_left = 0;
 
+// Whether AppMessage is actually open. It can fail to open for want of memory -- the inbox buffer
+// is taken from the kernel heap, which this app has no say over -- and it reports that only in a
+// return value which was being discarded. A closed channel accepts no message and delivers none,
+// so retrying the request against one retries the wrong thing: the open is what has to be tried
+// again. Without that, a failure here meant the configuration page appeared to save and the watch
+// simply never heard about it, for the whole launch, with nothing said anywhere.
+static bool channel_open = false;
+
+static void prv_open_channel(void) {
+  channel_open = (app_message_open(SETTINGS_INBOX_SIZE, SETTINGS_OUTBOX_SIZE) == APP_MSG_OK);
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Private Functions
 //
@@ -75,6 +87,9 @@ static void prv_request_settings(void);
 // Retry a request the phone was not there for
 static void prv_retry_request(void *data) {
   request_timer = NULL;
+  if (!channel_open) {
+    prv_open_channel();
+  }
   prv_request_settings();
 }
 
@@ -107,6 +122,10 @@ static void prv_outbox_failed_handler(DictionaryIterator *iter, AppMessageResult
 // What is in the message does not matter; that one arrived is the whole signal.
 static void prv_request_settings(void) {
   DictionaryIterator *iter;
+  if (!channel_open) {
+    prv_schedule_retry();
+    return;
+  }
   if (app_message_outbox_begin(&iter) != APP_MSG_OK) {
     prv_schedule_retry();
     return;
@@ -348,7 +367,7 @@ void settings_initialize(void (*on_change)(void)) {
   app_message_register_inbox_received(prv_inbox_received_handler);
   app_message_register_outbox_failed(prv_outbox_failed_handler);
   // five integers in from the configuration page, one byte out to ask for them
-  app_message_open(SETTINGS_INBOX_SIZE, SETTINGS_OUTBOX_SIZE);
+  prv_open_channel();
   requests_left = SETTINGS_REQUEST_RETRIES;
   prv_request_settings();
 }
@@ -361,4 +380,5 @@ void settings_terminate(void) {
     request_timer = NULL;
   }
   app_message_deregister_callbacks();
+  channel_open = false;
 }

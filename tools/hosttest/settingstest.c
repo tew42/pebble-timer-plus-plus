@@ -68,6 +68,23 @@ int main(void) {
   CHECK(!stub_timer_pending, "two failures in a row left two retries queued");
   printf("  ok: bounded, and one retry in flight at a time\n");
 
+  // AppMessage can refuse to open for want of memory -- the inbox buffer comes off the kernel
+  // heap, which this app has no say over -- and it says so only in a return value. A closed
+  // channel takes no message and delivers none, so a retry aimed at the request alone would spend
+  // itself against a channel that can never carry one.
+  printf("\na channel which would not open is opened again, not just asked again:\n");
+  stub_reset();
+  stub_open_fails = true;
+  settings_initialize(&on_change);
+  CHECK(stub_outbox_sends == 0, "a closed channel sent %d requests", stub_outbox_sends);
+  CHECK(stub_timer_pending, "a failed open scheduled no retry");
+  stub_open_fails = false;
+  stub_fire_timer();
+  CHECK(stub_inbox_size > 0, "the retry did not reopen the channel");
+  CHECK(stub_outbox_sends == 1, "expected the request once the channel opened, got %d",
+        stub_outbox_sends);
+  printf("  ok: reopened on the retry, and the request followed it out\n");
+
   printf("\nnothing is left to fire after the app stops listening:\n");
   stub_reset();
   settings_initialize(&on_change);

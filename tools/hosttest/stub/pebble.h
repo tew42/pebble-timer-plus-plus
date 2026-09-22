@@ -33,6 +33,7 @@ typedef enum {
   APP_MSG_OK = 0,
   APP_MSG_BUSY = 1,
   APP_MSG_SEND_TIMEOUT = 2,
+  APP_MSG_OUT_OF_MEMORY = 64,
   APP_MSG_INVALID_ARGS = 128,
 } AppMessageResult;
 void app_message_register_inbox_received(void (*cb)(DictionaryIterator *, void *));
@@ -50,6 +51,7 @@ extern int stub_outbox_sends;
 extern uint32_t stub_outbox_last_key;
 extern uint32_t stub_outbox_size;
 extern uint32_t stub_inbox_size;
+extern bool stub_open_fails; //< make app_message_open refuse, as it does when memory is short
 extern void (*stub_outbox_failed)(DictionaryIterator *, AppMessageResult, void *);
 // and the last blob handed to persist_write_data, so a test can look at what the app chose to
 // store without the stub having to model flash. Writes still go nowhere and reads still find

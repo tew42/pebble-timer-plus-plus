@@ -43,7 +43,11 @@ void app_message_register_outbox_failed(void (*cb)(DictionaryIterator *, AppMess
                                                    void *)) {
   stub_outbox_failed = cb;
 }
+bool stub_open_fails = false;
 int app_message_open(uint32_t i, uint32_t o) {
+  if (stub_open_fails) {
+    return APP_MSG_OUT_OF_MEMORY;
+  }
   stub_inbox_size = i;
   stub_outbox_size = o;
   return 0;
@@ -99,6 +103,7 @@ void stub_reset(void) {
   stub_timer_cb = NULL;
   stub_timer_cancels = 0;
   stub_timer_pending = false;
+  stub_open_fails = false;
 }
 AppTimer *app_timer_register(uint32_t ms, void (*cb)(void *), void *data) {
   (void)ms; (void)data;

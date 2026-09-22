@@ -117,8 +117,16 @@ int main(void) {
   vibe_burst_count = 0;
   timer_check_elapsed();
   CHECK(vibe_burst_count == 1, "a late launch gave %d bursts, expected 1", vibe_burst_count);
+  // and a second go, because the first enqueue can be swallowed without a word when another
+  // pattern is already playing -- an alert sounding inside its window re-enqueues every second
+  // and rides that out, where a late one used to have a single attempt and no way to know
   timer_check_elapsed();
-  CHECK(vibe_burst_count == 1, "it kept buzzing after the one burst (%d)", vibe_burst_count);
+  CHECK(vibe_burst_count == 2, "the late alert got %d attempts, expected 2", vibe_burst_count);
+  // but bounded: it must not go on buzzing
+  for (int i = 0; i < 5; i++) {
+    timer_check_elapsed();
+  }
+  CHECK(vibe_burst_count == 2, "it kept buzzing past its attempts (%d)", vibe_burst_count);
   printf("  one burst on arrival, then silence\n");
 
   // and a session which sat through the window gets nothing after it

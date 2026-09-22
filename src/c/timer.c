@@ -64,6 +64,16 @@ static bool split_active;
 // the alert window already past has still to sound it once.
 static bool has_vibrated;
 
+// Enqueues still owed to an alert being sounded after its window had already closed.
+// vibes_enqueue_custom_pattern is dropped, in silence, when another pattern is already playing --
+// a notification arriving alongside the wakeup is enough to do it -- and neither the SDK call nor
+// the service beneath it tells the app so. An alert sounding inside its window covers that by
+// re-enqueueing on every refresh for twenty seconds; one sounding late used to get a single
+// attempt on a single pass and then have the window shut on it in the same breath, so a drop
+// lost the alert outright and left the app recording that it had buzzed.
+#define LATE_ALERT_TRIES 2
+static uint8_t late_tries;
+
 // Whether the buzzing has been called off. The alert is two things: a state -- the timer has just
 // elapsed, and select will hand the set time back -- and a noise. Any button stops the noise, so
 // this silences that without ending the state, which is what leaves the next press free to mean
@@ -201,14 +211,24 @@ void timer_check_elapsed(void) {
   // refresh, so once the coarse cadences begin the next call can be a whole minute later and the
   // alert would buzz long after it visibly finished.
   const bool past_window = timer_get_value_ms() > VIBRATION_LENGTH_MS;
-  if (past_window) {
+  // A session which only started after the window closed has not sounded the alert at all, which
+  // is what happens when the wakeup could only be scheduled late. It gets a few goes rather than
+  // one, so that a dropped enqueue is not the end of it; a button saying no ends it immediately,
+  // and the window then shuts on the next pass as it always did.
+  if (silenced) {
+    late_tries = 0;
+  } else if (past_window && !has_vibrated) {
+    late_tries = LATE_ALERT_TRIES;
+  }
+  const bool sounding_late = late_tries > 0;
+  if (past_window && !sounding_late) {
     timer_data.can_vibrate = false;
   }
-  // A session which only started after the window closed has not sounded the alert at all,
-  // though, which is what happens when the wakeup could only be scheduled late. It gets one,
-  // unless a button has already said no.
-  if (silenced || (past_window && has_vibrated)) {
+  if (silenced || (past_window && has_vibrated && !sounding_late)) {
     return;
+  }
+  if (sounding_late) {
+    late_tries--;
   }
   // vibrate
   has_vibrated = true;
