@@ -31,6 +31,9 @@ typedef GColor8 GColor;
 // geometry
 typedef struct { int16_t top, right, bottom, left; } GEdgeInsets;
 #define GEdgeInsets1(v) ((GEdgeInsets){(v), (v), (v), (v)})
+// the SDK's own trick: a function-like macro shares the typedef's name, so GSize(w, h) builds one
+// and GSize alone is still the type
+#define GSize(w, h) ((GSize){(w), (h)})
 GRect grect_inset(GRect rect, GEdgeInsets insets);
 GPoint grect_center_point(const GRect *rect);
 
@@ -130,6 +133,16 @@ bool property_animation_from(PropertyAnimation *property_animation, void *value,
                              bool set);
 bool property_animation_to(PropertyAnimation *property_animation, void *value, size_t size,
                            bool set);
+
+// bitmaps, which only the colour test build's dithered background uses
+// Mirrored from the SDK's app-facing declarations: the rect goes by value, as utility.c passes it
+typedef struct GBitmap GBitmap;
+typedef enum { GBitmapFormat1Bit, GBitmapFormat8Bit } GBitmapFormat;
+GBitmap *gbitmap_create_blank(GSize size, GBitmapFormat format);
+void gbitmap_destroy(GBitmap *bitmap);
+uint8_t *gbitmap_get_data(const GBitmap *bitmap);
+uint16_t gbitmap_get_bytes_per_row(const GBitmap *bitmap);
+void graphics_draw_bitmap_in_rect(GContext *ctx, const GBitmap *bitmap, GRect rect);
 
 // clicks
 typedef struct ClickRecognizer *ClickRecognizerRef;

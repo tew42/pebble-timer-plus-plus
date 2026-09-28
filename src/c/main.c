@@ -548,6 +548,25 @@ static void prv_down_click_handler(ClickRecognizerRef recognizer, void *ctx) {
   layer_mark_dirty(main_data.layer);
 }
 
+#if COLOR_TEST && !defined(PBL_BW)
+// How long up or down is held to switch the colour test's band or background
+#define COLOR_TEST_HOLD_MS 500
+
+// Hold up: the band's shading step
+static void prv_color_test_band_handler(ClickRecognizerRef recognizer, void *ctx) {
+  prv_idle_seen();
+  drawing_color_test_band();
+  layer_mark_dirty(main_data.layer);
+}
+
+// Hold down: the centre and the background
+static void prv_color_test_surround_handler(ClickRecognizerRef recognizer, void *ctx) {
+  prv_idle_seen();
+  drawing_color_test_surround();
+  layer_mark_dirty(main_data.layer);
+}
+#endif
+
 // Click configuration provider
 static void prv_click_config_provider(void *ctx) {
   window_single_click_subscribe(BUTTON_ID_BACK, prv_back_click_handler);
@@ -560,6 +579,14 @@ static void prv_click_config_provider(void *ctx) {
                               NULL);
   window_single_repeating_click_subscribe(BUTTON_ID_DOWN, BUTTON_HOLD_REPEAT_MS,
                                           prv_down_click_handler);
+#if COLOR_TEST && !defined(PBL_BW)
+  // A long click turns off the repeat on its button: click.c starts the hold-to-repeat timer only
+  // where there is no long click, and dispatches the single click on release instead of press.
+  // So in this build a length is dialled one press at a time.
+  window_long_click_subscribe(BUTTON_ID_UP, COLOR_TEST_HOLD_MS, prv_color_test_band_handler, NULL);
+  window_long_click_subscribe(BUTTON_ID_DOWN, COLOR_TEST_HOLD_MS, prv_color_test_surround_handler,
+                              NULL);
+#endif
 }
 
 // AppTimer callback

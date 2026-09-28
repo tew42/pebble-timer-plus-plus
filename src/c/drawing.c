@@ -229,6 +229,16 @@ static const uint32_t color_test_palette[] = {
     0x55FFFF, 0x55AAFF, 0x5555FF, 0xAA55FF, 0xFF55FF, 0xFF55AA,
 };
 static int8_t color_test_index = -1; //< Into the palette, or -1 until the first step
+static uint8_t color_test_band_step = 2; //< How many steps below the accent the band is shaded
+static uint8_t color_test_surround = 0;  //< Bit 0 whitens the centre, the rest picks the background
+static GBitmap *color_test_dither = NULL; //< The dithered background's 2x2 tile, made when needed
+
+// The backgrounds the test can put behind the ring, the shipped one first
+enum { ColorTestBackGray, ColorTestBackBlack, ColorTestBackDither, ColorTestBackCount };
+
+// Defined with the rest of the palette code further down
+static GColor prv_shift(GColor color, int8_t step);
+static GColor prv_band_shade(GColor color, GColor back);
 
 // The accent to draw: the one stepped to, or the configured one until something has been
 static uint32_t prv_color_test_rgb(bool chrono) {
@@ -263,6 +273,103 @@ void drawing_color_test_step(int8_t step) {
     }
   }
   color_test_index = (int8_t)((color_test_index + step + count) % count);
+}
+
+// Switch the band between two steps below the accent and one
+void drawing_color_test_band(void) { color_test_band_step = (color_test_band_step == 2) ? 1 : 2; }
+
+// Step to the next pairing of centre and background
+void drawing_color_test_surround(void) {
+  color_test_surround = (uint8_t)((color_test_surround + 1) % (2 * ColorTestBackCount));
+}
+
+// The variant on screen, for the footer
+static char *prv_color_test_state(void) {
+  static const char *const backs[ColorTestBackCount] = {"gy", "bk", "di"};
+  static char state[20];
+  snprintf(state, sizeof(state), "b%u %s %s", (unsigned int)color_test_band_step,
+           (color_test_surround & 1) ? "wh" : "sh", backs[color_test_surround >> 1]);
+  return state;
+}
+
+// The colour the band has to stay clear of: the background, or for the dither the gray in it
+static GColor prv_color_test_back_color(void) {
+  return ((color_test_surround >> 1) == ColorTestBackBlack) ? GColorBlack : GColorDarkGray;
+}
+
+// Put the test's variants over the shipped palette
+static void prv_color_test_palette(GColor accent) {
+  if (color_test_surround & 1) {
+    drawing_data.mid_color = GColorWhite;
+  }
+  const GColor back = prv_color_test_back_color();
+  drawing_data.band_color = prv_band_shade(accent, back);
+  if (color_test_band_step == 1) {
+    // prv_band_shade's own rule with the one step tried first: clear of the accent and the back
+    static const int8_t steps[] = {-1, -2, 1, 2};
+    for (uint8_t ii = 0; ii < ARRAY_LENGTH(steps); ii++) {
+      const GColor shaded = prv_shift(accent, steps[ii]);
+      if (shaded.argb != accent.argb && shaded.argb != back.argb) {
+        drawing_data.band_color = shaded;
+        return;
+      }
+    }
+  }
+}
+
+// Tile the dithered background over a rect
+// Dark red, dark green, dark blue and dark gray: a neutral which averages out darker than the
+// gray alone, and one no single colour in the palette gives.
+static void prv_color_test_fill_dither(GContext *ctx, GRect rect) {
+  if (!color_test_dither) {
+    color_test_dither = gbitmap_create_blank(GSize(2, 2), GBitmapFormat8Bit);
+    if (color_test_dither) {
+      uint8_t *data = gbitmap_get_data(color_test_dither);
+      const uint16_t row = gbitmap_get_bytes_per_row(color_test_dither);
+      data[0] = GColorFromHEX(0x550000).argb;
+      data[1] = GColorFromHEX(0x005500).argb;
+      data[row] = GColorFromHEX(0x000055).argb;
+      data[row + 1] = GColorFromHEX(0x555555).argb;
+    }
+  }
+  if (!color_test_dither) {
+    // no room for the tile: the shipped gray, rather than a ring with no background at all
+    graphics_context_set_fill_color(ctx, GColorDarkGray);
+    graphics_fill_rect(ctx, rect, 0, GCornerNone);
+    return;
+  }
+  graphics_draw_bitmap_in_rect(ctx, color_test_dither, rect);
+}
+
+// Draw the ring over a test background, or leave it to the shipped path for the shipped one
+// The shipped ring fills the screen with the accent and covers what the arc has not reached. A
+// dither cannot be drawn as a wedge, so this goes the other way about: background everywhere,
+// then the arc and the band over it. Both reach the screen's corners for the same reason the
+// covering does, the square being sized to the screen's half diagonal.
+// @return True if the ring has been drawn here
+static bool prv_color_test_ring(GContext *ctx, GRect screen, GRect square, int32_t radius,
+                                int16_t solid_angle, int16_t band_angle) {
+  const uint8_t back = color_test_surround >> 1;
+  if (back == ColorTestBackGray) {
+    return false;
+  }
+  if (back == ColorTestBackBlack) {
+    graphics_context_set_fill_color(ctx, GColorBlack);
+    graphics_fill_rect(ctx, screen, 0, GCornerNone);
+  } else {
+    prv_color_test_fill_dither(ctx, screen);
+  }
+  if (solid_angle > 0) {
+    graphics_context_set_fill_color(ctx, drawing_data.ring_color);
+    graphics_fill_radial(ctx, square, GOvalScaleModeFillCircle, radius, 0,
+                         RING_ANGLE_TRIG(solid_angle));
+  }
+  if (band_angle != solid_angle) {
+    graphics_context_set_fill_color(ctx, drawing_data.band_color);
+    graphics_fill_radial(ctx, square, GOvalScaleModeFillCircle, radius,
+                         RING_ANGLE_TRIG(solid_angle), RING_ANGLE_TRIG(band_angle));
+  }
+  return true;
 }
 
 #endif
@@ -312,6 +419,12 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
   bounds.origin.y += FOOTER_Y_OFFSET;
   bounds.size.w = CIRCLE_RADIUS * 2;
   bounds.size.h = CIRCLE_RADIUS - FOOTER_Y_OFFSET;
+#if COLOR_TEST && !defined(PBL_BW)
+  // the colour test build names the variant on screen in place of the finish time
+  graphics_draw_text(ctx, prv_color_test_state(), scl_get_font(ScalableFontFooter), bounds,
+                     GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+  return;
+#endif
   // calculate text
   char buff[10];
   // a split is the one place the millisecond the clock keeps underneath is worth reading -- a
@@ -512,6 +625,9 @@ static void prv_palette_update(void) {
   drawing_data.ring_color = accent;
   drawing_data.mid_color = prv_shade(accent, 2);
   drawing_data.band_color = prv_band_shade(accent, BACK_COLOR);
+#if COLOR_TEST
+  prv_color_test_palette(accent);
+#endif
 #endif
 }
 
@@ -521,7 +637,7 @@ static void prv_render_progress_ring(GContext *ctx, GRect bounds) {
   // calculate ring bounds size
   int32_t gr_angle = atan2_lookup(bounds.size.h, bounds.size.w);
   int32_t radius = (int32_t)bounds.size.h * TRIG_MAX_RATIO / sin_lookup(gr_angle) / 2 + PADDING;
-#ifdef PBL_BW
+#if defined(PBL_BW) || COLOR_TEST
   // captured before bounds is reshaped into the ring's square, for the dither pass below
   const GRect screen = bounds;
 #endif
@@ -544,6 +660,11 @@ static void prv_render_progress_ring(GContext *ctx, GRect bounds) {
                          TRIG_MAX_ANGLE);
   }
 #else
+#if COLOR_TEST
+  if (prv_color_test_ring(ctx, screen, bounds, radius, solid_angle, band_angle)) {
+    return;
+  }
+#endif
   if (band_angle != solid_angle) {
     graphics_context_set_fill_color(ctx, drawing_data.band_color);
     graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius,
@@ -837,5 +958,11 @@ void drawing_terminate(void) {
 #if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
   // the only thing drawing_initialize allocates; the rest is system fonts it does not own
   fonts_unload_custom_font(drawing_data.time_font);
+#endif
+#if COLOR_TEST && !defined(PBL_BW)
+  if (color_test_dither) {
+    gbitmap_destroy(color_test_dither);
+    color_test_dither = NULL;
+  }
 #endif
 }
