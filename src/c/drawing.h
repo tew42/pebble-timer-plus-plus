@@ -11,6 +11,16 @@
 #pragma once
 #include <pebble.h>
 
+//! Build switch for the colour test: 0 for a release, 1 (here or as -DCOLOR_TEST=1) for the test
+//! In the test build, up and down on a running timer step through the thirty accents the
+//! configuration page offers instead of peeking, and the header names the one on screen by its hex
+//! where it would otherwise say Timer. It is there to compare accents on the watch, against the
+//! same ring in the same light, without a trip to the phone between each one. It is not for
+//! release, because it takes the peek away. A watch with no colour screen builds it unchanged.
+#ifndef COLOR_TEST
+#define COLOR_TEST 0
+#endif
+
 //! Hop the selected digits, and stretch the focus box after them
 //! Both are displacements the render adds on top, not changes to the rects the layout owns, so a
 //! layout which is moving those rects carries on doing it while the hop rides over it. The next
@@ -32,6 +42,14 @@ void drawing_stop_reset_animation(void);
 //! own. Exposed rather than recomputed in main.c so the two cannot drift apart.
 //! @return The ring radius in pixels, scaled for the display
 int16_t drawing_ring_radius(void);
+
+#if COLOR_TEST && !defined(PBL_BW)
+//! Step the colour test to the next or previous accent, in the configuration page's order
+//! The first step starts from the configured timer accent, so it lands next to the colour already
+//! in use rather than at the top of the list.
+//! @param step +1 for the next accent, -1 for the previous
+void drawing_color_test_step(int8_t step);
+#endif
 
 //! Render everything to the screen
 //! @param layer The layer being rendered onto

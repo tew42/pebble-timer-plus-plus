@@ -213,6 +213,60 @@ static void prv_render_focus_layer(GContext *ctx) {
   prv_fill_ring_tone(ctx, grect_inset(box, GEdgeInsets1(drawing_data.focus_inset)));
 }
 
+#if COLOR_TEST && !defined(PBL_BW)
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Colour Test
+//
+
+// The accents the configuration page offers, in the order its picker lays them out: the hue
+// wheel at full strength, then lightened. A copy of config.json's layout, which is fine for a test
+// build and would not be for anything shipped.
+static const uint32_t color_test_palette[] = {
+    0xFF0000, 0xFF5500, 0xFFAA00, 0xFFFF00, 0xAAFF00, 0x55FF00,
+    0x00FF00, 0x00FF55, 0x00FFAA, 0x00FFFF, 0x00AAFF, 0x0055FF,
+    0x0000FF, 0x5500FF, 0xAA00FF, 0xFF00FF, 0xFF00AA, 0xFF0055,
+    0xFF5555, 0xFFAA55, 0xFFFF55, 0xAAFF55, 0x55FF55, 0x55FFAA,
+    0x55FFFF, 0x55AAFF, 0x5555FF, 0xAA55FF, 0xFF55FF, 0xFF55AA,
+};
+static int8_t color_test_index = -1; //< Into the palette, or -1 until the first step
+
+// The accent to draw: the one stepped to, or the configured one until something has been
+static uint32_t prv_color_test_rgb(bool chrono) {
+  if (color_test_index < 0) {
+    return settings_accent_rgb(chrono);
+  }
+  return color_test_palette[color_test_index];
+}
+
+// The accent on screen, as the configuration page labels its swatch
+static char *prv_color_test_label(void) {
+  // room for any uint32_t, so no compiler has a truncation to warn about
+  static char label[9];
+  snprintf(label, sizeof(label), "%06x",
+           (unsigned int)(prv_color_test_rgb(drawing_data.accent_chrono) & 0xFFFFFF));
+  return label;
+}
+
+// Step to the next or previous accent
+void drawing_color_test_step(int8_t step) {
+  const int8_t count = (int8_t)ARRAY_LENGTH(color_test_palette);
+  if (color_test_index < 0) {
+    const uint32_t configured = settings_accent_rgb(false);
+    for (int8_t ii = 0; ii < count; ii++) {
+      if (color_test_palette[ii] == configured) {
+        color_test_index = ii;
+      }
+    }
+    if (color_test_index < 0) {
+      color_test_index = 0; // a stored colour the page no longer offers: start at the top
+      return;
+    }
+  }
+  color_test_index = (int8_t)((color_test_index + step + count) % count);
+}
+
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Sub Texts
 //
@@ -235,10 +289,16 @@ static void prv_render_header_text(GContext *ctx, GRect bounds) {
     buff = "Split";
   } else if (main_is_peeking()) {
     buff = "Peek";
+#if COLOR_TEST && !defined(PBL_BW)
+  } else {
+    // the colour test build names the accent on screen where the mode would be
+    buff = prv_color_test_label();
+#else
   } else if (timer_is_chrono()) {
     buff = "Chrono";
   } else {
     buff = "Timer";
+#endif
   }
   graphics_draw_text(ctx, buff, scl_get_font(ScalableFontLabel), bounds, GTextOverflowModeFill,
                      GTextAlignmentCenter, NULL);
@@ -444,7 +504,11 @@ static void prv_palette_update(void) {
   if (timer_get_value_ms() > 0 || drawing_data.progress_angle == 0) {
     drawing_data.accent_chrono = timer_shows_run();
   }
+#if COLOR_TEST
+  const GColor accent = GColorFromHEX(prv_color_test_rgb(drawing_data.accent_chrono));
+#else
   const GColor accent = GColorFromHEX(settings_accent_rgb(drawing_data.accent_chrono));
+#endif
   drawing_data.ring_color = accent;
   drawing_data.mid_color = prv_shade(accent, 2);
   drawing_data.band_color = prv_band_shade(accent, BACK_COLOR);

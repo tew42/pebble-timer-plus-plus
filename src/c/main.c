@@ -385,7 +385,16 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *ctx) {
     return;
   }
   if (!timer_is_paused()) {
+#if COLOR_TEST && !defined(PBL_BW)
+    // the colour test build: a running timer steps to the previous accent instead of peeking
+    if (timer_is_chrono()) {
+      prv_reveal_exact_time();
+    } else {
+      drawing_color_test_step(-1);
+    }
+#else
     prv_reveal_exact_time();
+#endif
     drawing_update();
     layer_mark_dirty(main_data.layer);
     return;
@@ -516,7 +525,16 @@ static void prv_down_click_handler(ClickRecognizerRef recognizer, void *ctx) {
     return;
   }
   if (!timer_is_paused()) {
+#if COLOR_TEST && !defined(PBL_BW)
+    // the colour test build: a running timer steps to the next accent instead of peeking
+    if (timer_is_chrono()) {
+      prv_reveal_exact_time();
+    } else {
+      drawing_color_test_step(1);
+    }
+#else
     prv_reveal_exact_time();
+#endif
     drawing_update();
     layer_mark_dirty(main_data.layer);
     return;

@@ -25,7 +25,7 @@ Everything it builds is gitignored. A green run is every test plus a syntax pass
 | `ringtest`, `shadetest`, `flicker`, `convention` | the progress ring's geometry and shading |
 | `glyphtest`, `layouttest` | `text_render.c`'s glyphs and layout |
 | `jstest` | the Clay configuration page: its options against `settings.h`'s bounds, its palettes, and that every swatch is labelled with its hex and named |
-| `syntax.sh` | `main.c`, `drawing.c` and `animation.c` compiled for every platform, both sides of `PBL_TOUCH` |
+| `syntax.sh` | `main.c`, `drawing.c` and `animation.c` compiled for every platform, both sides of `PBL_TOUCH`, and again as the `COLOR_TEST` build |
 
 ## Three things it cannot do
 
