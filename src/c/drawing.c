@@ -361,15 +361,18 @@ static void prv_color_test_dither_band(GContext *ctx) {
 
 // Tile the dithered background over a rect
 // Dark red, dark green, dark blue and dark gray: a neutral which averages out darker than the
-// gray alone, and one no single colour in the palette gives.
+// gray alone, and one no single colour in the palette gives. The four are far from equally
+// bright -- green and gray each give several times the light of red or blue -- so the bright pair
+// sits on a diagonal, where it makes a one pixel checkerboard. In one column it made the
+// background a grating of bright and dark columns two pixels apart.
 static void prv_color_test_fill_dither(GContext *ctx, GRect rect) {
   if (!color_test_dither) {
     color_test_dither = gbitmap_create_blank(GSize(2, 2), GBitmapFormat8Bit);
     if (color_test_dither) {
       uint8_t *data = gbitmap_get_data(color_test_dither);
       const uint16_t row = gbitmap_get_bytes_per_row(color_test_dither);
-      data[0] = GColorFromHEX(0x550000).argb;
-      data[1] = GColorFromHEX(0x005500).argb;
+      data[0] = GColorFromHEX(0x005500).argb;       // green   red
+      data[1] = GColorFromHEX(0x550000).argb;       // blue    gray
       data[row] = GColorFromHEX(0x000055).argb;
       data[row + 1] = GColorFromHEX(0x555555).argb;
     }
