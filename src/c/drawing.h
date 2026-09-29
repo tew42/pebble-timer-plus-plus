@@ -14,11 +14,13 @@
 //! Build switch for the colour test: 0 for a release, 1 (here or as -DCOLOR_TEST=1) for the test
 //! In the test build, up and down on a running timer step through the thirty accents the
 //! configuration page offers instead of peeking, and the header names the one on screen by its hex
-//! where it would otherwise say Timer. Holding up switches the band between two shading steps
-//! below the accent, as shipped, and one; holding down steps through the centre (shaded as
+//! where it would otherwise say Timer. Holding up steps the band from two shading steps below the
+//! accent, as shipped, to one and a half (a checkerboard of the two), to one; holding down steps
+//! through the centre (shaded as
 //! shipped, or white) against the background (dark gray as shipped, black, or a 2x2 dither of
 //! dark red, dark green, dark blue and dark gray). The footer names the variant on screen in place
-//! of the finish time: "b2 sh gy" is the band's step, then sh or wh, then gy, bk or di.
+//! of the finish time: "b2 sh gy" is the band's step (b2, b1.5 or b1), then sh or wh, then gy, bk
+//! or di.
 //! It is there to compare accents on the watch, against the same ring in the same light, without
 //! a trip to the phone between each one. It is not for release: it takes the peek away, and the
 //! holds stop up and down repeating while held, so a length is dialled a press at a time. A watch
@@ -56,7 +58,7 @@ int16_t drawing_ring_radius(void);
 //! @param step +1 for the next accent, -1 for the previous
 void drawing_color_test_step(int8_t step);
 
-//! Switch the band between two shading steps below the accent, as shipped, and one
+//! Step the band from two shading steps below the accent, as shipped, to one and a half, to one
 void drawing_color_test_band(void);
 
 //! Step to the next pairing of centre and background

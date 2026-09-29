@@ -552,7 +552,7 @@ static void prv_down_click_handler(ClickRecognizerRef recognizer, void *ctx) {
 // How long up or down is held to switch the colour test's band or background
 #define COLOR_TEST_HOLD_MS 500
 
-// Hold up: the band's shading step
+// Hold up: the band's shading step, two to one and a half to one
 static void prv_color_test_band_handler(ClickRecognizerRef recognizer, void *ctx) {
   prv_idle_seen();
   drawing_color_test_band();

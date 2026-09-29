@@ -229,7 +229,8 @@ static const uint32_t color_test_palette[] = {
     0x55FFFF, 0x55AAFF, 0x5555FF, 0xAA55FF, 0xFF55FF, 0xFF55AA,
 };
 static int8_t color_test_index = -1; //< Into the palette, or -1 until the first step
-static uint8_t color_test_band_step = 2; //< How many steps below the accent the band is shaded
+static uint8_t color_test_band_halves = 4; //< The band's shade below the accent in half steps: 4, 3, 2
+static GColor color_test_band_pair[2];     //< The one step shade and the two step one, for the 1.5
 static uint8_t color_test_surround = 0;  //< Bit 0 whitens the centre, the rest picks the background
 static GBitmap *color_test_dither = NULL; //< The dithered background's 2x2 tile, made when needed
 
@@ -275,8 +276,10 @@ void drawing_color_test_step(int8_t step) {
   color_test_index = (int8_t)((color_test_index + step + count) % count);
 }
 
-// Switch the band between two steps below the accent and one
-void drawing_color_test_band(void) { color_test_band_step = (color_test_band_step == 2) ? 1 : 2; }
+// Step the band from two steps below the accent to one and a half, to one, and round again
+void drawing_color_test_band(void) {
+  color_test_band_halves = (color_test_band_halves > 2) ? (uint8_t)(color_test_band_halves - 1) : 4;
+}
 
 // Step to the next pairing of centre and background
 void drawing_color_test_surround(void) {
@@ -285,9 +288,10 @@ void drawing_color_test_surround(void) {
 
 // The variant on screen, for the footer
 static char *prv_color_test_state(void) {
+  static const char *const bands[] = {"b1", "b1.5", "b2"}; //< by half steps, from two
   static const char *const backs[ColorTestBackCount] = {"gy", "bk", "di"};
   static char state[20];
-  snprintf(state, sizeof(state), "b%u %s %s", (unsigned int)color_test_band_step,
+  snprintf(state, sizeof(state), "%s %s %s", bands[color_test_band_halves - 2],
            (color_test_surround & 1) ? "wh" : "sh", backs[color_test_surround >> 1]);
   return state;
 }
@@ -303,18 +307,57 @@ static void prv_color_test_palette(GColor accent) {
     drawing_data.mid_color = GColorWhite;
   }
   const GColor back = prv_color_test_back_color();
-  drawing_data.band_color = prv_band_shade(accent, back);
-  if (color_test_band_step == 1) {
-    // prv_band_shade's own rule with the one step tried first: clear of the accent and the back
-    static const int8_t steps[] = {-1, -2, 1, 2};
-    for (uint8_t ii = 0; ii < ARRAY_LENGTH(steps); ii++) {
-      const GColor shaded = prv_shift(accent, steps[ii]);
-      if (shaded.argb != accent.argb && shaded.argb != back.argb) {
-        drawing_data.band_color = shaded;
-        return;
+  const GColor two = prv_band_shade(accent, back);
+  // prv_band_shade's own rule with the one step tried first: clear of the accent and the back
+  GColor one = two;
+  static const int8_t steps[] = {-1, -2, 1, 2};
+  for (uint8_t ii = 0; ii < ARRAY_LENGTH(steps); ii++) {
+    const GColor shaded = prv_shift(accent, steps[ii]);
+    if (shaded.argb != accent.argb && shaded.argb != back.argb) {
+      one = shaded;
+      break;
+    }
+  }
+  // one and a half is drawn as one, and prv_color_test_dither_band turns half of it into two
+  drawing_data.band_color = (color_test_band_halves == 4) ? two : one;
+  color_test_band_pair[0] = one;
+  color_test_band_pair[1] = two;
+}
+
+// Turn the one step band into a checkerboard of the one step shade and the two step one
+// A wedge cannot be filled with a pattern, so this goes over the finished ring in the frame
+// buffer, after the band and before the centre. It swaps only pixels which are exactly the one
+// step shade, so whatever the fill blended at the band's edges stays as a one step band would
+// have it. Nothing else on the ring can be that shade: an offered accent has a channel at full,
+// so its one step shade has one at aa, and no background colour does. The exception is a pixel
+// the fill happens to blend to it along the seam at the top, where the arc meets the background,
+// and that is at most one pixel wide between two dark shades.
+static void prv_color_test_dither_band(GContext *ctx) {
+  const uint8_t one = color_test_band_pair[0].argb;
+  const uint8_t two = color_test_band_pair[1].argb;
+  if (color_test_band_halves != 3 || !drawing_data.show_band || one == two) {
+    return;
+  }
+  GBitmap *frame = graphics_capture_frame_buffer(ctx);
+  if (!frame) {
+    return; // the band stays at one step for this frame
+  }
+  const GRect bounds = gbitmap_get_bounds(frame);
+  const int16_t right = bounds.origin.x + bounds.size.w - 1;
+  for (int16_t y = bounds.origin.y; y < bounds.origin.y + bounds.size.h; y++) {
+    const GBitmapDataRowInfo row = gbitmap_get_data_row_info(frame, (uint16_t)y);
+    // data is column 0 of the row, and min_x..max_x the valid part of it -- ragged on a round
+    // screen. max_x may run past the bitmap's width for speed, as the firmware's own note says,
+    // so the bounds cap it.
+    const int16_t first = (row.min_x > bounds.origin.x) ? row.min_x : bounds.origin.x;
+    const int16_t last = (row.max_x < right) ? row.max_x : right;
+    for (int16_t x = first; x <= last; x++) {
+      if (((x + y) & 1) && row.data[x] == one) {
+        row.data[x] = two;
       }
     }
   }
+  graphics_release_frame_buffer(ctx, frame);
 }
 
 // Tile the dithered background over a rect
@@ -420,8 +463,10 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
   bounds.size.w = CIRCLE_RADIUS * 2;
   bounds.size.h = CIRCLE_RADIUS - FOOTER_Y_OFFSET;
 #if COLOR_TEST && !defined(PBL_BW)
-  // the colour test build names the variant on screen in place of the finish time
-  graphics_draw_text(ctx, prv_color_test_state(), scl_get_font(ScalableFontFooter), bounds,
+  // the colour test build names the variant on screen in place of the finish time. In the header's
+  // font rather than the footer's: on emery and gabbro the footer is Bebas, which package.json
+  // ships cut down to [0-9:.], so every letter here would come from the firmware's small fallback
+  graphics_draw_text(ctx, prv_color_test_state(), scl_get_font(ScalableFontLabel), bounds,
                      GTextOverflowModeFill, GTextAlignmentCenter, NULL);
   return;
 #endif
@@ -848,6 +893,9 @@ void drawing_render(Layer *layer, GContext *ctx) {
   // this is actually the ring, which is then covered up with the background
   prv_fill_ring_tone(ctx, bounds);
   prv_render_progress_ring(ctx, bounds);
+#if COLOR_TEST && !defined(PBL_BW)
+  prv_color_test_dither_band(ctx);
+#endif
   // draw main circle
   graphics_context_set_fill_color(ctx, drawing_data.mid_color);
   graphics_fill_circle(ctx, grect_center_point(&bounds), CIRCLE_RADIUS);

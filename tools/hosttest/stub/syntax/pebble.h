@@ -134,7 +134,7 @@ bool property_animation_from(PropertyAnimation *property_animation, void *value,
 bool property_animation_to(PropertyAnimation *property_animation, void *value, size_t size,
                            bool set);
 
-// bitmaps, which only the colour test build's dithered background uses
+// bitmaps and the frame buffer, which only the colour test build's dithers use
 // Mirrored from the SDK's app-facing declarations: the rect goes by value, as utility.c passes it
 typedef struct GBitmap GBitmap;
 typedef enum { GBitmapFormat1Bit, GBitmapFormat8Bit } GBitmapFormat;
@@ -143,6 +143,15 @@ void gbitmap_destroy(GBitmap *bitmap);
 uint8_t *gbitmap_get_data(const GBitmap *bitmap);
 uint16_t gbitmap_get_bytes_per_row(const GBitmap *bitmap);
 void graphics_draw_bitmap_in_rect(GContext *ctx, const GBitmap *bitmap, GRect rect);
+GRect gbitmap_get_bounds(const GBitmap *bitmap);
+typedef struct {
+  uint8_t *data;
+  int16_t min_x;
+  int16_t max_x;
+} GBitmapDataRowInfo;
+GBitmapDataRowInfo gbitmap_get_data_row_info(const GBitmap *bitmap, uint16_t y);
+GBitmap *graphics_capture_frame_buffer(GContext *ctx);
+bool graphics_release_frame_buffer(GContext *ctx, GBitmap *buffer);
 
 // clicks
 typedef struct ClickRecognizer *ClickRecognizerRef;
