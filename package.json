@@ -47,16 +47,6 @@
                         "gabbro"
                     ],
                     "type": "bitmap"
-                },
-                {
-                    "characterRegex": "[0-9:.]",
-                    "file": "fonts/bebas_neue_regular.ttf",
-                    "name": "BEBAS_FONT_35",
-                    "targetPlatforms": [
-                        "emery",
-                        "gabbro"
-                    ],
-                    "type": "font"
                 }
             ]
         },

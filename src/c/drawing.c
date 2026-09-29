@@ -120,7 +120,6 @@ static struct {
   bool laid_out;                       //< Whether a layout has been computed at all yet
   GRect text_fields[TEXT_FIELD_COUNT]; //< The number of text fields (hr : min : sec)
   GRect focus_field;                   //< The selection field layer
-  GFont time_font;                     //< The digits font, where the platform carries one
   int16_t focus_inset;                 //< Shrinks the selection field while select is held
   bool reset_hint;                     //< Whether that shrink is up, so it is put away once
   int16_t bounce_digits;               //< How far the hopping digits are displaced, zero at rest
@@ -736,17 +735,12 @@ void drawing_initialize(Layer *layer) {
   // set fonts
   GFont font_gothic_24_bold = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
   GFont font_gothic_28_bold = fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD);
-  // The digits font is drawn only on the two platforms below, and package.json now ships the
-  // resource only to them, so RESOURCE_ID_BEBAS_FONT_35 does not exist anywhere else and the
-  // guard is required rather than an optimisation. It is worth having on its own account: aplite
-  // allows 24k for code and heap together, and it was loading and holding a font it never drew.
-  // Elsewhere the two members below are set to the system font rather than left null. Nothing
-  // reads them there, and a real font cannot be dereferenced into trouble if that ever changes.
-#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
-  drawing_data.time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_BEBAS_FONT_35));
-#else
-  drawing_data.time_font = font_gothic_28_bold;
-#endif
+  // The footer is drawn a size up on the two large screens, so it keeps the share of the height it
+  // has everywhere else: Bitham 34's digits stand 24 px on emery where Gothic 28's stand 18, which
+  // is 10.5% of the screen against basalt's 10.7%. It is a numbers font, [0-9:.,-] and nothing
+  // more, which is everything the footer draws -- a clock and a split's fraction -- but a letter
+  // put there would come out in the firmware's small fallback.
+  GFont font_bitham_34_numbers = fonts_get_system_font(FONT_KEY_BITHAM_34_MEDIUM_NUMBERS);
   // clang-format off
   scl_set_fonts(ScalableFontLabel, {
     .o = font_gothic_24_bold, // Everything else
@@ -755,8 +749,8 @@ void drawing_initialize(Layer *layer) {
   });
   scl_set_fonts(ScalableFontFooter, {
     .o = font_gothic_28_bold, // Everything else
-    .e = drawing_data.time_font, // Emery (Pebble Time 2*)
-    .g = drawing_data.time_font, // Gabbro (Pebble Round 2)
+    .e = font_bitham_34_numbers, // Emery (Pebble Time 2*)
+    .g = font_bitham_34_numbers, // Gabbro (Pebble Round 2)
   });
   // clang-format on
   // seed the accent three; they are chosen per counting direction, and the first frame is
@@ -770,8 +764,5 @@ void drawing_initialize(Layer *layer) {
 // Destroy the singleton drawing data
 void drawing_terminate(void) {
   animation_stop_all();
-#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
-  // the only thing drawing_initialize allocates; the rest is system fonts it does not own
-  fonts_unload_custom_font(drawing_data.time_font);
-#endif
+  // nothing else to give back: every font is a system font, which the app does not own
 }

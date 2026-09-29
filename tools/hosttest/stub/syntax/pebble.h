@@ -162,15 +162,11 @@ void graphics_draw_text(GContext *ctx, const char *text, GFont font, GRect box,
 GSize graphics_text_layout_get_content_size(const char *text, GFont font, GRect box,
                                             GTextOverflowMode overflow, GTextAlignment alignment);
 
-// fonts and resources
+// fonts
 #define FONT_KEY_GOTHIC_24_BOLD "gothic-24-bold"
 #define FONT_KEY_GOTHIC_28_BOLD "gothic-28-bold"
-#define RESOURCE_ID_BEBAS_FONT_35 1
-typedef struct ResHandle *ResHandle;
-ResHandle resource_get_handle(uint32_t id);
+#define FONT_KEY_BITHAM_34_MEDIUM_NUMBERS "bitham-34-medium-numbers"
 GFont fonts_get_system_font(const char *key);
-GFont fonts_load_custom_font(ResHandle handle);
-void fonts_unload_custom_font(GFont font);
 
 // logging
 // AppLogLevel comes from the base stub; only the macro is sharpened here, so a format string
