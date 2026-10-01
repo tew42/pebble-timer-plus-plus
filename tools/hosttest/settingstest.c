@@ -36,9 +36,12 @@ int main(void) {
   CHECK(stub_outbox_last_key == MESSAGE_KEY_settingsRequest,
         "the request went out under key %u", (unsigned)stub_outbox_last_key);
   CHECK(stub_outbox_size > 0, "an outbox of no size can carry no request");
-  CHECK(stub_inbox_size >= 45,
-        "the inbox holds %u bytes, and the page's four tuples need about 45",
-        (unsigned)stub_inbox_size);
+  // a dictionary larger than the inbox is dropped whole and every setting stops arriving, so the
+  // inbox has to hold one integer tuple, seven bytes of header and four of payload, for every
+  // setting config.json has, plus the dictionary's own byte
+  CHECK(stub_inbox_size >= 1 + CFG_PAGE_SETTINGS * (7 + 4),
+        "the inbox holds %u bytes, and the page's %d settings need %d", (unsigned)stub_inbox_size,
+        CFG_PAGE_SETTINGS, 1 + CFG_PAGE_SETTINGS * (7 + 4));
   printf("  ok: one request out, on a key of its own, through an outbox with room for it\n");
 
   printf("\na phone which is not listening yet gets a few more goes:\n");

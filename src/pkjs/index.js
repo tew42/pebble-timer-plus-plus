@@ -112,11 +112,7 @@ var clay = new Clay(clayConfig, function() {
 
     // The hex a swatch stands for, back out of the decimal Clay writes on it
     function swatchHex(box) {
-        var hex = parseInt(box.getAttribute("data-value"), 10).toString(16);
-        while (hex.length < 6) {
-            hex = "0" + hex;
-        }
-        return hex;
+        return hexOf(box.getAttribute("data-value"));
     }
 
     // Black or white lettering, whichever the swatch can carry
@@ -180,7 +176,7 @@ var clay = new Clay(clayConfig, function() {
         return !!item && parseInt(item.get(), 10) === CONTRAST_HIGH;
     }
 
-    // The hex a picker's value names
+    // The hex a picker's value, or a swatch's decimal, names
     function hexOf(value) {
         var hex = (parseInt(value, 10) & 0xffffff).toString(16);
         while (hex.length < 6) {

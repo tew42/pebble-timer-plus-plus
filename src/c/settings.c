@@ -12,12 +12,14 @@
 #include "utility.h"
 #include <pebble.h>
 
-// AppMessage buffers: five tuples in, one out. A tuple costs seven bytes of header and its
-// payload, so the page's five integers need fifty-six at their widest and the request nine.
-// The margin is smaller than it looks: an inbound dictionary larger than the inbox is dropped
-// whole, with no inbox-dropped handler registered to say so, and a sixth integer setting would
-// need sixty-seven. Grow this with the page.
-#define SETTINGS_INBOX_SIZE 64
+// AppMessage buffers: one tuple in for every setting the configuration page sends, one out to ask
+// for them. A dictionary is a byte of header, then seven bytes of header and the payload for each
+// tuple, and every setting the page sends is an integer, four bytes at its widest. An inbound
+// dictionary larger than the inbox is dropped whole, with no inbox-dropped handler registered to
+// say so, so every setting stops arriving at once: this has to grow with the page, and
+// settingstest counts the page's settings in config.json to hold it to that.
+#define SETTINGS_PAGE_TUPLES 6
+#define SETTINGS_INBOX_SIZE (1 + SETTINGS_PAGE_TUPLES * (7 + 4))
 #define SETTINGS_OUTBOX_SIZE 32
 
 // Persistent storage
@@ -167,9 +169,10 @@ static Cadence prv_cadence(int64_t value_ms) {
 }
 
 // Whether two settings hold the same values
-// Field by field rather than memcmp, because Settings can carry padding between its byte fields and
-// its colors -- it had a byte of it until the contrast mode filled the gap -- and memcmp reads it. That was safe here only by a chain of accidents: the structure is a
-// file-scope object so its padding starts zeroed, prv_persist_read copies named members out of
+// Field by field rather than memcmp, because Settings can carry padding between its byte fields
+// and its colors -- it had a byte of it until the contrast mode filled the gap -- and memcmp reads
+// it. That was safe here only by a chain of accidents: the structure is a file-scope object so
+// its padding starts zeroed, prv_persist_read copies named members out of
 // the blob rather than assigning the whole thing, and a struct assignment happens to carry
 // padding on every toolchain this builds with. Break any one of those -- most easily by reading
 // flash straight into settings_data, where the padding is whatever an older build wrote -- and
@@ -422,7 +425,7 @@ void settings_initialize(void (*on_change)(void)) {
   prv_persist_read();
   app_message_register_inbox_received(prv_inbox_received_handler);
   app_message_register_outbox_failed(prv_outbox_failed_handler);
-  // five integers in from the configuration page, one byte out to ask for them
+  // the page's integers in, one byte out to ask for them
   prv_open_channel();
   requests_left = SETTINGS_REQUEST_RETRIES;
   prv_request_settings();

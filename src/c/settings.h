@@ -51,9 +51,9 @@
 //! Contrast modes, as the configuration page sends them. Regular is the look the app has always
 //! had: dark gray behind the ring and a center shaded up from the accent. High puts black behind
 //! the ring and white in the center, for light the regular mode washes out in. Only colors with a
-//! channel at 00 suit regular and only colors with a channel at ff suit high, so drawing.c moves
-//! an accent into whichever mode is in force. These must match the options in
-//! src/pkjs/config.json.
+//! channel at 00 suit regular and only colors with a channel at ff suit high, so
+//! settings_accent_rgb() moves an accent into whichever mode is in force. These must match the
+//! options in src/pkjs/config.json.
 #define SETTINGS_CONTRAST_REGULAR 0
 #define SETTINGS_CONTRAST_HIGH 1
 
