@@ -134,7 +134,7 @@ typedef enum { APP_LOG_LEVEL_ERROR, APP_LOG_LEVEL_WARNING, APP_LOG_LEVEL_INFO } 
 
 // --- gesture recognizers, signatures copied from PebbleOS applib/ui/recognizer/*.h ---
 // The stub does NOT model the platform's recognition: it records the recognizers an app creates
-// and lets a test fire them. Modelling the 300ms/10px tap rule here would only be testing the
+// and lets a test fire them. Modeling the 300ms/10px tap rule here would only be testing the
 // model. What these cover is our side of the contract -- which recognizer fired, where, and what
 // the app does about it.
 typedef struct Recognizer Recognizer;

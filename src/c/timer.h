@@ -29,7 +29,7 @@ void timer_get_time_parts(uint16_t *hr, uint16_t *min, uint16_t *sec);
 //! Get the milliseconds the digits are not showing, where they are worth showing
 //! A split is the one place the millisecond the clock keeps underneath is worth reading: it is a
 //! reading taken deliberately, of a clock which is still going. A moving reading is too fast to
-//! read, and a time which is being dialled is being written rather than read.
+//! read, and a time which is being dialed is being written rather than read.
 //! @param ms A pointer to where to store the milliseconds, 0 to 999
 //! @return True if a split is being shown, in which case ms was written
 bool timer_get_held_fraction_ms(uint16_t *ms);
@@ -61,7 +61,7 @@ void timer_silence(void);
 bool timer_is_chrono(void);
 
 //! Check whether the time shown is a stopwatch run rather than a timer
-//! Zero counts as a timer: it is where a length is dialled from, and where a stopwatch starts
+//! Zero counts as a timer: it is where a length is dialed from, and where a stopwatch starts
 //! @return True if the shown time is a run which has got somewhere
 bool timer_shows_run(void);
 

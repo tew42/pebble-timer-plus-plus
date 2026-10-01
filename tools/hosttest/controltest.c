@@ -475,7 +475,7 @@ int main(void) {
   printf("  ok: Timer, Chrono, Peek, Split and Alarm, in that order of precedence\n");
   #undef LABEL
 
-  // Dialling the minutes past 59 means an hour, and the carry is the timer's to make: the wrap on
+  // Dialing the minutes past 59 means an hour, and the carry is the timer's to make: the wrap on
   // its own would pass through zero, where a stopwatch run stops being one and the hour would
   // land on a blank timer instead.
   printf("\nthe minutes carry into hours, from either kind of time:\n");
@@ -488,7 +488,7 @@ int main(void) {
   press_up();
   CHECK(timer_get_value_ms() == MSEC_IN_HR, "a timer should carry to 1:00:00, got %lldms",
         (long long)timer_get_value_ms());
-  CHECK(field == FieldMin, "the carry moved the buttons off the minutes they were dialling");
+  CHECK(field == FieldMin, "the carry moved the buttons off the minutes they were dialing");
   step("carried");
   // the same from a stopwatch run of exactly 59 minutes, which used to become an hour long timer
   timer_reset();
@@ -507,7 +507,7 @@ int main(void) {
         "the carry should leave it a run, not a %lldms timer", (long long)timer_get_length_ms());
   CHECK(field == FieldMin, "the carry moved the buttons off the minutes here too");
   step("carried a run");
-  // dialling down still wraps inside the hour rather than borrowing from it
+  // dialing down still wraps inside the hour rather than borrowing from it
   timer_reset();
   field = FieldMin;
   stored = ModeEditMin;
@@ -563,9 +563,9 @@ int main(void) {
   stored = ModeEditHr;
   press_down();
   CHECK(timer_get_value_ms() == 0 && field == FieldMin,
-        "dialling the last hour away should reset and drop to the minutes, got %lldms on %s",
+        "dialing the last hour away should reset and drop to the minutes, got %lldms on %s",
         (long long)timer_get_value_ms(), mode_name[derived()]);
-  printf("  ok: the last hour dialled away lands on the minutes\n");
+  printf("  ok: the last hour dialed away lands on the minutes\n");
 
   // Instant start: the clock is counted from the moment the app came to rest at zero rather than
   // from the moment it was told to go. One row per path through the feature.
@@ -677,7 +677,7 @@ int main(void) {
         "the window opened by a reset should start the stopwatch too, got %lldms",
         (long long)timer_get_value_ms());
 
-  // dialling down through zero is not the app coming to rest at zero: the reset inside
+  // dialing down through zero is not the app coming to rest at zero: the reset inside
   // timer_increment() is the timer's own business and main.c never sees it
   timer_reset();
   LAUNCH(false);
@@ -687,8 +687,8 @@ int main(void) {
   press_down(); // back to nothing
   CHECK(timer_get_value_ms() == 0, "expected to be back at nothing, got %lldms",
         (long long)timer_get_value_ms());
-  CHECK(!instant_due_ms, "dialling to zero must not start a wait under the user's finger");
-  step("dialled to zero");
+  CHECK(!instant_due_ms, "dialing to zero must not start a wait under the user's finger");
+  step("dialed to zero");
 
   // switching the feature off closes an open window, credit and all
   timer_reset();
@@ -778,7 +778,7 @@ int main(void) {
     CHECK(timer_get_value_ms() == 154000, "%d detents moved the clock to %lldms", detents,
           (long long)timer_get_value_ms());
   }
-  // counting down is the same: no peek armed, nothing dialled
+  // counting down is the same: no peek armed, nothing dialed
   timer_reset();
   for (int i = 0; i < 5; i++) { timer_increment(MSEC_IN_MIN, false); }
   timer_toggle_play_pause();
@@ -833,7 +833,7 @@ int main(void) {
   fake_now_ms += IDLE_CLOSE_MS;
   CHECK(idle_tick(), "a stored stopwatch run nobody touched should close");
 
-  // a press only moves the deadline; it does not exempt the timer. A length dialled and then
+  // a press only moves the deadline; it does not exempt the timer. A length dialed and then
   // abandoned is the commonest way this app is left paused in the foreground, so it closes too.
   timer_reset();
   for (int i = 0; i < 5; i++) { timer_increment(MSEC_IN_MIN, false); }
@@ -844,7 +844,7 @@ int main(void) {
   fake_now_ms += IDLE_CLOSE_MS - 1;
   CHECK(!idle_tick(), "the five minutes should run from the press, not the launch");
   fake_now_ms += 1;
-  CHECK(idle_tick(), "a timer dialled and then abandoned should close");
+  CHECK(idle_tick(), "a timer dialed and then abandoned should close");
 
   // and a stopwatch paused mid run is the same: pausing is not working on it
   timer_reset();
@@ -881,7 +881,7 @@ int main(void) {
   fake_now_ms += IDLE_CLOSE_MS;
   CHECK(!idle_tick(), "a silenced alert is still a running clock, so it should stay open");
 
-  // dialled up and back down to nothing: at zero again, and the five minutes run from the last
+  // dialed up and back down to nothing: at zero again, and the five minutes run from the last
   // press rather than from the launch
   timer_reset();
   IDLE_LAUNCH();
@@ -893,7 +893,7 @@ int main(void) {
   fake_now_ms += IDLE_CLOSE_MS - 1;
   CHECK(!idle_tick(), "the five minutes should run from the last press, not the launch");
   fake_now_ms += 1;
-  CHECK(idle_tick(), "dialled back down to nothing, it should close five minutes later");
+  CHECK(idle_tick(), "dialed back down to nothing, it should close five minutes later");
 
   // a reset puts it back at the start, from wherever it was
   timer_reset();

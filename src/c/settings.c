@@ -44,11 +44,11 @@ typedef struct {
   uint8_t minute_above_min;     //< Update every minute above this many minutes, or NEVER
   uint8_t instant_start_sec;    //< Instant start window in seconds, or NEVER for off
   uint8_t contrast;             //< SETTINGS_CONTRAST_REGULAR or SETTINGS_CONTRAST_HIGH
-  uint32_t timer_rgb;           //< Accent colour while counting down
-  uint32_t chrono_rgb;          //< Accent colour while counting up
+  uint32_t timer_rgb;           //< Accent color while counting down
+  uint32_t chrono_rgb;          //< Accent color while counting up
 } Settings;
-// both update modes default to off, so upgrading users see exactly the behaviour they had
-// before, and counting down keeps the colour the app has always had
+// both update modes default to off, so upgrading users see exactly the behavior they had
+// before, and counting down keeps the color the app has always had
 static Settings settings_data = {
     .ten_second_above_sec = SETTINGS_NEVER,
     .minute_above_min = SETTINGS_NEVER,
@@ -222,7 +222,7 @@ static void prv_persist_read(void) {
       prv_validate(stored.instant_start_sec, SETTINGS_INSTANT_START_MIN_SEC,
                    SETTINGS_INSTANT_START_MAX_SEC, settings_data.instant_start_sec);
   settings_data.contrast = prv_validate_contrast(stored.contrast, settings_data.contrast);
-  // any 24 bit value names a colour; GColorFromHEX quantises whatever it is handed
+  // any 24 bit value names a color; GColorFromHEX quantizes whatever it is handed
   settings_data.timer_rgb = stored.timer_rgb & 0xFFFFFF;
   settings_data.chrono_rgb = stored.chrono_rgb & 0xFFFFFF;
 }
@@ -242,9 +242,9 @@ static void prv_persist_store(void) {
 // The length only says that for the two integer types, which is why the type is checked first.
 // For a byte array the length is the size of the array and says nothing about a scalar width, so
 // falling through to the int32 read took four bytes from a payload which may hold fewer -- three
-// being exactly the shape a colour would arrive in, and the read then running one byte past the
+// being exactly the shape a color would arrive in, and the read then running one byte past the
 // tuple inside the inbox buffer. An unreadable tuple now says so instead, and the caller leaves
-// the setting as it found it. Returning a number could not: zero is a legal colour.
+// the setting as it found it. Returning a number could not: zero is a legal color.
 // @param value Where to put the integer, written only when this returns true
 // @return True if the tuple holds something which can be read as an integer
 static bool prv_tuple_int(const Tuple *tuple, int32_t *value) {
@@ -336,7 +336,7 @@ uint8_t settings_masked_second_digits(int64_t value_ms) {
   return (step_ms > MSEC_IN_SEC) ? 1 : 0;
 }
 
-// Get the accent colour for one of the two counting directions
+// Get the accent color for one of the two counting directions
 // Get the instant start window, which is also the largest credit a start will be given
 bool settings_instant_start_ms(uint32_t *window_ms) {
   if (settings_data.instant_start_sec == SETTINGS_NEVER) {

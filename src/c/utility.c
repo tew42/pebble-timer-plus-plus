@@ -13,7 +13,7 @@
 #include "utility.h"
 
 #ifdef PBL_BW
-// The 2x2 dither pattern behind both greys, built on the first call which needs it
+// The 2x2 dither pattern behind both grays, built on the first call which needs it
 // Lazily, so it is allocated during the first render rather than at init, which is exactly when
 // the heap is least likely to have room -- and aplite has 24k of it for code as well. Everything
 // else here allocates through MALLOC, which halts on failure; these did not check at all and
@@ -37,7 +37,7 @@ static GBitmap *prv_dither(GBitmap **slot, bool both) {
   return (*slot);
 }
 
-// Fill GRect with "grey" on Aplite
+// Fill GRect with "gray" on Aplite
 static GBitmap *grey_bmp = NULL;
 void graphics_fill_rect_grey(GContext *ctx, GRect rect) {
   GBitmap *bmp = prv_dither(&grey_bmp, true);
@@ -46,7 +46,7 @@ void graphics_fill_rect_grey(GContext *ctx, GRect rect) {
   }
 }
 
-// OR a lighter "grey" onto a GRect on Aplite
+// OR a lighter "gray" onto a GRect on Aplite
 // Its set pixel is one of the two the pattern above sets, so ORing this over that leaves it alone
 static GBitmap *grey_light_bmp = NULL;
 void graphics_fill_rect_grey_light(GContext *ctx, GRect rect) {
@@ -54,7 +54,7 @@ void graphics_fill_rect_grey_light(GContext *ctx, GRect rect) {
   if (!bmp) {
     return;
   }
-  // OR so the pattern only adds pixels, leaving anything already grey untouched
+  // OR so the pattern only adds pixels, leaving anything already gray untouched
   graphics_context_set_compositing_mode(ctx, GCompOpOr);
   graphics_draw_bitmap_in_rect(ctx, bmp, rect);
   graphics_context_set_compositing_mode(ctx, GCompOpAssign);

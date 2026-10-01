@@ -4,7 +4,7 @@
 // Contains all the drawing code for this app.
 //
 // @author Eric D. Phillips
-// @author Thomas Winkler (tew42) (reduced-frequency display, band, mode colours)
+// @author Thomas Winkler (tew42) (reduced-frequency display, band, mode colors)
 // @date August 29, 2015
 // @bugs No known bugs
 
@@ -63,7 +63,7 @@
 _Static_assert(RING_ANGLE_MAX <= INT16_MAX,
                "a full turn must fit the type the angles are stored in");
 #define PROGRESS_ANI_DURATION ANI_FRAMES(8)
-// The box the digits are sized to fit, as a square centred on the origin and half as tall. The
+// The box the digits are sized to fit, as a square centered on the origin and half as tall. The
 // two differ only in how far inside the ring they sit: editing gives the header and footer room.
 #define MAIN_TEXT_BOUNDS_FOR(r) GRect(-(r), -(r) / 2, (r) * 2, (r))
 #define MAIN_TEXT_BOUNDS MAIN_TEXT_BOUNDS_FOR(CIRCLE_RADIUS - scl_y(42))
@@ -135,12 +135,12 @@ static struct {
 // Focus Layer
 //
 
-// Move one of the laid-out rects to where it belongs, travelling there or arriving outright
+// Move one of the laid-out rects to where it belongs, traveling there or arriving outright
 // A layout has somewhere to travel from only when the fields it is made of are the same ones: when
 // the hours appear or go, the rect they need has no width to grow from and the rects beside them
 // change size as well as place, which reads as a glitch rather than as a move.
 // Either way the new layout replaces whatever was moving these rects before: a layout is a
-// statement about where things belong, so a move towards an older one has nothing left to say.
+// statement about where things belong, so a move toward an older one has nothing left to say.
 static void prv_place_field(GRect *field, GRect to, uint32_t duration, bool snap) {
   if (snap) {
     animation_stop(field);
@@ -170,7 +170,7 @@ static void prv_focus_layer_update_state(GRect bounds, const GRect fields[TEXT_F
                                          bool snap) {
   GRect to;
   if (!timer_is_paused()) {
-    // parked off the right edge, half the height of the seconds and centred on them
+    // parked off the right edge, half the height of the seconds and centered on them
     to = GRect(bounds.size.w, bounds.size.h / 2 - fields[4].size.h / 4, fields[4].size.w,
                fields[4].size.h / 2);
   } else {
@@ -180,8 +180,8 @@ static void prv_focus_layer_update_state(GRect bounds, const GRect fields[TEXT_F
 }
 
 // Fill a rect with the ring's own tone
-// One bit hardware has no third colour to fill with, so it dithers instead. Written once because
-// both callers had it, differing only in that one set the fill colour outside the #ifdef and so
+// One bit hardware has no third color to fill with, so it dithers instead. Written once because
+// both callers had it, differing only in that one set the fill color outside the #ifdef and so
 // set it on the path which ignores it: graphics_fill_rect_grey blits a pattern.
 static void prv_fill_ring_tone(GContext *ctx, GRect rect) {
 #ifdef PBL_BW
@@ -264,7 +264,7 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
     // in timer mode, get time
     time_t end_time = epoch() / MSEC_IN_SEC;
     if (timer_is_paused() && !timer_is_chrono()) {
-      // a length which has been dialled inside an open instant start window will begin credited,
+      // a length which has been dialed inside an open instant start window will begin credited,
       // so it finishes that much sooner than the digits on their own would say
       end_time += (timer_get_display_ms() - main_instant_credit_ms()) / MSEC_IN_SEC;
     }
@@ -378,7 +378,7 @@ static void prv_render_main_text(GContext *ctx) {
 //
 
 #ifndef PBL_BW
-// Shift every channel of a colour by the same amount, clamped
+// Shift every channel of a color by the same amount, clamped
 static GColor prv_shift(GColor color, int8_t step) {
   const int8_t channels[3] = {(int8_t)color.r + step, (int8_t)color.g + step,
                               (int8_t)color.b + step};
@@ -397,10 +397,10 @@ static GColor prv_shift(GColor color, int8_t step) {
 
 // Adopt the accent color for the direction the timer is counting, and shade it for the mode
 // Only a running stopwatch gets the counting up accent: a timer of zero length counts as one by
-// its value alone, but while that length is being set it is a timer, and it is the timer's colour
+// its value alone, but while that length is being set it is a timer, and it is the timer's color
 // which belongs there. A reset holds on to the accent it was counting in until the ring has run
-// down, since the value is zero from the moment the button is released and recolouring an arc
-// which is still collapsing would hand the run that just ended the other direction's colour.
+// down, since the value is zero from the moment the button is released and recoloring an arc
+// which is still collapsing would hand the run that just ended the other direction's color.
 // The two contrast modes then shade it differently. Regular is the look the app has always had,
 // dark gray behind the ring and the center two steps up from the accent, with the band one step
 // down. High puts black behind the ring and white in the center, and takes the band two steps
@@ -410,8 +410,8 @@ static GColor prv_shift(GColor color, int8_t step) {
 static void prv_palette_update(void) {
 #ifndef PBL_BW
   // the accent belongs to what the time on the screen is, not to whether it is moving: a
-  // stopwatch run keeps the counting up colour while it is held, and a timer waiting to be
-  // started keeps the timer's. Zero is a timer, which is where a length is dialled from.
+  // stopwatch run keeps the counting up color while it is held, and a timer waiting to be
+  // started keeps the timer's. Zero is a timer, which is where a length is dialed from.
   // A reset is the one thing which gets ahead of the ring -- the value is zero from the moment
   // the button comes up -- so the accent waits there until the arc has run down.
   if (timer_get_value_ms() > 0 || drawing_data.progress_angle == 0) {

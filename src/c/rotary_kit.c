@@ -224,15 +224,15 @@ static int32_t prv_isqrt(int32_t value) {
     return x;
 }
 
-// Distance from the wheel centre in pixels.
+// Distance from the wheel center in pixels.
 static int32_t prv_radius(int16_t x, int16_t y) {
     const int32_t dx = x - s_cfg.center_x;
     const int32_t dy = y - s_cfg.center_y;
     return prv_isqrt(dx * dx + dy * dy);
 }
 
-// A turn holds its radius; a translation collapses it towards the centre and grows it out the
-// other side. Once the radial change has outrun the arc actually travelled, the gesture is a
+// A turn holds its radius; a translation collapses it toward the center and grows it out the
+// other side. Once the radial change has outrun the arc actually traveled, the gesture is a
 // translation, and rotation stops for the rest of it -- which is what stops a swipe emitting
 // detents on its way across. Measured from where rotation began rather than from Touchdown, so
 // that starting in the dead zone and moving out onto the wheel still turns it.
@@ -523,7 +523,7 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
             // Carry the part-detent across a change of pitch as the fraction it is, rather than
             // as a count of half-degrees. Left alone, a remainder banked at the coarse pitch is
             // most of a detent at the fine one, and the moment the level rose it would be handed
-            // straight back as a burst of steps the finger never travelled.
+            // straight back as a burst of steps the finger never traveled.
             if (s_last_threshold_hd > 0 && threshold_hd != s_last_threshold_hd) {
                 s_accumulated_hd = s_accumulated_hd * threshold_hd / s_last_threshold_hd;
             }

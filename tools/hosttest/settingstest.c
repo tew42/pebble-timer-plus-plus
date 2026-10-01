@@ -94,14 +94,14 @@ int main(void) {
   stub_fail_outbox();
   CHECK(stub_timer_pending, "no retry to cancel");
   settings_terminate();
-  CHECK(stub_timer_cancels == 1, "the pending retry was not cancelled");
+  CHECK(stub_timer_cancels == 1, "the pending retry was not canceled");
   CHECK(!stub_timer_pending, "the retry is still pending after terminate");
   // and terminating with nothing pending cancels nothing
   stub_reset();
   settings_initialize(&on_change);
   settings_terminate();
-  CHECK(stub_timer_cancels == 0, "terminate cancelled a timer it never had");
-  printf("  ok: cancelled when there is one, untouched when there is not\n");
+  CHECK(stub_timer_cancels == 0, "terminate canceled a timer it never had");
+  printf("  ok: canceled when there is one, untouched when there is not\n");
 
   printf("\ninstant start is off until the page says otherwise:\n");
   {
@@ -179,7 +179,7 @@ int main(void) {
 
   // A tuple says what it holds in its type. Its length is a width only for the two integer
   // types; for a byte array it is the size of the array, so taking it for a width read four
-  // bytes out of a payload which may hold three -- exactly the shape a colour arrives in -- and
+  // bytes out of a payload which may hold three -- exactly the shape a color arrives in -- and
   // ran a byte past the tuple inside the inbox buffer.
   printf("\nan inbound tuple is read by its type, not by its length:\n");
   {
@@ -213,25 +213,25 @@ int main(void) {
     CHECK(!prv_tuple_int(&t, &value), "an empty cstring was read as an integer");
     printf("  ok: integers by width, strings parsed, everything else refused\n");
 
-    // and what that means where it matters: an unreadable colour leaves the accent alone rather
+    // and what that means where it matters: an unreadable color leaves the accent alone rather
     // than painting it whatever the bytes past the tuple happened to be
     stub_reset();
     settings_initialize(&on_change);
     settings_data.timer_rgb = SETTINGS_TIMER_RGB_DEFAULT;
     const uint32_t before = settings_data.timer_rgb;
-    Tuple colour = {.type = TUPLE_BYTE_ARRAY, .length = 3, .value = {{.uint32 = 0x00FF0000}}};
+    Tuple color = {.type = TUPLE_BYTE_ARRAY, .length = 3, .value = {{.uint32 = 0x00FF0000}}};
     stub_dict_reset();
-    stub_dict_put(MESSAGE_KEY_timerColor, &colour);
+    stub_dict_put(MESSAGE_KEY_timerColor, &color);
     prv_inbox_received_handler(NULL, NULL);
-    CHECK(settings_data.timer_rgb == before, "an unreadable colour changed the accent to %06lx",
+    CHECK(settings_data.timer_rgb == before, "an unreadable color changed the accent to %06lx",
           (unsigned long)settings_data.timer_rgb);
 
-    // while a colour which is readable still lands
+    // while a color which is readable still lands
     Tuple good = {.type = TUPLE_INT, .length = 4, .value = {{.int32 = 0x0055FF}}};
     stub_dict_reset();
     stub_dict_put(MESSAGE_KEY_timerColor, &good);
     prv_inbox_received_handler(NULL, NULL);
-    CHECK(settings_data.timer_rgb == 0x0055FF, "a readable colour came through as %06lx",
+    CHECK(settings_data.timer_rgb == 0x0055FF, "a readable color came through as %06lx",
           (unsigned long)settings_data.timer_rgb);
     stub_dict_reset();
     settings_terminate();

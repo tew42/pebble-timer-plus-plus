@@ -62,7 +62,7 @@ static void run(const char *name, int64_t start_ms, bool up, int64_t stop_ms) {
                 (long long)worst_alert_gap);
 }
 
-// The shipped defaults must reproduce today's behaviour exactly: a wake every second.
+// The shipped defaults must reproduce today's behavior exactly: a wake every second.
 static void check_defaults(void) {
   printf("defaults (10s>%u, min>%u)\n", settings_data.ten_second_above_sec,
          settings_data.minute_above_min);
@@ -93,17 +93,17 @@ static void check_config_values(void) {
   printf("config.json round-trip\n");
   CHECK(TEN_OPTS_DEFAULT == SETTINGS_NEVER, "config.json 10s default is not SETTINGS_NEVER");
   CHECK(MIN_OPTS_DEFAULT == SETTINGS_NEVER, "config.json minute default is not SETTINGS_NEVER");
-  // the colour pickers' defaults and the C defaults are written out separately, so pin them
+  // the color pickers' defaults and the C defaults are written out separately, so pin them
   CHECK(TIMER_COLOR_DEFAULT == SETTINGS_TIMER_RGB_DEFAULT,
-        "config.json counting down colour %06x does not match settings.h %06x",
+        "config.json counting down color %06x does not match settings.h %06x",
         TIMER_COLOR_DEFAULT, SETTINGS_TIMER_RGB_DEFAULT);
   CHECK(CHRONO_COLOR_DEFAULT == SETTINGS_CHRONO_RGB_DEFAULT,
-        "config.json counting up colour %06x does not match settings.h %06x",
+        "config.json counting up color %06x does not match settings.h %06x",
         CHRONO_COLOR_DEFAULT, SETTINGS_CHRONO_RGB_DEFAULT);
   CHECK(settings_accent_rgb(false) == SETTINGS_TIMER_RGB_DEFAULT,
-        "counting down starts on the wrong colour");
+        "counting down starts on the wrong color");
   CHECK(settings_accent_rgb(true) == SETTINGS_CHRONO_RGB_DEFAULT,
-        "counting up starts on the wrong colour");
+        "counting up starts on the wrong color");
   for (unsigned i = 0; i < sizeof(TEN_OPTS) / sizeof(*TEN_OPTS); i++) {
     CHECK(prv_validate(TEN_OPTS[i], SETTINGS_TEN_SECOND_MIN_SEC, SETTINGS_TEN_SECOND_MAX_SEC, 99)
               == TEN_OPTS[i], "10s option %d rejected", TEN_OPTS[i]);

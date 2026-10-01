@@ -37,7 +37,7 @@ static void scan(const char *label, int64_t start, int flicker_ms) {
 int main(void) {
   printf("countdown from a whole minute, as a user would set it:\n");
   const struct { const char *n; uint8_t ten; uint8_t min; } cfg[] = {
-      {"both Never (old behaviour)", SETTINGS_NEVER, SETTINGS_NEVER},
+      {"both Never (old behavior)", SETTINGS_NEVER, SETTINGS_NEVER},
       {"10s>20                    ", 20, SETTINGS_NEVER},
       {"10s>20, min>2             ", 20, 2},
       {"10s>120, min>10           ", 120, 10},

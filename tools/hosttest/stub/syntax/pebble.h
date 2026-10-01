@@ -5,7 +5,7 @@
 #include_next <pebble.h>
 #include <time.h>
 
-// colours: two bits per channel, as GColor8 really is, so the shading arithmetic in drawing.c is
+// colors: two bits per channel, as GColor8 really is, so the shading arithmetic in drawing.c is
 // checked against the same field widths the SDK gives it
 typedef union {
   uint8_t argb;
@@ -154,7 +154,7 @@ void graphics_context_set_fill_color(GContext *ctx, GColor color);
 void graphics_context_set_stroke_color(GContext *ctx, GColor color);
 void graphics_context_set_text_color(GContext *ctx, GColor color);
 void graphics_fill_rect(GContext *ctx, GRect rect, uint16_t radius, GCornerMask corners);
-void graphics_fill_circle(GContext *ctx, GPoint centre, uint16_t radius);
+void graphics_fill_circle(GContext *ctx, GPoint center, uint16_t radius);
 void graphics_fill_radial(GContext *ctx, GRect rect, GOvalScaleMode scale, uint16_t inset,
                           int32_t angle_start, int32_t angle_end);
 void graphics_draw_text(GContext *ctx, const char *text, GFont font, GRect box,

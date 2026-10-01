@@ -125,9 +125,9 @@ int main(void) {
   for (unsigned i = 0; i < sizeof offsets / sizeof *offsets; i++) {
     reset();
     line(CX + RIM, CY - offsets[i], CX - RIM, CY - offsets[i], 25, 200);
-    CHECK(swipes == 1, "%dpx off centre: expected one swipe, got %d", offsets[i], swipes);
-    CHECK(last_dir == RotarySwipeDirection_Left, "%dpx off centre: wrong direction", offsets[i]);
-    CHECK(clicks == 0, "%dpx off centre: it stepped the field %d times on its way across",
+    CHECK(swipes == 1, "%dpx off center: expected one swipe, got %d", offsets[i], swipes);
+    CHECK(last_dir == RotarySwipeDirection_Left, "%dpx off center: wrong direction", offsets[i]);
+    CHECK(clicks == 0, "%dpx off center: it stepped the field %d times on its way across",
           offsets[i], clicks);
   }
 
@@ -164,8 +164,8 @@ int main(void) {
   printf("starting in the hole and flicking out still counts:\n");
   reset();
   line(CX, CY, CX + 80, CY, 20, 150);
-  CHECK(swipes == 1, "a half traverse from the centre outwards should swipe");
-  CHECK(last_dir == RotarySwipeDirection_Right, "wrong direction out of the centre");
+  CHECK(swipes == 1, "a half traverse from the center outwards should swipe");
+  CHECK(last_dir == RotarySwipeDirection_Right, "wrong direction out of the center");
 
   printf("a deliberate turn still turns:\n");
   reset();
@@ -237,7 +237,7 @@ int main(void) {
   CHECK(hold_fires == 0, "the hint must not be the fire");
   stub_fire_timer(); //< the rest of the hold
   CHECK(hold_fires == 1, "expected the hold to fire, got %d", hold_fires);
-  CHECK(hold_cancels == 0, "a hold which fired was not cancelled");
+  CHECK(hold_cancels == 0, "a hold which fired was not canceled");
   emit(TouchEvent_Liftoff, 0, 0);
   CHECK(liftoffs == 0, "the liftoff which ends a fired hold should mean nothing");
   CHECK(hold_cancels == 0, "and it is not a cancel either");
@@ -251,7 +251,7 @@ int main(void) {
   emit(TouchEvent_PositionUpdate, CX + 20, CY); //< past the 10px slop
   CHECK(hold_cancels == 1, "moving past the slop should cancel the hold");
   emit(TouchEvent_Liftoff, 0, 0);
-  CHECK(hold_fires == 0, "a cancelled hold must not fire");
+  CHECK(hold_fires == 0, "a canceled hold must not fire");
 
   printf("a hold which never hinted cancels silently:\n");
   reset();

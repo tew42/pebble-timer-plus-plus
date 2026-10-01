@@ -480,7 +480,7 @@ if (customFn) {
             // the label is the swatch's own hex, recovered from the decimal Clay writes on it, so a
             // dropped leading zero shows up here rather than on the phone
             if (box.textContent !== box.hex) {
-                fail(key + ': swatch ' + box.hex + ' is labelled "' + box.textContent + '"');
+                fail(key + ': swatch ' + box.hex + ' is labeled "' + box.textContent + '"');
             }
             if (!box.title || box.title === box.hex) {
                 fail(key + ': swatch ' + box.hex + ' is offered but has no name');

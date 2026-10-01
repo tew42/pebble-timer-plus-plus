@@ -44,7 +44,7 @@ remaining counting down and the time elapsed counting up:
 | `10-second updates above` | Redraw every 10 seconds from this far out | `5:3_`  |
 | `Minute updates above`    | Redraw once a minute from this far out    | `5:__`  |
 
-Both default to *Never*, the original once-a-second behaviour. Where they overlap the coarser one takes over, and the settings page switches the 10-second setting to *Never* to say so.
+Both default to *Never*, the original once-a-second behavior. Where they overlap the coarser one takes over, and the settings page switches the 10-second setting to *Never* to say so.
 
 The progress ring shades the stretch the masked digits could mean, so it never claims to know more than they do. Live seconds always show for the last or first 20 seconds, when paused, or when using up or down buttons to peek (timer) or split (stopwatch). 
 
@@ -71,7 +71,7 @@ Each mode offers the colors that stay legible in it. Regular needs one channel f
 center turns white; high needs one channel fully on, or the band disappears into the black. The 18
 full-strength hues around the edge of the picker suit both. Switching modes moves a color that no
 longer fits to the same hue, made fully saturated or fully bright. The picker is laid out like the
-color map in the Pebble SDK's color picker, with each swatch labelled by its hex code.
+color map in the Pebble SDK's color picker, with each swatch labeled by its hex code.
 
 ## Closing itself
 
@@ -80,7 +80,7 @@ sitting in the foreground costing battery. It costs most on the touch watches, w
 stays powered for as long as the app is up.
 
 A running timer or stopwatch keeps it open, and that is the only thing that does. Anywhere the
-clock is stopped it will go: sitting at nothing, a length you dialled but never started, a
+clock is stopped it will go: sitting at nothing, a length you dialed but never started, a
 stopwatch you paused. Nothing is lost when it does, because the app stores where it was on the way
 out, so opening it again puts back exactly what you left.
 
@@ -102,7 +102,7 @@ the build configuration changes:
 5. Run `Show Recommended Extensions` and install the suggestions.
 6. Run `clangd: Restart language server`.
 
-## Acknowledgements
+## Acknowledgments
 
 This app is other people's work with some of mine on top.
 

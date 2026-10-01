@@ -21,7 +21,7 @@ static const Canvas CANVASES[] = {
     {"gabbro", 260, 260, true},
 };
 
-static int H;   // the canvas being modelled
+static int H;   // the canvas being modeled
 static int scl_y(int t) { return (t * H + 500) / 1000; }
 
 static int circle_radius(bool round_screen) { return scl_y(round_screen ? 355 : 375); }

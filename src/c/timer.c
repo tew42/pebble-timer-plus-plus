@@ -181,7 +181,7 @@ bool timer_is_chrono(void) { return prv_signed_value_ms() <= 0; }
 
 // Check whether the time shown is a stopwatch run rather than a timer
 // Zero is both and neither: it is where a timer is set from and where a stopwatch starts, so it
-// counts as a timer, which is what makes dialling up from zero set a length.
+// counts as a timer, which is what makes dialing up from zero set a length.
 bool timer_shows_run(void) { return timer_is_chrono() && timer_get_value_ms() > 0; }
 
 // Hold the shown time where it is
@@ -269,7 +269,7 @@ bool timer_increment(int64_t increment, bool carry) {
   const bool carried = carry && wrapped && room;
   const int64_t carry_ms = carried ? ((increment > 0) ? interval : -interval) : 0;
   const int64_t next_ms = display_ms + step_ms + carry_ms;
-  // dialled to nothing: a clean zero rather than the remainder on its own
+  // dialed to nothing: a clean zero rather than the remainder on its own
   if (next_ms <= 0) {
     timer_reset();
   } else {

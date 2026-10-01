@@ -6,11 +6,11 @@
 //     published thresholds, as well as crossing the dead zone. It used to be any drag from one
 //     90° wedge to the opposite one, with no test of distance, duration or straightness.
 //   - Rotation stops for the rest of a gesture once the finger's radial movement outruns the arc
-//     it has travelled. Without that a swipe emitted detents on its way across the wheel.
+//     it has traveled. Without that a swipe emitted detents on its way across the wheel.
 //   - The four-wedge region machinery is gone; direction now comes from the displacement.
 //   - Acceleration follows the speed of a turn rather than its accumulated distance, and is
 //     scoped to the gesture rather than to a timeout.
-//   - The centre tap is replaced by a hold, which reports a hint and a cancel as well as firing.
+//   - The center tap is replaced by a hold, which reports a hint and a cancel as well as firing.
 //
 // Usage:
 //   1. Call rotary_kit_set_window_config() when creating each window.
@@ -30,14 +30,14 @@
 //   click_num: 1-based count of clicks fired in the current drag gesture
 typedef void (*RotaryClickCallback)(int direction, int click_num, void *context);
 
-// Fired on liftoff for any gesture which was neither a swipe nor a centre tap (optional).
+// Fired on liftoff for any gesture which was neither a swipe nor a center tap (optional).
 // Despite the name this is not only reported after a rotation: a gesture which moved on the wheel
 // without reaching a single detent arrives here too, with total_clicks zero.
 //   total_clicks : total click-events fired during this gesture
 //   total_degrees: total absolute rotation in degrees (always positive)
 typedef void (*RotaryLiftoffCallback)(int total_clicks, int total_degrees, void *context);
 
-// Stages of a hold: a finger placed in the dead-zone centre and kept still.
+// Stages of a hold: a finger placed in the dead-zone center and kept still.
 //
 // The platform has no long-press recognizer, so this is built here. It is the one gesture which
 // is worth reporting before it completes: a hold has nothing to see or feel while it is being
@@ -68,7 +68,7 @@ typedef enum {
     RotarySwipeDirection_Right = 3,
 } RotarySwipeDirection;
 
-// Fired on liftoff when a swipe is recognised: a flick of at least 30px along its major axis,
+// Fired on liftoff when a swipe is recognized: a flick of at least 30px along its major axis,
 // completed within 300ms, whose minor-axis projection stayed within half the major axis, and
 // whose path passed through the dead zone.
 //
@@ -88,10 +88,10 @@ typedef void (*RotarySwipeCallback)(RotarySwipeDirection direction, void *contex
 
 typedef struct {
     // --- Geometry ---
-    int16_t center_x;           // X pixel of wheel centre (default: 130)
-    int16_t center_y;           // Y pixel of wheel centre (default: 130)
+    int16_t center_x;           // X pixel of wheel center (default: 130)
+    int16_t center_y;           // Y pixel of wheel center (default: 130)
     int16_t min_radius;         // Dead zone radius in px — touches inside are
-                                //   treated as centre taps (default: 40)
+                                //   treated as center taps (default: 40)
 
     // --- Sensitivity ---
     int16_t degrees_per_click;  // Degrees of arc per rotation detent (default: 30)
@@ -111,7 +111,7 @@ typedef struct {
 
     // --- Hold ---
     // A hold must start inside min_radius and stay within hold_slop_px of where it landed. It has
-    // to be placed in the centre rather than wandering into it, which is what keeps a sleeve or a
+    // to be placed in the center rather than wandering into it, which is what keeps a sleeve or a
     // wrist on a desk from ever reaching it: contact out on the rim arms nothing.
     uint32_t hold_ms;       // still this long to fire (default: 750, matching a long button press)
     uint32_t hold_hint_ms;  // still this long to report Hint (default: 150)

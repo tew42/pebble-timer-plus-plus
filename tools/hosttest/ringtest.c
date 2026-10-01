@@ -116,7 +116,7 @@ int main(void) {
   printf("  chrono band ending on the minute -> %d (RING_ANGLE_MAX), no wrap\n", r.band);
 
   // 5. while the timer is being set or paused the ring is exact and unbanded, and it follows
-  // every second as it is dialled in
+  // every second as it is dialed in
   // the cutoff must mark where the label will change, not the quantum above it
   printf("\n1 min timer at a 10s cadence, the 0:3_ band:\n");
   settings_data.ten_second_above_sec = 20; settings_data.minute_above_min = SETTINGS_NEVER;
@@ -137,12 +137,12 @@ int main(void) {
   for (int64_t v = 65000; v >= 60000; v -= 1000) {
     Ring e = ring_at(v, false, 65000, true);
     CHECK(!e.show, "edit mode showed a band at %llds", (long long)v / 1000);
-    CHECK(e.solid == RING_ANGLE_MAX * v / 65000, "edit ring quantised at %llds: %d",
+    CHECK(e.solid == RING_ANGLE_MAX * v / 65000, "edit ring quantized at %llds: %d",
           (long long)v / 1000, e.solid);
     if (e.solid == prev) { held++; }
     prev = e.solid;
   }
-  CHECK(held == 0, "edit ring failed to follow %d of the seconds dialled in", held);
+  CHECK(held == 0, "edit ring failed to follow %d of the seconds dialed in", held);
   printf("  ok: exact, unbanded, and moves on every second\n");
 
   // 6. a split holds an exact time too, so the digits show every second of it and the ring stops

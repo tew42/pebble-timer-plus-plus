@@ -83,7 +83,7 @@ static AniSlot *prv_slot_for(void *target) {
   if (!spare) {
     // an animated value this file has never seen and nowhere left to remember it, which means the
     // drawing code grew one and ANI_SLOT_COUNT did not. The value still gets where it belongs, it
-    // just arrives rather than travelling. Logged rather than asserted: NDEBUG is never set for an
+    // just arrives rather than traveling. Logged rather than asserted: NDEBUG is never set for an
     // app build, so ASSERT's null call is live in the shipped binary, and a watchapp which stops
     // dead is a worse answer than one which stops animating.
     APP_LOG(APP_LOG_LEVEL_ERROR, "out of animation slots; raise ANI_SLOT_COUNT");
@@ -103,7 +103,7 @@ static void prv_stopped(Animation *animation, bool finished, void *context) {
 
 // Cancel whatever a slot is running
 // The slot is cleared here rather than left to prv_stopped, and that is load-bearing twice over.
-// A handler only runs for an animation which has drawn at least one frame, so cancelling one still
+// A handler only runs for an animation which has drawn at least one frame, so canceling one still
 // waiting out its delay -- which the box's leg of a bounce spends two frames doing -- calls nothing
 // at all. And an Animation * is a handle the service looks up rather than a pointer it follows, so
 // unscheduling one which has already gone is a quiet no-op instead of a use after free. Together
@@ -156,7 +156,7 @@ static bool prv_set_endpoints(PropertyAnimation *prop, void *from, void *to, siz
          property_animation_to(prop, to, size, true);
 }
 
-// Put a value where it belongs without travelling, for when there is nothing to travel with
+// Put a value where it belongs without traveling, for when there is nothing to travel with
 // Running out of room for an animation must not cost the value its destination: a rect left at an
 // older layout is one the digits were never sized for, and stops being drawn at all.
 static void prv_arrive(void *target, const void *to, size_t size) {

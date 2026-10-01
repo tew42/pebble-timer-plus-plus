@@ -138,10 +138,10 @@ static void prv_peek_end(void *data) {
 // app waits at zero before starting the stopwatch by itself, and it is the most it will ever
 // back-date a start by. The first press stands the wait down but keeps the credit, which is what
 // makes a five second window usable: once anything has been touched nothing starts by itself, the
-// length can be dialled at leisure, and the start it is eventually given is still credited.
+// length can be dialed at leisure, and the start it is eventually given is still credited.
 //
 // A consequence worth being explicit about: because the first press ends the wait, the window can
-// only ever start a stopwatch by itself. A dialled timer is one select also starts, and that
+// only ever start a stopwatch by itself. A dialed timer is one select also starts, and that
 // start is credited, which is the half of it that matters.
 
 // Close the window, forgetting both the wait and the credit
@@ -169,7 +169,7 @@ int64_t main_instant_credit_ms(void) {
 }
 
 // Hand the credit to the clock which has just been started, and close the window behind it
-// Nothing special is needed for a credit larger than the length that was dialled: the value
+// Nothing special is needed for a credit larger than the length that was dialed: the value
 // crosses zero, which already means an elapsed timer, and the alert sounds on the next refresh.
 static void prv_instant_spend(void) {
   const int64_t credit_ms = main_instant_credit_ms();
@@ -190,7 +190,7 @@ static void prv_instant_stand_down(void) {
 // Nothing was pressed for the length of the window, so start the stopwatch
 // The same start select makes from the seconds field, credited, so the digits read the window the
 // instant they appear. The ring snaps there as it does for select: the refresh loop's first pass
-// draws the credited position, and travelling to it would be an animation nobody is watching.
+// draws the credited position, and traveling to it would be an animation nobody is watching.
 static void prv_instant_expire(void *data) {
   main_data.instant_timer = NULL;
 #if APP_TOUCH_CONTROLS
@@ -218,7 +218,7 @@ static void prv_instant_expire(void *data) {
 // Open the window, if the app has come to rest at zero with the feature switched on
 // Two events reach here and they are the same event: launching with nothing to resume, and a
 // reset. A reset does not drop the app into ordinary working, it puts it back at the start.
-// Dialling down through zero is deliberately not one of them. timer_increment() resets the timer
+// Dialing down through zero is deliberately not one of them. timer_increment() resets the timer
 // itself when the value would reach zero, but that is inside the timer and invisible here, which
 // is the wanted answer: dial down to nothing, pause to think, and a stopwatch starting underneath
 // would turn the next two presses from edits into a split and a peek.
@@ -239,14 +239,14 @@ static void prv_instant_arm(void) {
 // of all on a touch watch, where the digitizer draws power for as long as the window is up (see
 // prv_window_appear). Five minutes with nothing pressed and the clock stopped is nobody being
 // there, and going costs them nothing: prv_terminate stores the timer on the way out either way,
-// so reopening puts back exactly what was left, dialled length and all.
+// so reopening puts back exactly what was left, dialed length and all.
 //
 // One thing holds the app open, and it is the one thing worth watching: a clock which is still
-// moving. Everything else -- sitting at nothing, a length half dialled, a stopwatch paused mid
+// moving. Everything else -- sitting at nothing, a length half dialed, a stopwatch paused mid
 // run -- is somewhere the app can be picked up again from, so five minutes of nobody there is
 // enough to leave. An earlier draft also exempted anything touched in this session, which sounds
 // protective and is not: five minutes of no input already says nobody is working on it, and the
-// rule it bought made a stored timer close while the same timer dialled by hand never did.
+// rule it bought made a stored timer close while the same timer dialed by hand never did.
 //
 // The clock is a timestamp rather than a timer re-armed per press, so that a press does not have
 // to know what state it is about to produce. One timer is armed at launch and re-registers itself
@@ -349,7 +349,7 @@ static void prv_back_click_handler(ClickRecognizerRef recognizer, void *ctx) {
 // Move the selected field by one step in the given direction
 // Shared by the two buttons and the touch screen, which differ only in how they animate. The
 // carry into the next place is the timer's to make so that the value never passes through zero on
-// the way: a stopwatch run dialled from 59 minutes up to an hour stays a run.
+// the way: a stopwatch run dialed from 59 minutes up to an hour stays a run.
 static void prv_step_selected_field(int direction) {
   // the first press ends the wait for the app to start something by itself, and keeps the credit
   prv_instant_stand_down();
@@ -361,7 +361,7 @@ static void prv_step_selected_field(int direction) {
   } else {
     place_ms = MSEC_IN_SEC;
   }
-  // A field runs over into the place above it, and only upwards: dialling down has always wrapped
+  // A field runs over into the place above it, and only upwards: dialing down has always wrapped
   // inside the place rather than borrowing from it, which is the friendlier way round -- carrying
   // both ways would make a single press able to change two fields in either direction.
   // The buttons stay where they were pointed either way. Following the carry up to the new field
@@ -563,7 +563,7 @@ static void prv_app_timer_callback(void *data) {
 }
 
 // Stop the refresh loop
-// prv_app_timer_callback clears the handle before it returns, so a fired timer is never cancelled
+// prv_app_timer_callback clears the handle before it returns, so a fired timer is never canceled
 static void prv_refresh_stop(void) {
   if (main_data.app_timer) {
     app_timer_cancel(main_data.app_timer);
@@ -573,7 +573,7 @@ static void prv_refresh_stop(void) {
 
 // Restart the refresh loop from the current timer value
 // A sleep left over from an earlier run can be a whole minute long at the coarsest cadence, so it
-// has to be cancelled rather than waited out
+// has to be canceled rather than waited out
 static void prv_refresh_restart(void) {
   prv_refresh_stop();
   prv_app_timer_callback(NULL);

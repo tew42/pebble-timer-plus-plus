@@ -11,7 +11,7 @@ static int failures = 0;
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #define CHECK(c, ...) do { if (!(c)) { printf("  FAIL: "); printf(__VA_ARGS__); printf("\n"); failures++; } } while (0)
 
-// 0xRRGGBB -> the three two-bit channels Pebble quantises it to
+// 0xRRGGBB -> the three two-bit channels Pebble quantizes it to
 static void channels(uint32_t rgb, int *r, int *g, int *b) {
   *r = ((rgb >> 16) & 0xFF) * 3 / 255;
   *g = ((rgb >> 8) & 0xFF) * 3 / 255;

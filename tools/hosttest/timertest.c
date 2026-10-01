@@ -239,16 +239,16 @@ int main(void) {
         (long long)timer_get_value_ms());
   printf("  ok: the length is what was set until the run is spent\n");
 
-  // zero is a timer, not a run: it is where a length is dialled from
+  // zero is a timer, not a run: it is where a length is dialed from
   printf("\nzero reads as a timer:\n");
   timer_reset();
   CHECK(!timer_shows_run(), "zero should not read as a run");
   CHECK(timer_is_chrono(), "zero should still count as a stopwatch by value");
   timer_increment(MSEC_IN_MIN, false);
   CHECK(!timer_shows_run() && timer_get_length_ms() == MSEC_IN_MIN,
-        "dialling up from zero should set a length, got %lldms",
+        "dialing up from zero should set a length, got %lldms",
         (long long)timer_get_length_ms());
-  printf("  ok: dialling up from zero sets a timer\n");
+  printf("  ok: dialing up from zero sets a timer\n");
 
   // a rewind gives the run back and stops the clock, which is where the alert leaves the app
   printf("\na rewind lands on the set time, held:\n");
@@ -409,7 +409,7 @@ int main(void) {
         (long long)timer_get_display_ms(), (long long)timer_get_value_ms());
   timer_increment(-MSEC_IN_SEC, false);
   CHECK(timer_get_value_ms() == 0 && timer_get_length_ms() == 0,
-        "dialling past zero should reset, got %lldms", (long long)timer_get_value_ms());
+        "dialing past zero should reset, got %lldms", (long long)timer_get_value_ms());
   printf("  ok: 2.4s dials down 0:03, 0:02, 0:01, zero\n");
 
   printf("\na split offers the millisecond underneath, and only a split:\n");
@@ -435,10 +435,10 @@ int main(void) {
           (long long)timer_get_value_ms());
     timer_increment(MSEC_IN_SEC, true);
     CHECK(timer_get_value_ms() % MSEC_IN_SEC == 400,
-          "dialling it should keep the 400ms, value is %lldms", (long long)timer_get_value_ms());
+          "dialing it should keep the 400ms, value is %lldms", (long long)timer_get_value_ms());
     printf("  ok: only a split shows it; a paused run keeps it without showing it\n");
   }
 
-  printf(failures ? "\n%d FAILURES\n" : "\ntimer behaviour holds\n", failures);
+  printf(failures ? "\n%d FAILURES\n" : "\ntimer behavior holds\n", failures);
   return failures != 0;
 }

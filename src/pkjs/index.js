@@ -59,7 +59,7 @@ var clay = new Clay(clayConfig, function() {
     // Where the two thresholds overlap the watch takes the coarser mode, so a ten second
     // threshold at or beyond the minute one leaves its band empty and does nothing at all. That
     // is well defined, just misleading to look at, so the page switches the ten second setting to
-    // Never: the same behaviour, said plainly, and the minute threshold just chosen is kept.
+    // Never: the same behavior, said plainly, and the minute threshold just chosen is kept.
     function resolveThresholdOverlap() {
         var tenSecond = clayConfig.getItemByMessageKey("tenSecondUpdatesAbove");
         var minute = clayConfig.getItemByMessageKey("minuteUpdatesAbove");
@@ -284,7 +284,7 @@ var clay = new Clay(clayConfig, function() {
     }
 
     clayConfig.on(clayConfig.EVENTS.AFTER_BUILD, function() {
-        // also normalises a redundant pair which was stored before this ran
+        // also normalizes a redundant pair which was stored before this ran
         resolveThresholdOverlap();
         describeColorPickers();
         var tenSecond = clayConfig.getItemByMessageKey("tenSecondUpdatesAbove");

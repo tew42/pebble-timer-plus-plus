@@ -24,7 +24,7 @@ Everything it builds is gitignored. A green run is every test plus a syntax pass
 | `clocktest` | the footer's projected finish time |
 | `ringtest`, `shadetest`, `flicker`, `convention` | the progress ring's geometry, and the shading of both contrast modes |
 | `glyphtest`, `layouttest` | `text_render.c`'s glyphs and layout |
-| `jstest` | the Clay configuration page: its options against `settings.h`'s bounds, the pickers' layout against the SDK color map, each contrast mode's colors, the moves it makes, and that every swatch is labelled with its hex and named |
+| `jstest` | the Clay configuration page: its options against `settings.h`'s bounds, the pickers' layout against the SDK color map, each contrast mode's colors, the moves it makes, and that every swatch is labeled with its hex and named |
 | `syntax.sh` | `main.c`, `drawing.c` and `animation.c` compiled for every platform, both sides of `PBL_TOUCH` |
 
 `accent_moves.json` lists where each contrast mode moves a color it cannot shade legibly, for all
