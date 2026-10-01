@@ -1,7 +1,7 @@
-// The accent colours are shaded, not listed: drawing.c takes the colour picked for a counting
-// direction and shifts every channel to get the middle and the band. This mirrors that
-// arithmetic (GColor8 gives each channel two bits) and pins the claim that it reproduces the
-// palette the app shipped with, so changing the shading cannot quietly restyle the app.
+// The accent colors are shaded, not listed: drawing.c takes the color in force for a counting
+// direction, already moved into the contrast mode by settings.c, and shifts every channel to get
+// the center and the band. This mirrors that arithmetic (GColor8 gives each channel two bits) and
+// pins what the two modes draw, so changing the shading cannot quietly restyle the app.
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -32,104 +32,87 @@ static uint32_t shift(uint32_t rgb, int step) {
   }
   return to_rgb(c[0], c[1], c[2]);
 }
-// mirrors prv_shade() in drawing.c: white cannot go lighter and black cannot go darker, so where
-// clamping would hand back the accent itself, step a single place the other way
-static uint32_t shade(uint32_t rgb, int step) {
-  const uint32_t shaded = shift(rgb, step);
-  return (shaded != rgb) ? shaded : shift(rgb, (step > 0) ? -1 : 1);
-}
-// the colour behind the ring on colour hardware (GColorDarkGray)
-#define BACK 0x555555u
-// mirrors prv_band_shade() in drawing.c: two steps down for a difference the eye can see, and
-// never onto the ring or onto what is behind it, which would leave nothing to look at
-static uint32_t band_shade(uint32_t rgb) {
-  static const int steps[] = {-2, -1, 1, 2};
-  for (unsigned i = 0; i < sizeof(steps) / sizeof(steps[0]); i++) {
-    const uint32_t shaded = shift(rgb, steps[i]);
-    if (shaded != rgb && shaded != BACK) { return shaded; }
+// mirrors prv_palette_update() in drawing.c: regular puts dark gray behind the ring, the center
+// two steps up and the band one step down; high puts black behind, white in the center and the
+// band two steps down
+struct palette { uint32_t ring, center, band, back; };
+static struct palette shade_for(uint32_t accent, bool high) {
+  if (high) {
+    return (struct palette){accent, 0xFFFFFF, shift(accent, -2), 0x000000};
   }
-  return shift(rgb, -2);
+  return (struct palette){accent, shift(accent, 2), shift(accent, -1), 0x555555};
+}
+// where settings.c moves a color the mode cannot draw, from the list the page is held to as well
+static uint32_t moved(uint32_t rgb, bool high) {
+  const uint32_t (*moves)[2] = high ? MOVES_HIGH : MOVES_REGULAR;
+  const unsigned count = high ? ARRAY_SIZE(MOVES_HIGH) : ARRAY_SIZE(MOVES_REGULAR);
+  for (unsigned i = 0; i < count; i++) {
+    if (moves[i][0] == rgb) { return moves[i][1]; }
+  }
+  return rgb;
 }
 
 int main(void) {
-  // the shipped palette, from the colours drawing_initialize used before it was made settable
-  const uint32_t GColorGreen = 0x00FF00, GColorMintGreen = 0xAAFFAA, GColorDarkGreen = 0x005500;
-  printf("the default colour reproduces the original palette:\n");
+  // regular is the original look: a green ring, a mint green center, on dark gray
+  const uint32_t GColorGreen = 0x00FF00, GColorMintGreen = 0xAAFFAA;
+  printf("green in each mode:\n");
   CHECK(TIMER_COLOR_DEFAULT == GColorGreen, "counting down no longer defaults to green");
-  CHECK(shade(GColorGreen, 2) == GColorMintGreen, "middle is %06x, was mint green %06x",
-        shade(GColorGreen, 2), GColorMintGreen);
-  // the band is a new element, so it has no original to reproduce; it is a full two steps down
-  // because one step -- islamic green under a green ring -- was too close to read as a band
-  CHECK(band_shade(GColorGreen) == GColorDarkGreen, "band is %06x, wanted dark green %06x",
-        band_shade(GColorGreen), GColorDarkGreen);
-  printf("  ring %06x -> middle %06x, band %06x\n", GColorGreen, shade(GColorGreen, 2),
-         band_shade(GColorGreen));
+  const struct palette regular = shade_for(GColorGreen, false), high = shade_for(GColorGreen, true);
+  CHECK(regular.center == GColorMintGreen && regular.band == 0x00AA00 && regular.back == 0x555555,
+        "regular green is center %06x, band %06x, back %06x; wanted aaffaa, 00aa00, 555555",
+        regular.center, regular.band, regular.back);
+  CHECK(high.center == 0xFFFFFF && high.band == 0x005500 && high.back == 0x000000,
+        "high green is center %06x, band %06x, back %06x; wanted ffffff, 005500, 000000",
+        high.center, high.band, high.back);
+  printf("  regular: ring %06x, center %06x, band %06x, on %06x\n", regular.ring, regular.center,
+         regular.band, regular.back);
+  printf("  high:    ring %06x, center %06x, band %06x, on %06x\n", high.ring, high.center,
+         high.band, high.back);
 
-  printf("\nevery colour the picker can send shades to something usable:\n");
-  const uint8_t level[4] = {0x00, 0x55, 0xAA, 0xFF};
+  // whatever the watch has stored, once settings.c has moved it into the mode, the four surfaces
+  // the eye has to tell apart are four different colors, and the shading keeps its direction
+  printf("\nevery color the watch could hold draws four distinct surfaces in both modes:\n");
   int checked = 0;
-  for (int r = 0; r < 4; r++) {
-    for (int g = 0; g < 4; g++) {
-      for (int b = 0; b < 4; b++) {
-        const uint32_t ring = to_rgb(r, g, b);
-        const uint32_t mid = shade(ring, 2), band = band_shade(ring);
-        // the middle carries black digits, so it must never be darker than the ring, and the
-        // band must never be lighter than it: that ordering is what makes the band readable
-        int mr, mg, mb, br, bg, bb;
-        channels(mid, &mr, &mg, &mb);
-        channels(band, &br, &bg, &bb);
-        // the middle carries the editing focus box and the band sits against the ring, so both
-        // must be distinguishable from it -- for every colour the picker can send, not just most
-        CHECK(mid != ring, "the middle of %06x is the ring colour, hiding the focus box", ring);
-        CHECK(band != ring, "the band of %06x is the ring colour, so it cannot be seen", ring);
-        CHECK(band != BACK, "the band of %06x is the colour behind the ring, so it reads as gap",
-              ring);
-        // and away from the extremes the shading keeps its direction
-        if (ring != 0xFFFFFF) { CHECK(mr >= r && mg >= g && mb >= b,
-                                      "middle of %06x is darker than the ring", ring); }
-        // black is the one accent with no darker shade left to take, so it is the one exception
-        if (ring != 0x000000) { CHECK(br <= r && bg <= g && bb <= b,
-                                      "band of %06x is lighter than the ring", ring); }
-        (void)level;
-        checked++;
-        if (failures) { return 1; }
+  for (int mode = 0; mode < 2; mode++) {
+    for (int r = 0; r < 4; r++) {
+      for (int g = 0; g < 4; g++) {
+        for (int b = 0; b < 4; b++) {
+          const uint32_t stored = to_rgb(r, g, b);
+          const struct palette p = shade_for(moved(stored, mode), mode);
+          const uint32_t surfaces[4] = {p.ring, p.center, p.band, p.back};
+          for (int i = 0; i < 4; i++) {
+            for (int j = i + 1; j < 4; j++) {
+              CHECK(surfaces[i] != surfaces[j], "%s, stored %06x: two surfaces are both %06x",
+                    mode ? "high" : "regular", stored, surfaces[i]);
+            }
+          }
+          int ar, ag, ab, br, bg, bb, cr, cg, cb;
+          channels(p.ring, &ar, &ag, &ab);
+          channels(p.band, &br, &bg, &bb);
+          channels(p.center, &cr, &cg, &cb);
+          // the center carries black digits, so it is never darker than the ring, and the band
+          // never lighter: that ordering is what makes both read
+          CHECK(cr >= ar && cg >= ag && cb >= ab, "%s, stored %06x: center darker than the ring",
+                mode ? "high" : "regular", stored);
+          CHECK(br <= ar && bg <= ag && bb <= ab, "%s, stored %06x: band lighter than the ring",
+                mode ? "high" : "regular", stored);
+          checked++;
+          if (failures) { return 1; }
+        }
       }
     }
   }
-  printf("  ok: %d colours, middle and band always distinguishable from the ring\n", checked);
+  printf("  ok: %d cases, ring, center, band and back always four colors\n", checked);
 
-  // the configuration page offers only accents at full brightness with a channel to spare
-  // (HSV value 100%, saturation at least two thirds), which is exactly the condition under which
-  // two steps down is available without any fallback
-  printf("\nthe palette the picker offers never needs the fallback:\n");
-  int offered = 0;
-  for (int r = 0; r < 4; r++) {
-    for (int g = 0; g < 4; g++) {
-      for (int b = 0; b < 4; b++) {
-        const int mx = (r > g ? (r > b ? r : b) : (g > b ? g : b));
-        const int mn = (r < g ? (r < b ? r : b) : (g < b ? g : b));
-        if (mx != 3 || mn > 1) { continue; }
-        const uint32_t ring = to_rgb(r, g, b);
-        CHECK(band_shade(ring) == shift(ring, -2),
-              "the band of %06x had to fall back to %06x", ring, band_shade(ring));
-        CHECK(band_shade(ring) != shade(ring, 2),
-              "the band of %06x is the same as the middle", ring);
-        offered++;
-      }
-    }
-  }
-  CHECK(offered == 30, "the palette should hold 30 colours, this rule gives %d", offered);
-  printf("  ok: all %d offered colours shade two steps down cleanly\n", offered);
-
-  // both directions default to the same green, so a watch with nothing saved looks exactly as it
-  // did before the colours became settable; telling the modes apart is the user's choice to make
-  printf("\nboth directions start on the colour the app shipped with:\n");
+  // both directions default to the same green, which both modes can draw, so a fresh install
+  // looks like the original and switching modes moves nothing
+  printf("\nboth directions start on the color the app shipped with:\n");
   CHECK(CHRONO_COLOR_DEFAULT == GColorGreen, "counting up no longer defaults to green");
-  CHECK(TIMER_COLOR_DEFAULT == CHRONO_COLOR_DEFAULT,
-        "the defaults differ, so a fresh install would not look like the original");
-  printf("  counting down %06x, counting up %06x, both shading to %06x and %06x\n",
-         TIMER_COLOR_DEFAULT, CHRONO_COLOR_DEFAULT, shade(CHRONO_COLOR_DEFAULT, 2),
-         band_shade(CHRONO_COLOR_DEFAULT));
+  CHECK(moved(TIMER_COLOR_DEFAULT, false) == TIMER_COLOR_DEFAULT &&
+        moved(TIMER_COLOR_DEFAULT, true) == TIMER_COLOR_DEFAULT,
+        "the default green is moved by one of the modes");
+  printf("  counting down %06x, counting up %06x, the same in both modes\n", TIMER_COLOR_DEFAULT,
+         CHRONO_COLOR_DEFAULT);
 
   // Which accent is in force is a small state machine, because a reset cannot be read off the
   // timer afterwards: the value is zero, and a zero length timer is a stopwatch by that test, so

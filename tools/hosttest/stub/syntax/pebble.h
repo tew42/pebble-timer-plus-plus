@@ -20,7 +20,7 @@ typedef GColor8 GColor;
 #define GColorFromHEX(hex) ((GColor){.argb = (uint8_t)(hex)})
 #define GColorBlack ((GColor){.argb = 0xC0})
 #define GColorWhite ((GColor){.argb = 0xFF})
-#define GColorGreen ((GColor){.argb = 0xF0})
+#define GColorGreen ((GColor){.argb = 0xCC})
 #define GColorDarkGray ((GColor){.argb = 0xD5})
 #ifdef PBL_BW
 #define PBL_IF_COLOR_ELSE(a, b) (b)
