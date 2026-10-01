@@ -161,46 +161,17 @@
         "defaultValue": "00ff00",
         "sunlight": false,
         "layout": [
-          [
-            "ff0000",
-            "ff5500",
-            "ffaa00",
-            "ffff00",
-            "aaff00",
-            "55ff00"
-          ],
-          [
-            "00ff00",
-            "00ff55",
-            "00ffaa",
-            "00ffff",
-            "00aaff",
-            "0055ff"
-          ],
-          [
-            "0000ff",
-            "5500ff",
-            "aa00ff",
-            "ff00ff",
-            "ff00aa",
-            "ff0055"
-          ],
-          [
-            "ff5555",
-            "ffaa55",
-            "ffff55",
-            "aaff55",
-            "55ff55",
-            "55ffaa"
-          ],
-          [
-            "55ffff",
-            "55aaff",
-            "5555ff",
-            "aa55ff",
-            "ff55ff",
-            "ff55aa"
-          ]
+          [false, false, false, false, false, "aaff55", false, false, false, false, false, "ffffaa", false, false, false, false, false, false, false, false],
+          ["aaffaa", false, false, false, "55ff00", false, "aaff00", false, false, false, false, false, "ffff55", false, false, false, false, false, false, false],
+          [false, "55ff55", false, "00ff00", false, false, false, false, false, false, false, "ffff00", false, "ffaa55", false, false, false, false, false, false],
+          [false, false, "00ff55", false, "00aa00", false, "55aa00", false, false, false, "aaaa00", false, "ffaa00", false, "ff5500", false, false, false, "ffaaaa", false],
+          [false, "55ffaa", false, "00aa55", false, false, false, "005500", false, "555500", false, false, false, "aa5500", false, "ff0000", false, "ff5555", false, false],
+          [false, false, "00ffaa", false, "00aaaa", false, false, false, "005555", false, false, false, false, false, false, false, "ff0055", false, false, false],
+          [false, "55ffff", false, "00ffff", false, false, false, "0055aa", false, false, false, false, false, "550000", false, "aa0000", false, false, false, false],
+          ["aaffff", false, false, false, false, false, "00aaff", false, "0000aa", false, "000055", false, "550055", false, "aa0055", false, "ff00aa", false, false, false],
+          [false, false, false, false, false, "55aaff", false, "0000ff", false, "5500ff", false, "5500aa", false, "aa00aa", false, "ff00ff", false, "ff55aa", false, false],
+          [false, false, false, false, false, false, "0055ff", false, "5555ff", false, false, false, "aa00ff", false, false, false, "ff55ff", false, "ffaaff", false],
+          [false, false, false, false, false, false, false, false, false, "aaaaff", false, false, false, "aa55ff", false, false, false, false, false, false]
         ]
       },
       {
@@ -210,46 +181,17 @@
         "defaultValue": "00ff00",
         "sunlight": false,
         "layout": [
-          [
-            "ff0000",
-            "ff5500",
-            "ffaa00",
-            "ffff00",
-            "aaff00",
-            "55ff00"
-          ],
-          [
-            "00ff00",
-            "00ff55",
-            "00ffaa",
-            "00ffff",
-            "00aaff",
-            "0055ff"
-          ],
-          [
-            "0000ff",
-            "5500ff",
-            "aa00ff",
-            "ff00ff",
-            "ff00aa",
-            "ff0055"
-          ],
-          [
-            "ff5555",
-            "ffaa55",
-            "ffff55",
-            "aaff55",
-            "55ff55",
-            "55ffaa"
-          ],
-          [
-            "55ffff",
-            "55aaff",
-            "5555ff",
-            "aa55ff",
-            "ff55ff",
-            "ff55aa"
-          ]
+          [false, false, false, false, false, "aaff55", false, false, false, false, false, "ffffaa", false, false, false, false, false, false, false, false],
+          ["aaffaa", false, false, false, "55ff00", false, "aaff00", false, false, false, false, false, "ffff55", false, false, false, false, false, false, false],
+          [false, "55ff55", false, "00ff00", false, false, false, false, false, false, false, "ffff00", false, "ffaa55", false, false, false, false, false, false],
+          [false, false, "00ff55", false, "00aa00", false, "55aa00", false, false, false, "aaaa00", false, "ffaa00", false, "ff5500", false, false, false, "ffaaaa", false],
+          [false, "55ffaa", false, "00aa55", false, false, false, "005500", false, "555500", false, false, false, "aa5500", false, "ff0000", false, "ff5555", false, false],
+          [false, false, "00ffaa", false, "00aaaa", false, false, false, "005555", false, false, false, false, false, false, false, "ff0055", false, false, false],
+          [false, "55ffff", false, "00ffff", false, false, false, "0055aa", false, false, false, false, false, "550000", false, "aa0000", false, false, false, false],
+          ["aaffff", false, false, false, false, false, "00aaff", false, "0000aa", false, "000055", false, "550055", false, "aa0055", false, "ff00aa", false, false, false],
+          [false, false, false, false, false, "55aaff", false, "0000ff", false, "5500ff", false, "5500aa", false, "aa00aa", false, "ff00ff", false, "ff55aa", false, false],
+          [false, false, false, false, false, false, "0055ff", false, "5555ff", false, false, false, "aa00ff", false, false, false, "ff55ff", false, "ffaaff", false],
+          [false, false, false, false, false, false, false, false, false, "aaaaff", false, false, false, "aa55ff", false, false, false, false, false, false]
         ]
       }
     ]

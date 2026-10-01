@@ -56,7 +56,22 @@ There is a configurable time window of 5s or 10s; if nothing is pressed within t
 
 ### Colors
 
-Counting down (timer) and counting up (stopwatch) each get their own accent, both green to start. Only the primary ring color is chosen; the middle and the interval band are shaded from it, so only colors that stay legible when shaded are offered. Color watches only.
+Counting down (timer) and counting up (stopwatch) each get their own accent, both green to start.
+Only the ring color is chosen; the center and the interval band are shaded from it. Color watches
+only.
+
+**Contrast** decides how they are shaded:
+
+- **Regular** is the original look: a dark gray track behind the ring, a center two steps lighter
+  than the accent, and an interval band one step darker.
+- **High** puts black behind the ring and white in the center, with the band two steps darker,
+  for bright light.
+
+Each mode offers the colors that stay legible in it. Regular needs one channel fully off, or the
+center turns white; high needs one channel fully on, or the band disappears into the black. The 18
+full-strength hues around the edge of the picker suit both. Switching modes moves a color that no
+longer fits to the same hue, made fully saturated or fully bright. The picker is laid out like the
+color map in the Pebble SDK's color picker, with each swatch labelled by its hex code.
 
 ## Closing itself
 

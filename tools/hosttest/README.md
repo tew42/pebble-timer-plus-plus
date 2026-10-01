@@ -19,13 +19,17 @@ Everything it builds is gitignored. A green run is every test plus a syntax pass
 | --- | --- |
 | `timertest` | the timer's value arithmetic, rounding, splits, persistence |
 | `controltest` | `main.c`'s control grammar, mirrored against the real `timer.c` |
-| `settingstest` | the settings module, its validation and its persist versioning |
+| `settingstest` | the settings module, its validation and its persist versioning, and the contrast mode's move of every stored color |
 | `rotarytest` | `rotary_kit.c`: telling a swipe from a turn, the wheel, the dead zone |
 | `clocktest` | the footer's projected finish time |
-| `ringtest`, `shadetest`, `flicker`, `convention` | the progress ring's geometry and shading |
+| `ringtest`, `shadetest`, `flicker`, `convention` | the progress ring's geometry, and the shading of both contrast modes |
 | `glyphtest`, `layouttest` | `text_render.c`'s glyphs and layout |
-| `jstest` | the Clay configuration page: its options against `settings.h`'s bounds, its palettes, and that every swatch is labelled with its hex and named |
+| `jstest` | the Clay configuration page: its options against `settings.h`'s bounds, the pickers' layout against the SDK color map, each contrast mode's colors, the moves it makes, and that every swatch is labelled with its hex and named |
 | `syntax.sh` | `main.c`, `drawing.c` and `animation.c` compiled for every platform, both sides of `PBL_TOUCH` |
+
+`accent_moves.json` lists where each contrast mode moves a color it cannot shade legibly, for all
+64 colors. `jstest` holds the configuration page to it, and `settingstest` holds the watch to it by
+way of `configopts.h`, so the two can only disagree by both being wrong the same way.
 
 ## Three things it cannot do
 

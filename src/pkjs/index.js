@@ -78,14 +78,14 @@ var clay = new Clay(clayConfig, function() {
         }
     }
 
-    // Clay draws the colour picker as bare swatches and nothing else. That is enough on a desktop
+    // Clay draws the color picker as bare swatches and nothing else. That is enough on a desktop
     // and not enough on a phone: a good many of the accents on offer differ by one two-bit channel,
     // and on an OLED panel those are close enough together to be a guess. So each swatch carries
     // its own hex code, and whichever one is in force is named underneath the picker.
     //
-    // All sixty-four of Pebble's colours are named here rather than just the thirty this page
-    // offers, so the labels survive the layout being trimmed and still read on the black and white
-    // layouts Clay substitutes when the watch has no colour screen.
+    // All sixty-four of Pebble's colors are named here rather than just the ones this page offers,
+    // so the labels survive the palette changing and still read on the black and white layouts
+    // Clay substitutes when the watch has no color screen.
     var COLOR_NAMES = {
         "000000": "Black", "000055": "Oxford Blue", "0000aa": "Duke Blue", "0000ff": "Blue",
         "005500": "Dark Green", "005555": "Midnight Green", "0055aa": "Cobalt Blue",
@@ -137,45 +137,153 @@ var clay = new Clay(clayConfig, function() {
         return (luminance > 0.3) ? "#000" : "#fff";
     }
 
-    // Label one picker's swatches, and give it a readout naming the current choice
-    function describePicker(picker) {
-        // Clay's own class, so the readout is spaced and coloured the way a description would be.
-        // It goes ahead of the picker rather than after it because the picker is position fixed
-        // and takes up no room in the flow, so appending would leave the name floating in a gap.
-        var readout = document.createElement("div");
-        readout.className = "description";
-        picker.insertBefore(readout, picker.querySelector(".picker-wrap"));
-        function announce(box) {
-            var hex = swatchHex(box);
-            readout.textContent = (COLOR_NAMES[hex] || "Custom") + "  #" + hex;
+    // The contrast modes, and which colors each can draw
+    // The same rule as prv_accent_in_mode in src/c/settings.c, which applies it to whatever the watch
+    // has stored, so the page and the watch always agree on the color in force. Regular shades the
+    // center two steps up, so it needs a channel at 00 or the center comes out white; high shades
+    // the band two steps down, so it needs a channel at ff or the band is the black behind it.
+    // Channels here are Pebble's two-bit levels, 0 to 3, taken from the top of each byte as
+    // GColorFromHEX takes them.
+    var CONTRAST_HIGH = 1;  // must match SETTINGS_CONTRAST_HIGH in src/c/settings.h
+
+    function channelsOf(value) {
+        return [(value >> 22) & 3, (value >> 14) & 3, (value >> 6) & 3];
+    }
+
+    function valueOf(channels) {
+        return channels.reduce(function(sum, c) {
+            return sum * 256 + c * 0x55;
+        }, 0);
+    }
+
+    // The color an accent becomes in a mode: itself if the mode can draw it, otherwise the same
+    // hue made fully saturated (regular) or fully bright (high), rounding half up. Black, the grays
+    // and white have no hue to keep, and become the default green.
+    function accentFor(value, high) {
+        var c = channelsOf(value);
+        var lo = Math.min.apply(Math, c);
+        var hi = Math.max.apply(Math, c);
+        if (lo === hi) {
+            return 0x00ff00;
         }
-        var boxes = picker.querySelectorAll(".color-box[data-value]");
-        for (var ii = 0; ii < boxes.length; ii++) {
-            var box = boxes[ii];
+        if (high ? hi === 3 : lo === 0) {
+            return valueOf(c);
+        }
+        return valueOf(c.map(function(x) {
+            return high ? Math.floor((6 * x + hi) / (2 * hi))
+                        : Math.floor((2 * hi * (x - lo) + (hi - lo)) / (2 * (hi - lo)));
+        }));
+    }
+
+    function contrastHigh() {
+        var item = clayConfig.getItemByMessageKey("contrast");
+        return !!item && parseInt(item.get(), 10) === CONTRAST_HIGH;
+    }
+
+    // The hex a picker's value names
+    function hexOf(value) {
+        var hex = (parseInt(value, 10) & 0xffffff).toString(16);
+        while (hex.length < 6) {
+            hex = "0" + hex;
+        }
+        return hex;
+    }
+
+    // Lay a picker out like the SDK's color map, and label its swatches
+    // config.json holds the map from the SDK's color picker page on a grid of half hexagons: each
+    // color sits in one cell with an empty one after it, and alternate rows start half a hexagon
+    // in. Clay draws every cell the same width, so each swatch is widened here over the gap after
+    // it, which is what sets the rows offset the way the page's hexagons are. The rows are made
+    // taller too: Clay sizes the cells square, and a swatch two cells wide and one tall has no
+    // room for a label.
+    function shapePicker(picker) {
+        var cells = picker.querySelectorAll(".color-box");
+        if (!cells.length) {
+            return;
+        }
+        var width = parseFloat(cells[0].style.width);
+        var columns = Math.round(100 / width);
+        var rows = Math.round(cells.length / columns);
+        for (var ii = 0; ii < cells.length; ii++) {
+            var box = cells[ii];
+            if (!box.getAttribute("data-value")) {
+                continue;
+            }
+            var gap = box.nextElementSibling;
+            if (gap && !gap.getAttribute("data-value")) {
+                gap.style.display = "none";
+            }
             var hex = swatchHex(box);
             box.textContent = hex;
             box.title = COLOR_NAMES[hex] || hex;
-            // appended, so Clay's own width, height and background survive. The font shorthand
-            // also clears the italics the swatch inherits from being an <i>.
-            box.style.cssText += ";display:flex;align-items:center;justify-content:center" +
-                ";font:normal 0.6rem/1 monospace;letter-spacing:0;color:" + swatchInk(box);
-            box.addEventListener("click", function(event) {
-                announce(event.currentTarget);
-            });
+            // appended, so Clay's own height and background survive. The font shorthand also
+            // clears the italics the swatch inherits from being an <i>.
+            box.style.cssText += ";width:" + (2 * width) + "%" +
+                ";display:flex;align-items:center;justify-content:center" +
+                ";font:normal 0.46rem/1 monospace;letter-spacing:0;color:" + swatchInk(box);
         }
-        // Clay sets each item's value, and so the selected class, while it builds, so there is
-        // already a choice to name by the time this runs
-        var selected = picker.querySelector(".color-box.selected");
-        if (selected) {
-            announce(selected);
+        // swatches four fifths as tall as they are wide
+        var wrap = picker.querySelector(".color-box-wrap");
+        if (wrap) {
+            wrap.style.paddingBottom = (rows * 2 * 0.8 / columns * 100) + "%";
         }
     }
 
-    // Name every colour picker on the page
+    // Give a picker a readout naming the color in force, kept up as the value changes
+    // Clay's own class, so the readout is spaced and colored the way a description would be. It
+    // goes ahead of the picker rather than after it because the picker is position fixed and takes
+    // up no room in the flow, so appending would leave the name floating in a gap. It follows the
+    // item rather than the taps, since a switch of contrast can move the pick as well.
+    function describePicker(item, picker) {
+        var readout = document.createElement("div");
+        readout.className = "description";
+        picker.insertBefore(readout, picker.querySelector(".picker-wrap"));
+        function announce() {
+            var hex = hexOf(item.get());
+            readout.textContent = (COLOR_NAMES[hex] || "Custom") + "  #" + hex;
+        }
+        item.on("change", announce);
+        announce();
+    }
+
+    // Offer each picker only the colors the contrast mode can draw, and move a pick it cannot
+    // The swatches keep their places in the map and are only hidden, so switching modes does not
+    // shuffle what is left.
+    function applyContrast(pickers) {
+        var high = contrastHigh();
+        pickers.forEach(function(entry) {
+            var boxes = entry.picker.querySelectorAll(".color-box[data-value]");
+            for (var ii = 0; ii < boxes.length; ii++) {
+                var value = parseInt(boxes[ii].getAttribute("data-value"), 10);
+                boxes[ii].style.visibility = (accentFor(value, high) === value) ? "" : "hidden";
+            }
+            var current = parseInt(entry.item.get(), 10);
+            var moved = accentFor(current, high);
+            if (moved !== current) {
+                entry.item.set(moved);
+            }
+        });
+    }
+
+    // Shape, label and filter both color pickers, and follow the contrast mode as it changes
     function describeColorPickers() {
-        var pickers = document.querySelectorAll(".component-color");
-        for (var ii = 0; ii < pickers.length; ii++) {
-            describePicker(pickers[ii]);
+        var pickers = [];
+        ["timerColor", "chronoColor"].forEach(function(key) {
+            var item = clayConfig.getItemByMessageKey(key);
+            if (item && item.$element && item.$element[0]) {
+                pickers.push({item: item, picker: item.$element[0]});
+            }
+        });
+        pickers.forEach(function(entry) {
+            shapePicker(entry.picker);
+            describePicker(entry.item, entry.picker);
+        });
+        applyContrast(pickers);
+        var contrast = clayConfig.getItemByMessageKey("contrast");
+        if (contrast) {
+            contrast.on("change", function() {
+                applyContrast(pickers);
+            });
         }
     }
 
