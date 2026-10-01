@@ -39,14 +39,23 @@
 #define SETTINGS_INSTANT_START_MIN_SEC 5
 #define SETTINGS_INSTANT_START_MAX_SEC 10
 
-//! Accent colours, as 0xRRGGBB, one for each counting direction. Both default to the green this
-//! app has always used, so out of the box nothing looks any different: drawing.c derives the
-//! middle and band shades from the colour and reproduces the original palette exactly. Setting
-//! them apart is what makes the two modes distinguishable, and makes a timer running past zero
-//! change colour as it turns into a stopwatch.
+//! Accent colors, as 0xRRGGBB, one for each counting direction. Both default to the green this
+//! app has always used: in regular contrast drawing.c shades it to the original mint green center,
+//! and adds the band this fork introduced one step below it. Setting the two apart is what makes
+//! the counting directions distinguishable, and makes a timer running past zero change color as
+//! it turns into a stopwatch.
 //! These must match the defaults in src/pkjs/config.json.
 #define SETTINGS_TIMER_RGB_DEFAULT 0x00FF00  //< GColorGreen
 #define SETTINGS_CHRONO_RGB_DEFAULT 0x00FF00 //< GColorGreen, the same until it is changed
+
+//! Contrast modes, as the configuration page sends them. Regular is the look the app has always
+//! had: dark gray behind the ring and a center shaded up from the accent. High puts black behind
+//! the ring and white in the center, for light the regular mode washes out in. Only colors with a
+//! channel at 00 suit regular and only colors with a channel at ff suit high, so drawing.c moves
+//! an accent into whichever mode is in force. These must match the options in
+//! src/pkjs/config.json.
+#define SETTINGS_CONTRAST_REGULAR 0
+#define SETTINGS_CONTRAST_HIGH 1
 
 //! Load the settings and open AppMessage to receive updates from the phone
 //! @param on_change Called whenever new settings arrive, to refresh anything derived from them
@@ -70,10 +79,17 @@ uint32_t settings_refresh_step_ms(int64_t value_ms);
 //! @return True if instant start is on, in which case window_ms was written
 bool settings_instant_start_ms(uint32_t *window_ms);
 
-//! Get the accent colour for one of the two counting directions
-//! @param chrono True when counting up, which has its own colour
-//! @return The colour as 0xRRGGBB, ready for GColorFromHEX
+//! Get the accent color for one of the two counting directions, moved into the contrast mode
+//! A stored color the mode cannot shade legibly, picked under the other mode or before there were
+//! modes, comes back as the same hue made fully saturated (regular) or fully bright (high), the
+//! same move the configuration page makes; black, the grays and white come back as the default.
+//! @param chrono True when counting up, which has its own color
+//! @return The color as 0xRRGGBB, ready for GColorFromHEX
 uint32_t settings_accent_rgb(bool chrono);
+
+//! Get whether the high contrast mode is in force
+//! @return True for high contrast, false for regular
+bool settings_contrast_high(void);
 
 //! Get how long until the display next needs refreshing
 //! @param value_ms The exact timer value in milliseconds; this one rounds it itself

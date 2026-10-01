@@ -19,8 +19,16 @@ Tuple *dict_find(DictionaryIterator *i, uint32_t k) {
   }
   return NULL;
 }
-int32_t persist_read_int(uint32_t k) { (void)k; return 0; }
-int persist_read_data(uint32_t k, void *b, size_t s) { (void)k; (void)b; (void)s; return 0; }
+int32_t stub_persist_stored_int;
+uint8_t stub_persist_stored[64];
+size_t stub_persist_stored_size;
+int32_t persist_read_int(uint32_t k) { (void)k; return stub_persist_stored_int; }
+int persist_read_data(uint32_t k, void *b, size_t s) {
+  (void)k;
+  const size_t n = (s < stub_persist_stored_size) ? s : stub_persist_stored_size;
+  memcpy(b, stub_persist_stored, n);
+  return (int)n;
+}
 uint8_t stub_persist_last[64];
 size_t stub_persist_last_size;
 uint32_t stub_persist_last_key;
@@ -30,7 +38,8 @@ int persist_write_data(uint32_t k, const void *b, size_t s) {
   memcpy(stub_persist_last, b, stub_persist_last_size);
   return (int)s;
 }
-int persist_write_int(uint32_t k, int32_t v) { (void)k; (void)v; return 4; }
+int32_t stub_persist_last_int;
+int persist_write_int(uint32_t k, int32_t v) { (void)k; stub_persist_last_int = v; return 4; }
 void app_message_register_inbox_received(void (*cb)(DictionaryIterator *, void *)) { (void)cb; }
 int stub_outbox_sends;
 uint32_t stub_outbox_last_key;
@@ -104,6 +113,8 @@ void stub_reset(void) {
   stub_timer_cancels = 0;
   stub_timer_pending = false;
   stub_open_fails = false;
+  stub_persist_stored_int = 0;
+  stub_persist_stored_size = 0;
 }
 AppTimer *app_timer_register(uint32_t ms, void (*cb)(void *), void *data) {
   (void)ms; (void)data;

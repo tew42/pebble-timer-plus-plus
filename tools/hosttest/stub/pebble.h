@@ -45,6 +45,7 @@ AppMessageResult app_message_outbox_send(void);
 void dict_write_uint8(DictionaryIterator *iter, uint32_t key, uint8_t value);
 #define MESSAGE_KEY_settingsRequest 5
 #define MESSAGE_KEY_instantStart 6
+#define MESSAGE_KEY_contrast 7
 // what the harness watches: the stub records the outbox traffic and the pending AppTimer so a
 // test can see a request go out, fail, and be retried
 extern int stub_outbox_sends;
@@ -59,6 +60,12 @@ extern void (*stub_outbox_failed)(DictionaryIterator *, AppMessageResult, void *
 extern uint8_t stub_persist_last[64];
 extern size_t stub_persist_last_size;
 extern uint32_t stub_persist_last_key;
+extern int32_t stub_persist_last_int; //< the last value handed to persist_write_int
+// and what a launch finds stored, for a test to set up. Empty unless one does: every read
+// returns 0 and copies nothing, as it always has.
+extern int32_t stub_persist_stored_int;
+extern uint8_t stub_persist_stored[64];
+extern size_t stub_persist_stored_size;
 extern void (*stub_timer_cb)(void *);
 extern int stub_timer_cancels;
 extern bool stub_timer_pending;

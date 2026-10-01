@@ -235,6 +235,102 @@ int main(void) {
     printf("  ok: an unreadable setting is left alone, a readable one still arrives\n");
   }
 
+  // The contrast mode: off the page, through the inbox, into storage and back on the next launch
+  printf("\nthe contrast mode arrives, is checked, and survives a relaunch:\n");
+  {
+    stub_reset();
+    settings_initialize(&on_change);
+    CHECK(!settings_contrast_high(), "contrast should start regular");
+    CHECK(CFG_CONTRAST_DEFAULT == SETTINGS_CONTRAST_REGULAR,
+          "the page defaults to %d, the watch to regular", (int)CFG_CONTRAST_DEFAULT);
+    CHECK(ARRAY_LENGTH(CFG_CONTRAST) == 2 && CFG_CONTRAST[0] == SETTINGS_CONTRAST_REGULAR &&
+          CFG_CONTRAST[1] == SETTINGS_CONTRAST_HIGH, "the page's options are not regular and high");
+    // what arrives: the two modes, then three things which are neither
+    static const struct { int32_t sent; bool high; } arrivals[] = {
+        {1, true}, {0, false}, {1, true}, {2, true}, {255, true}, {-1, true}, {0, false}};
+    for (unsigned ii = 0; ii < ARRAY_LENGTH(arrivals); ii++) {
+      Tuple t = {.type = TUPLE_INT, .length = 4, .value = {{.int32 = arrivals[ii].sent}}};
+      stub_dict_reset();
+      stub_dict_put(MESSAGE_KEY_contrast, &t);
+      prv_inbox_received_handler(NULL, NULL);
+      CHECK(settings_contrast_high() == arrivals[ii].high, "after %ld the mode is %s",
+            (long)arrivals[ii].sent, settings_contrast_high() ? "high" : "regular");
+    }
+    printf("  ok: regular by default, the two modes taken, anything else left alone\n");
+
+    // a change is stored under this version, and a relaunch reading it back gets it again
+    Tuple high = {.type = TUPLE_INT, .length = 4, .value = {{.int32 = 1}}};
+    stub_dict_reset();
+    stub_dict_put(MESSAGE_KEY_contrast, &high);
+    prv_inbox_received_handler(NULL, NULL);
+    CHECK(stub_persist_last_int == PERSIST_SETTINGS_VERSION && PERSIST_SETTINGS_VERSION == 4,
+          "stored under version %ld", (long)stub_persist_last_int);
+    uint8_t blob[64];
+    const size_t size = stub_persist_last_size;
+    memcpy(blob, stub_persist_last, size);
+    settings_terminate();
+    stub_reset();
+    settings_data.contrast = SETTINGS_CONTRAST_REGULAR;
+    stub_persist_stored_int = PERSIST_SETTINGS_VERSION;
+    memcpy(stub_persist_stored, blob, size);
+    stub_persist_stored_size = size;
+    settings_initialize(&on_change);
+    CHECK(settings_contrast_high(), "a stored high contrast came back regular");
+    settings_terminate();
+    // while a blob from before the contrast mode is not read as this shape at all
+    stub_reset();
+    settings_data.contrast = SETTINGS_CONTRAST_REGULAR;
+    stub_persist_stored_int = 3;
+    memcpy(stub_persist_stored, blob, size);
+    stub_persist_stored_size = size;
+    settings_initialize(&on_change);
+    CHECK(!settings_contrast_high(), "a version 3 blob was read as this version's settings");
+    settings_terminate();
+    printf("  ok: stored under version 4, read back on relaunch, a version 3 blob discarded\n");
+  }
+
+  // Every color the watch could have stored, in both modes, against the one list of moves the
+  // configuration page is held to as well (accent_moves.json, by way of configopts.h)
+  printf("\nan accent the contrast mode cannot shade is moved to the same hue:\n");
+  {
+    stub_reset();
+    settings_initialize(&on_change);
+    int moved = 0;
+    for (int high = 0; high < 2; high++) {
+      const uint32_t (*moves)[2] = high ? MOVES_HIGH : MOVES_REGULAR;
+      const unsigned count = high ? ARRAY_LENGTH(MOVES_HIGH) : ARRAY_LENGTH(MOVES_REGULAR);
+      settings_data.contrast = high ? SETTINGS_CONTRAST_HIGH : SETTINGS_CONTRAST_REGULAR;
+      for (uint32_t r = 0; r < 4; r++) {
+        for (uint32_t g = 0; g < 4; g++) {
+          for (uint32_t b = 0; b < 4; b++) {
+            const uint32_t rgb = (r * 0x55) << 16 | (g * 0x55) << 8 | (b * 0x55);
+            uint32_t expected = rgb;
+            for (unsigned ii = 0; ii < count; ii++) {
+              if (moves[ii][0] == rgb) {
+                expected = moves[ii][1];
+              }
+            }
+            moved += (expected != rgb);
+            settings_data.timer_rgb = rgb;
+            settings_data.chrono_rgb = rgb;
+            CHECK(settings_accent_rgb(false) == expected && settings_accent_rgb(true) == expected,
+                  "%s: %06lx became %06lx, the list says %06lx", high ? "high" : "regular",
+                  (unsigned long)rgb, (unsigned long)settings_accent_rgb(false),
+                  (unsigned long)expected);
+          }
+        }
+      }
+    }
+    // what GColorFromHEX would draw, not just the exact palette values: a stored byte between
+    // levels is judged by its top two bits, as the watch draws it
+    settings_data.contrast = SETTINGS_CONTRAST_REGULAR;
+    settings_data.timer_rgb = 0x7FFF40; // draws as 55ff55, Screamin Green
+    CHECK(settings_accent_rgb(false) == 0x00FF00, "an in-between Screamin Green became %06lx",
+          (unsigned long)settings_accent_rgb(false));
+    settings_terminate();
+    printf("  ok: all 64 colors in both modes, %d of the 128 moved, every one as listed\n", moved);
+  }
+
   printf(failures ? "\n%d FAILURES\n" : "\nthe settings request holds up\n", failures);
   return failures != 0;
 }

@@ -137,6 +137,24 @@
         "defaultValue": "You can assign separate color themes to Timer and Stopwatch functions."
       },
       {
+        "type": "select",
+        "messageKey": "contrast",
+        "label": "Contrast",
+        "description": "Regular keeps a gray ring track and a center tinted with your color. High puts black behind the ring and white in the center, for bright light. Each offers the colors that stay legible in it, so switching may move your pick to the nearest one.",
+        "serializeValueAs": "integer",
+        "defaultValue": "0",
+        "options": [
+          {
+            "label": "Regular",
+            "value": "0"
+          },
+          {
+            "label": "High",
+            "value": "1"
+          }
+        ]
+      },
+      {
         "type": "color",
         "messageKey": "timerColor",
         "label": "Timer (counting down)",

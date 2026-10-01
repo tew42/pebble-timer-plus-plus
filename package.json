@@ -20,7 +20,8 @@
             "timerColor",
             "chronoColor",
             "settingsRequest",
-            "instantStart"
+            "instantStart",
+            "contrast"
         ],
         "projectType": "native",
         "resources": {
