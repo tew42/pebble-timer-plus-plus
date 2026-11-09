@@ -131,6 +131,10 @@ void timer_rewind(bool keep_start);
 //! Reset the timer to zero
 void timer_reset(void);
 
+//! The key the timer's layout version is stored under. Every version since 2015 stores the timer
+//! when the app closes, so the key existing means the app has been installed and run before.
+#define TIMER_PERSIST_VERSION_KEY 4342896
+
 //! Save the timer to persistent storage
 void timer_persist_store(void);
 

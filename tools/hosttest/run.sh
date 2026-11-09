@@ -26,7 +26,7 @@ gcc $CF -DNDEBUG=1 -o layouttest layouttest.c stub/stub.c "$R/text_render.c" || 
 for t in test ringtest convention flicker shadetest timertest clocktest controltest settingstest rotarytest glyphtest layouttest; do
   if ./"$t" >/tmp/$t.log 2>&1; then echo "  ok   $t"; else echo "  FAIL $t"; tail -20 /tmp/$t.log; fail=1; fi
 done
-if node jstest.js >/tmp/jstest.log 2>&1; then echo "  ok   jstest"; else echo "  FAIL jstest"; cat /tmp/jstest.log; fail=1; fi
+if node jstest.js "$ROOT" >/tmp/jstest.log 2>&1; then echo "  ok   jstest"; else echo "  FAIL jstest"; cat /tmp/jstest.log; fail=1; fi
 # main.c, drawing.c and animation.c cannot be run here, but they can be compiled: syntax only,
 # on every platform
 bash syntax.sh "$ROOT" || fail=1

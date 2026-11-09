@@ -49,7 +49,9 @@ void dict_write_uint8(DictionaryIterator *iter, uint32_t key, uint8_t value);
 // what the harness watches: the stub records the outbox traffic and the pending AppTimer so a
 // test can see a request go out, fail, and be retried
 extern int stub_outbox_sends;
-extern uint32_t stub_outbox_last_key;
+extern uint32_t stub_outbox_keys[4];   //< the tuples of the last message begun, in order
+extern uint8_t stub_outbox_values[4];
+extern int stub_outbox_tuples;
 extern uint32_t stub_outbox_size;
 extern uint32_t stub_inbox_size;
 extern bool stub_open_fails; //< make app_message_open refuse, as it does when memory is short
@@ -76,6 +78,8 @@ extern bool stub_outbox_busy; //< when set, app_message_outbox_begin refuses as 
 void stub_dict_reset(void);
 void stub_dict_put(uint32_t key, Tuple *tuple);
 bool persist_exists(uint32_t key);
+extern uint32_t stub_persist_keys[4]; //< the keys persist_exists finds, cleared by stub_reset
+extern int stub_persist_key_count;
 
 // --- vibration, enough for timer.c ---
 typedef struct { const uint32_t *durations; uint32_t num_segments; } VibePattern;

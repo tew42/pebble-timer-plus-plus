@@ -102,6 +102,23 @@ try {
     } else {
         console.log('  ok: nothing saved yet, nothing sent, and the watch keeps its defaults');
     }
+    // the watch's overrun choice is kept where the phone has none of its own: a page saved before
+    // the toggle existed, or never saved, would show it off and switch an old install on saving
+    [{saved: {timerColor: 0x00ff00}, want: true, what: 'a page saved before the toggle'},
+     {saved: null, want: true, what: 'a page never saved'},
+     {saved: {overrunChrono: false}, want: false, what: 'a page with its own choice'}
+    ].forEach(function(c) {
+        var phone = loadIndexJs(c.saved);
+        phone.listeners.appmessage({payload: {settingsRequest: 1, overrunChrono: 1}});
+        var now = JSON.parse(global.localStorage._v);
+        var answer = phone.sent.length === 1 ? phone.sent[0][phone.keys.overrunChrono] : undefined;
+        if (now.overrunChrono !== c.want || answer !== (c.want ? 1 : 0) ||
+            (c.saved && c.saved.timerColor && now.timerColor !== c.saved.timerColor)) {
+            fail(c.what + ': saved ' + JSON.stringify(now) + ' and answered ' +
+                 JSON.stringify(phone.sent) + ' for a watch running the overrun on');
+        }
+    });
+    console.log('  ok: the watch\'s overrun choice is kept unless the page has saved its own');
 } catch (e) {
     fail('could not load index.js the way the phone does: ' + e);
 }
@@ -128,11 +145,11 @@ function itemFor(key) {
     }
 })();
 
-// the overrun toggle defaults on, the behavior the app has always had
+// the overrun toggle defaults off: the stopwatch a timer used to become is the legacy choice
 (function () {
     var item = itemFor('overrunChrono');
-    if (!item || item.type !== 'toggle' || item.defaultValue !== true) {
-        fail('the overrun toggle is missing or does not default on');
+    if (!item || item.type !== 'toggle' || item.defaultValue !== false) {
+        fail('the overrun toggle is missing or does not default off');
     }
 })();
 

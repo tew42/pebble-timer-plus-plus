@@ -42,7 +42,9 @@ int32_t stub_persist_last_int;
 int persist_write_int(uint32_t k, int32_t v) { (void)k; stub_persist_last_int = v; return 4; }
 void app_message_register_inbox_received(void (*cb)(DictionaryIterator *, void *)) { (void)cb; }
 int stub_outbox_sends;
-uint32_t stub_outbox_last_key;
+uint32_t stub_outbox_keys[4];
+uint8_t stub_outbox_values[4];
+int stub_outbox_tuples;
 uint32_t stub_outbox_size;
 uint32_t stub_inbox_size;
 void (*stub_outbox_failed)(DictionaryIterator *, AppMessageResult, void *);
@@ -73,6 +75,7 @@ AppMessageResult app_message_outbox_begin(DictionaryIterator **iter) {
     return APP_MSG_BUSY;
   }
   (*iter) = (DictionaryIterator *)&stub_outbox_iter;
+  stub_outbox_tuples = 0;
   return APP_MSG_OK;
 }
 AppMessageResult app_message_outbox_send(void) {
@@ -81,8 +84,11 @@ AppMessageResult app_message_outbox_send(void) {
 }
 void dict_write_uint8(DictionaryIterator *iter, uint32_t key, uint8_t value) {
   (void)iter;
-  (void)value;
-  stub_outbox_last_key = key;
+  if (stub_outbox_tuples < 4) {
+    stub_outbox_keys[stub_outbox_tuples] = key;
+    stub_outbox_values[stub_outbox_tuples] = value;
+    stub_outbox_tuples++;
+  }
 }
 void stub_fail_outbox(void) {
   if (stub_outbox_failed) {
@@ -105,7 +111,7 @@ void stub_fire_timer(void) {
 }
 void stub_reset(void) {
   stub_outbox_sends = 0;
-  stub_outbox_last_key = 0;
+  stub_outbox_tuples = 0;
   stub_outbox_size = 0;
   stub_inbox_size = 0;
   stub_outbox_failed = NULL;
@@ -115,6 +121,7 @@ void stub_reset(void) {
   stub_open_fails = false;
   stub_persist_stored_int = 0;
   stub_persist_stored_size = 0;
+  stub_persist_key_count = 0;
 }
 AppTimer *app_timer_register(uint32_t ms, void (*cb)(void *), void *data) {
   (void)ms; (void)data;
@@ -128,7 +135,16 @@ void app_timer_cancel(AppTimer *timer) {
   stub_timer_cb = NULL;
   stub_timer_pending = false;
 }
-bool persist_exists(uint32_t k) { (void)k; return false; }
+uint32_t stub_persist_keys[4];
+int stub_persist_key_count;
+bool persist_exists(uint32_t k) {
+  for (int ii = 0; ii < stub_persist_key_count; ii++) {
+    if (stub_persist_keys[ii] == k) {
+      return true;
+    }
+  }
+  return false;
+}
 // the tests count bursts rather than feeling them
 int vibe_burst_count;
 void vibes_enqueue_custom_pattern(VibePattern p) { (void)p; vibe_burst_count++; }

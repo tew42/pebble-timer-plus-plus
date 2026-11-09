@@ -29,12 +29,23 @@ var clayConfig = require('./config.json');
 // case logs rather than returning in silence: on the watch side settings.c also gives up without
 // a word after three tries, and two silent halves make a feature which disappears with no sign
 // anywhere.
-Pebble.addEventListener('appmessage', function() {
+//
+// The request carries the watch's overrun choice. A page saved before that toggle existed, or never
+// saved, has no say in it, and would show the toggle at its default, off: saving the page would
+// then quietly take an install from before the toggle off the stopwatch it has always had. So the
+// watch's choice is saved as if from the page, through Clay's own setter, and the page shows it.
+Pebble.addEventListener('appmessage', function(e) {
     var stored = null;
     try {
         stored = JSON.parse(localStorage.getItem('clay-settings'));
-    } catch (e) {
-        console.log('Timer++: the saved settings could not be read: ' + e);
+    } catch (err) {
+        console.log('Timer++: the saved settings could not be read: ' + err);
+    }
+    var overrun = (e && e.payload) ? e.payload.overrunChrono : undefined;
+    if (overrun !== undefined && !(stored && stored.hasOwnProperty('overrunChrono'))) {
+        clay.setSettings('overrunChrono', !!overrun);
+        stored = stored || {};
+        stored.overrunChrono = !!overrun;
     }
     if (!stored) {
         // nothing has ever been saved, so what the watch already has is the truth -- or the key

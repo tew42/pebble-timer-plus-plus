@@ -33,8 +33,14 @@ int main(void) {
   stub_reset();
   settings_initialize(&on_change);
   CHECK(stub_outbox_sends == 1, "expected one request, got %d", stub_outbox_sends);
-  CHECK(stub_outbox_last_key == MESSAGE_KEY_settingsRequest,
-        "the request went out under key %u", (unsigned)stub_outbox_last_key);
+  CHECK(stub_outbox_tuples == 2 && stub_outbox_keys[0] == MESSAGE_KEY_settingsRequest,
+        "the request went out as %d tuples, the first under key %u", stub_outbox_tuples,
+        (unsigned)stub_outbox_keys[0]);
+  CHECK(stub_outbox_keys[1] == MESSAGE_KEY_overrunChrono &&
+            stub_outbox_values[1] == settings_overrun_chrono(),
+        "the request should carry the overrun choice, %d, got key %u value %u",
+        settings_overrun_chrono(), (unsigned)stub_outbox_keys[1], stub_outbox_values[1]);
+  CHECK(stub_outbox_size >= 1 + 2 * (7 + 1), "the outbox cannot hold the request's two bytes");
   CHECK(stub_outbox_size > 0, "an outbox of no size can carry no request");
   // a dictionary larger than the inbox is dropped whole and every setting stops arriving, so the
   // inbox has to hold one integer tuple, seven bytes of header and four of payload, for every
@@ -162,7 +168,7 @@ int main(void) {
     stub_outbox_busy = false;
     stub_fire_timer();
     CHECK(stub_outbox_sends == 1, "the request should have gone out once the outbox cleared");
-    CHECK(stub_outbox_last_key == MESSAGE_KEY_settingsRequest, "on the wrong key");
+    CHECK(stub_outbox_keys[0] == MESSAGE_KEY_settingsRequest, "on the wrong key");
 
     // and a refusal still spends a go, so a permanently jammed outbox is not asked for ever
     stub_outbox_busy = true;
@@ -262,8 +268,8 @@ int main(void) {
   {
     stub_reset();
     settings_initialize(&on_change);
-    CHECK(settings_overrun_chrono(), "the overrun should become a stopwatch by default");
-    CHECK(CFG_OVERRUN_CHRONO_DEFAULT == 1, "the page defaults the toggle off");
+    CHECK(!settings_overrun_chrono(), "the overrun should hold the alarm by default");
+    CHECK(CFG_OVERRUN_CHRONO_DEFAULT == 0, "the page defaults the toggle on");
     static const struct { int32_t sent; bool on; } arrivals[] = {
         {0, false}, {1, true}, {0, false}, {2, false}, {255, false}, {-1, false}, {1, true}};
     for (unsigned ii = 0; ii < ARRAY_LENGTH(arrivals); ii++) {
@@ -291,8 +297,65 @@ int main(void) {
     CHECK(!settings_overrun_chrono(), "a stored off came back on");
     settings_terminate();
     stub_dict_reset();
-    settings_data.overrun_chrono = 1;
-    printf("  ok: on by default, 0 and 1 taken, anything else left alone, stored and read back\n");
+    settings_data.overrun_chrono = 0;
+    printf("  ok: off by default, 0 and 1 taken, anything else left alone, stored and read back\n");
+  }
+
+  // The overrun toggle is off for a fresh install only. One from before the toggle, which has
+  // stored a timer or older settings by now, keeps the stopwatch it has always had; the choice is
+  // stored at once and told to the phone, so the page shows it too.
+  printf("\nan install from before the overrun toggle keeps the stopwatch, a fresh one does not:\n");
+  {
+    static const struct { uint32_t key; int32_t version; bool on; const char *what; } installs[] = {
+        {0, 0, false, "a fresh install"},
+        {TIMER_PERSIST_VERSION_KEY, 0, true, "an install with a stored timer"},
+        {PERSIST_SETTINGS_VERSION_KEY, 5, true, "an install with version 5 settings"},
+    };
+    for (unsigned ii = 0; ii < ARRAY_LENGTH(installs); ii++) {
+      stub_reset();
+      settings_data.overrun_chrono = 0;  // what a new process starts with
+      if (installs[ii].key) {
+        stub_persist_keys[stub_persist_key_count++] = installs[ii].key;
+      }
+      stub_persist_stored_int = installs[ii].version;
+      settings_initialize(&on_change);
+      CHECK(settings_overrun_chrono() == installs[ii].on, "%s: the toggle came up %s",
+            installs[ii].what, settings_overrun_chrono() ? "on" : "off");
+      Settings stored;
+      memcpy(&stored, stub_persist_last, sizeof(stored));
+      CHECK(stub_persist_last_int == PERSIST_SETTINGS_VERSION &&
+                stub_persist_last_size == sizeof(Settings) &&
+                stored.overrun_chrono == installs[ii].on,
+            "%s: the choice should be stored at once", installs[ii].what);
+      CHECK(stub_outbox_keys[1] == MESSAGE_KEY_overrunChrono &&
+                stub_outbox_values[1] == installs[ii].on,
+            "%s: the phone should be told the toggle is %s", installs[ii].what,
+            installs[ii].on ? "on" : "off");
+      settings_terminate();
+    }
+    // a fresh install's next launch finds the timer it stored on closing, and its own stored
+    // choice, which is the one that counts
+    stub_reset();
+    settings_data.overrun_chrono = 0;
+    settings_initialize(&on_change);
+    uint8_t blob[64];
+    const size_t size = stub_persist_last_size;
+    memcpy(blob, stub_persist_last, size);
+    settings_terminate();
+    stub_reset();
+    settings_data.overrun_chrono = 0;
+    stub_persist_keys[stub_persist_key_count++] = TIMER_PERSIST_VERSION_KEY;
+    stub_persist_keys[stub_persist_key_count++] = PERSIST_SETTINGS_VERSION_KEY;
+    stub_persist_stored_int = PERSIST_SETTINGS_VERSION;
+    memcpy(stub_persist_stored, blob, size);
+    stub_persist_stored_size = size;
+    settings_initialize(&on_change);
+    CHECK(!settings_overrun_chrono(), "a fresh install's second launch took its own timer for an "
+                                      "install from before the toggle");
+    settings_terminate();
+    settings_data.overrun_chrono = 0;
+    printf("  ok: on for a stored timer or older settings, off for nothing, stored and sent at "
+           "once\n");
   }
 
   // A blob from before the toggle is not read as this shape: version 5 had the colors where this

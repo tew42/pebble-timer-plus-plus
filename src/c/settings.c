@@ -9,10 +9,11 @@
 // @bugs No known bugs
 
 #include "settings.h"
+#include "timer.h"
 #include "utility.h"
 #include <pebble.h>
 
-// AppMessage buffers: one tuple in for every setting the configuration page sends, one out to ask
+// AppMessage buffers: one tuple in for every setting the configuration page sends, two out to ask
 // for them. A dictionary is a byte of header, then seven bytes of header and the payload for each
 // tuple, and every setting the page sends is an integer, four bytes at its widest. An inbound
 // dictionary larger than the inbox is dropped whole, with no inbox-dropped handler registered to
@@ -47,13 +48,14 @@ typedef struct {
   uint32_t timer_rgb;           //< Accent color while counting down
   uint32_t chrono_rgb;          //< Accent color while counting up
 } Settings;
-// both update modes default to off, so upgrading users see exactly the behavior they had
-// before, and counting down keeps the color the app has always had
+// both update modes default to off, so upgrading users see the display they had before, and
+// counting down keeps the color the app has always had; the overrun toggle is off only for a
+// fresh install, and prv_persist_read turns it on for one from before the toggle
 static Settings settings_data = {
     .ten_second_above_sec = SETTINGS_NEVER,
     .minute_above_min = SETTINGS_NEVER,
     .instant_start_sec = SETTINGS_NEVER,
-    .overrun_chrono = 1,
+    .overrun_chrono = 0,
     .timer_rgb = SETTINGS_TIMER_RGB_DEFAULT,
     .chrono_rgb = SETTINGS_CHRONO_RGB_DEFAULT,
 };
@@ -124,7 +126,8 @@ static void prv_outbox_failed_handler(DictionaryIterator *iter, AppMessageResult
 }
 
 // Ask the phone to send the settings it has
-// What is in the message does not matter; that one arrived is the whole signal.
+// The request carries the overrun choice, which a page saved before the toggle existed, or never
+// saved, knows nothing of: the phone keeps it as saved, so the page shows what the watch does.
 static void prv_request_settings(void) {
   DictionaryIterator *iter;
   if (!channel_open) {
@@ -136,6 +139,7 @@ static void prv_request_settings(void) {
     return;
   }
   dict_write_uint8(iter, MESSAGE_KEY_settingsRequest, 1);
+  dict_write_uint8(iter, MESSAGE_KEY_overrunChrono, settings_data.overrun_chrono);
   if (app_message_outbox_send() != APP_MSG_OK) {
     prv_schedule_retry();
   }
@@ -199,9 +203,24 @@ static uint8_t prv_validate(int32_t value, uint8_t min, uint8_t max, uint8_t cur
   return current;
 }
 
+// Save the settings to persistent storage
+static void prv_persist_store(void) {
+  persist_write_data(PERSIST_SETTINGS_KEY, &settings_data, sizeof(settings_data));
+  persist_write_int(PERSIST_SETTINGS_VERSION_KEY, PERSIST_SETTINGS_VERSION);
+}
+
 // Read the settings from persistent storage, keeping the defaults if none were stored
 static void prv_persist_read(void) {
   if (persist_read_int(PERSIST_SETTINGS_VERSION_KEY) != PERSIST_SETTINGS_VERSION) {
+    // Nothing of this version is stored. An install from before the overrun toggle keeps the
+    // stopwatch it has always had, and only a fresh one starts with the held alarm; older settings
+    // or a stored timer say which this is. The choice is stored at once, because this launch will
+    // store a timer of its own when it closes, and a fresh install would look like an old one on
+    // the next launch.
+    if (persist_exists(PERSIST_SETTINGS_VERSION_KEY) || persist_exists(TIMER_PERSIST_VERSION_KEY)) {
+      settings_data.overrun_chrono = 1;
+    }
+    prv_persist_store();
     return;
   }
   Settings stored = settings_data;
@@ -222,12 +241,6 @@ static void prv_persist_read(void) {
   // any 24 bit value names a color; GColorFromHEX quantizes whatever it is handed
   settings_data.timer_rgb = stored.timer_rgb & 0xFFFFFF;
   settings_data.chrono_rgb = stored.chrono_rgb & 0xFFFFFF;
-}
-
-// Save the settings to persistent storage
-static void prv_persist_store(void) {
-  persist_write_data(PERSIST_SETTINGS_KEY, &settings_data, sizeof(settings_data));
-  persist_write_int(PERSIST_SETTINGS_VERSION_KEY, PERSIST_SETTINGS_VERSION);
 }
 
 // Read a tuple as an integer, whichever way the configuration page serialized it
@@ -442,7 +455,7 @@ void settings_initialize(void (*on_change)(void)) {
   prv_persist_read();
   app_message_register_inbox_received(prv_inbox_received_handler);
   app_message_register_outbox_failed(prv_outbox_failed_handler);
-  // the page's integers in, one byte out to ask for them
+  // the page's integers in, two bytes out to ask for them
   prv_open_channel();
   requests_left = SETTINGS_REQUEST_RETRIES;
   prv_request_settings();

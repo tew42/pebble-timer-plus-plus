@@ -13,7 +13,6 @@
 #include "utility.h"
 
 #define PERSIST_VERSION 4
-#define PERSIST_VERSION_KEY 4342896
 #define PERSIST_TIMER_KEY 58734
 // How long the elapse alert buzzes. The buzz is re-enqueued from the display refresh, which
 // main.c keeps on a one second cadence for as long as timer_is_vibrating(), whatever the coarse
@@ -378,7 +377,7 @@ void timer_persist_store(void) {
   // thing to land. Written first, a store which lost the blob after getting the version through
   // would leave a stale blob wearing the current version's number, and the read would believe it.
   // settings.c already stores its pair this way round.
-  persist_write_int(PERSIST_VERSION_KEY, PERSIST_VERSION);
+  persist_write_int(TIMER_PERSIST_VERSION_KEY, PERSIST_VERSION);
 }
 
 // Read the timer from persistent storage
@@ -392,7 +391,7 @@ void timer_persist_read(void) {
   // this is the first thing prv_initialize calls and the structure is a zeroed static, but that
   // is the call order being lucky rather than the read being safe. A short blob is a corrupt one
   // whatever the version says, so it goes the same way as a missing one.
-  if (persist_read_int(PERSIST_VERSION_KEY) != PERSIST_VERSION ||
+  if (persist_read_int(TIMER_PERSIST_VERSION_KEY) != PERSIST_VERSION ||
       persist_read_data(PERSIST_TIMER_KEY, &timer_data, sizeof(timer_data)) !=
           (int)sizeof(timer_data)) {
     timer_reset();

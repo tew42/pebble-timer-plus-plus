@@ -75,11 +75,7 @@ picker.
 
 ### Alarm
 
-When a timer reaches zero it buzzes for 30 seconds. Any button stops the buzz and does nothing
-else, and select inside the alarm puts the timer back to its length, ready to start again.
-
-**Overrun becomes stopwatch** is on by default: after the alarm, the timer carries on counting up
-as a stopwatch. Switched off, the alarm stands for up to 5 minutes instead:
+When a timer reaches zero it buzzes for 30 seconds, and the alarm stands for up to 5 minutes:
 
 - Up and down only stop the buzz. Back stops it too, and a second back leaves the app.
 - Left alone, the app closes at 5 minutes with the timer paused at its length, ready to run again.
@@ -87,6 +83,11 @@ as a stopwatch. Switched off, the alarm stands for up to 5 minutes instead:
   timer keeps its original start, so it only starts once it is set to end in the future: a 30
   minute timer answered 2 minutes late has to be set above 32 minutes, and then finishes on the
   original schedule. Until then, select shakes the digits instead of starting.
+
+**Overrun becomes stopwatch (legacy)** brings back the earlier behavior: after zero the timer
+carries on counting up as a stopwatch. Any button stops the buzz and does nothing else, except
+select during the 30 seconds, which puts the timer back to its length, ready to start again. It is
+off for a fresh install, and on for one from before 1.5, so nothing changes for anyone upgrading.
 
 ## Closing itself
 

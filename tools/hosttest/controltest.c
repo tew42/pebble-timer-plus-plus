@@ -429,6 +429,7 @@ int main(void) {
   // now.
   printf("\na held alert: five minutes, select only, and a start which must reach past now:\n");
   {
+    const uint8_t overrun_was = settings_data.overrun_chrono;
     settings_data.overrun_chrono = 0;
     // left alone, buzz silenced or not, it closes at 5:00, storing the length paused
     for (int silence = 0; silence < 2; silence++) {
@@ -495,7 +496,7 @@ int main(void) {
     CHECK(left && timer_is_paused() && timer_get_display_ms() == MSEC_IN_MIN,
           "leaving a held alert should store 1:00 paused, got %lldms paused=%d",
           (long long)timer_get_display_ms(), timer_is_paused());
-    settings_data.overrun_chrono = 1;
+    settings_data.overrun_chrono = overrun_was;
     printf("  ok: closes at 5:00 rewound; select edits on the original start, past now only\n");
   }
 
@@ -566,6 +567,9 @@ int main(void) {
   CHECK(!strcmp(LABEL(), "Timer"), "a timer set: expected Timer, got %s", LABEL());
   timer_toggle_play_pause();
   CHECK(!strcmp(LABEL(), "Timer"), "counting down: expected Timer, got %s", LABEL());
+  // the legacy overrun, where the alert gives way to a stopwatch the up button can split
+  const uint8_t overrun_was = settings_data.overrun_chrono;
+  settings_data.overrun_chrono = 1;
   fake_now_ms += 61000; // a second past zero, alert sounding
   CHECK(timer_is_vibrating() && !strcmp(LABEL(), "Alarm"), "alerting: expected Alarm, got %s",
         LABEL());
@@ -583,6 +587,7 @@ int main(void) {
   CHECK(!strcmp(LABEL(), "Chrono"), "released: expected Chrono, got %s", LABEL());
   press_select();
   CHECK(!strcmp(LABEL(), "Chrono"), "a held run is still a stopwatch: got %s", LABEL());
+  settings_data.overrun_chrono = overrun_was;
   // and a peek says so, for the second it lasts
   settings_data.ten_second_above_sec = 20;
   settings_data.minute_above_min = 1;
