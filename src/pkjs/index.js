@@ -78,191 +78,135 @@ var clay = new Clay(clayConfig, function() {
         }
     }
 
-    // Clay draws the color picker as bare swatches and nothing else. That is enough on a desktop
-    // and not enough on a phone: a good many of the accents on offer differ by one two-bit channel,
-    // and on an OLED panel those are close enough together to be a guess. So each swatch carries
-    // its own hex code, and whichever one is in force is named underneath the picker.
-    //
-    // All sixty-four of Pebble's colors are named here rather than just the ones this page offers,
-    // so the labels survive the palette changing and still read on the black and white layouts
-    // Clay substitutes when the watch has no color screen.
-    var COLOR_NAMES = {
-        "000000": "Black", "000055": "Oxford Blue", "0000aa": "Duke Blue", "0000ff": "Blue",
-        "005500": "Dark Green", "005555": "Midnight Green", "0055aa": "Cobalt Blue",
-        "0055ff": "Blue Moon", "00aa00": "Islamic Green", "00aa55": "Jaeger Green",
-        "00aaaa": "Tiffany Blue", "00aaff": "Vivid Cerulean", "00ff00": "Green",
-        "00ff55": "Malachite", "00ffaa": "Medium Spring Green", "00ffff": "Cyan",
-        "550000": "Bulgarian Rose", "550055": "Imperial Purple", "5500aa": "Indigo",
-        "5500ff": "Electric Ultramarine", "555500": "Army Green", "555555": "Dark Gray",
-        "5555aa": "Liberty", "5555ff": "Very Light Blue", "55aa00": "Kelly Green",
-        "55aa55": "May Green", "55aaaa": "Cadet Blue", "55aaff": "Picton Blue",
-        "55ff00": "Bright Green", "55ff55": "Screamin Green", "55ffaa": "Medium Aquamarine",
-        "55ffff": "Electric Blue", "aa0000": "Dark Candy Apple Red", "aa0055": "Jazzberry Jam",
-        "aa00aa": "Purple", "aa00ff": "Vivid Violet", "aa5500": "Windsor Tan",
-        "aa5555": "Rose Vale", "aa55aa": "Purpureus", "aa55ff": "Lavender Indigo",
-        "aaaa00": "Limerick", "aaaa55": "Brass", "aaaaaa": "Light Gray",
-        "aaaaff": "Baby Blue Eyes", "aaff00": "Spring Bud", "aaff55": "Inchworm",
-        "aaffaa": "Mint Green", "aaffff": "Celeste", "ff0000": "Red", "ff0055": "Folly",
-        "ff00aa": "Fashion Magenta", "ff00ff": "Magenta", "ff5500": "Orange",
-        "ff5555": "Sunset Orange", "ff55aa": "Brilliant Rose", "ff55ff": "Shocking Pink",
-        "ffaa00": "Chrome Yellow", "ffaa55": "Rajah", "ffaaaa": "Melon",
-        "ffaaff": "Rich Brilliant Lavender", "ffff00": "Yellow", "ffff55": "Icterine",
-        "ffffaa": "Pastel Yellow", "ffffff": "White"
-    };
+    // The two palettes, and which colors each offers
+    // The same rule as settings_accent_rgb in src/c/settings.c, which applies it to whatever the
+    // watch has stored, so the page and the watch always agree on the color in force. With either
+    // coarse update mode on, the ring gets a band, and only the 24 accents in COARSE_ACCENTS were
+    // chosen to stand off it and the black behind the ring; a color outside them moves to the
+    // nearest by hue first and lightness second. Otherwise anything goes but black and white,
+    // which would vanish into what is behind the ring or the center. Either way black and white
+    // become the default green.
+    var COARSE_ACCENTS = [
+        0x00aaaa, 0x00ff00, 0x5555ff, 0xaa5555, 0x55aa55, 0xaa55aa, 0xaaaa00, 0xff5500,
+        0xff00ff, 0xff5555, 0x5555aa, 0x00aaff, 0xaa55ff, 0x00aa00, 0xff00aa, 0x55aaaa,
+        0xff55aa, 0xffaa00, 0xaa00aa, 0x55ff00, 0x55aaff, 0xaa00ff, 0xff55ff, 0xffaa55
+    ];
+    // Which of them each of the 64 colors becomes, a letter for each from a to x, indexed by the
+    // color's two-bit channels as rrggbb. Must match COARSE_MOVES in src/c/settings.c; both are
+    // printed by tools/hosttest/gen_palette.js, which works them out.
+    var COARSE_MOVES = "bkkcnakcnealbbbpdskcekkcneputtbpddsvddfmggputttpjjoihjqwrxjwggrb";
+    var DEFAULT_ACCENT = 0x00ff00;  // must match SETTINGS_TIMER_RGB_DEFAULT in src/c/settings.h
 
-    // The hex a swatch stands for, back out of the decimal Clay writes on it
-    function swatchHex(box) {
-        return hexOf(box.getAttribute("data-value"));
+    // Channels are Pebble's two-bit levels, taken from the top of each byte as GColorFromHEX
+    // takes them
+    function colorIndex(value) {
+        return ((value >> 18) & 0x30) | ((value >> 12) & 0x0c) | ((value >> 6) & 0x03);
     }
 
-    // Black or white lettering, whichever the swatch can carry
-    // Measured off the rendered element rather than worked out from the hex, because Clay paints
-    // the swatches through its sunlight map unless the item opts out of it, and the label has to
-    // stay legible on whichever of the two the page happens to be showing.
-    function swatchInk(box) {
-        var channels = window.getComputedStyle(box).backgroundColor.match(/\d+/g);
-        if (!channels || channels.length < 3) {
-            return "#000";
+    // The color a pick becomes in a palette: itself if the palette offers it, otherwise its move
+    function accentFor(value, coarse) {
+        var index = colorIndex(value);
+        if (coarse) {
+            return COARSE_ACCENTS[COARSE_MOVES.charCodeAt(index) - 97];
         }
-        function linear(text) {
-            var value = parseInt(text, 10) / 255;
-            return (value <= 0.04045) ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+        if (index === 0x00 || index === 0x3f) {
+            return DEFAULT_ACCENT;
         }
-        var luminance = 0.2126 * linear(channels[0]) + 0.7152 * linear(channels[1]) +
-                        0.0722 * linear(channels[2]);
-        return (luminance > 0.3) ? "#000" : "#fff";
-    }
-
-    // The contrast modes, and which colors each can draw
-    // The same rule as prv_accent_in_mode in src/c/settings.c, which applies it to whatever the watch
-    // has stored, so the page and the watch always agree on the color in force. Regular shades the
-    // center two steps up, so it needs a channel at 00 or the center comes out white; high shades
-    // the band two steps down, so it needs a channel at ff or the band is the black behind it.
-    // Channels here are Pebble's two-bit levels, 0 to 3, taken from the top of each byte as
-    // GColorFromHEX takes them.
-    var CONTRAST_HIGH = 1;  // must match SETTINGS_CONTRAST_HIGH in src/c/settings.h
-
-    function channelsOf(value) {
-        return [(value >> 22) & 3, (value >> 14) & 3, (value >> 6) & 3];
-    }
-
-    function valueOf(channels) {
-        return channels.reduce(function(sum, c) {
-            return sum * 256 + c * 0x55;
+        return [index >> 4, index >> 2, index].reduce(function(sum, c) {
+            return sum * 256 + (c & 3) * 0x55;
         }, 0);
     }
 
-    // The color an accent becomes in a mode: itself if the mode can draw it, otherwise the same
-    // hue made fully saturated (regular) or fully bright (high), rounding half up. Black, the grays
-    // and white have no hue to keep, and become the default green.
-    function accentFor(value, high) {
-        var c = channelsOf(value);
-        var lo = Math.min.apply(Math, c);
-        var hi = Math.max.apply(Math, c);
-        if (lo === hi) {
-            return 0x00ff00;
-        }
-        if (high ? hi === 3 : lo === 0) {
-            return valueOf(c);
-        }
-        return valueOf(c.map(function(x) {
-            return high ? Math.floor((6 * x + hi) / (2 * hi))
-                        : Math.floor((2 * hi * (x - lo) + (hi - lo)) / (2 * (hi - lo)));
-        }));
+    // Whether either coarse update mode is on, which is what decides the palette
+    function coarse() {
+        return ["tenSecondUpdatesAbove", "minuteUpdatesAbove"].some(function(key) {
+            var item = clayConfig.getItemByMessageKey(key);
+            return !!item && parseInt(item.get(), 10) !== NEVER;
+        });
     }
 
-    function contrastHigh() {
-        var item = clayConfig.getItemByMessageKey("contrast");
-        return !!item && parseInt(item.get(), 10) === CONTRAST_HIGH;
-    }
-
-    // The hex a picker's value, or a swatch's decimal, names
-    function hexOf(value) {
-        var hex = (parseInt(value, 10) & 0xffffff).toString(16);
-        while (hex.length < 6) {
-            hex = "0" + hex;
+    // Draw the swatches as hexagons, and mark the one picked
+    // The hexagons clip away the shadow Clay marks the pick with, so it gets a dot in the middle
+    // instead, white in a dark ring to show on any color. Clay paints each swatch with an inline
+    // background shorthand, which would clear the dot without the !important.
+    var HEX_CLASS = "hex-map";
+    function addHexStyle() {
+        if (document.getElementById(HEX_CLASS)) {
+            return;
         }
-        return hex;
+        var hexagon = "polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%)";
+        var style = document.createElement("style");
+        style.id = HEX_CLASS;
+        style.textContent =
+            "." + HEX_CLASS + " .color-box{-webkit-clip-path:" + hexagon + ";clip-path:" + hexagon +
+            "}" +
+            "." + HEX_CLASS + " .color-box.selected{box-shadow:none;background-image:" +
+            "radial-gradient(circle,#fff 0 14%,#000 14% 22%,transparent 22%) !important}";
+        document.head.appendChild(style);
     }
 
-    // Lay a picker out like the SDK's color map, and label its swatches
+    // Lay a picker out like the SDK's color map, as interlocking hexagons
     // config.json holds the map from the SDK's color picker page on a grid of half hexagons: each
     // color sits in one cell with an empty one after it, and alternate rows start half a hexagon
     // in. Clay draws every cell the same width, so each swatch is widened here over the gap after
-    // it, which is what sets the rows offset the way the page's hexagons are. The rows are made
-    // taller too: Clay sizes the cells square, and a swatch two cells wide and one tall has no
-    // room for a label.
+    // it, and made the height of a pointed hexagon that wide. A negative margin of a quarter of
+    // that height lets Clay's floats stack the rows three quarters of a hexagon apart, so each
+    // row's points sit in the notches of the next, and the picker grows to hold the rows at that
+    // pitch plus the last row's points. The empty cells are set to the pitch as well: left at
+    // Clay's height they stand taller than a row, and the floats after them snag on them.
     function shapePicker(picker) {
         var cells = picker.querySelectorAll(".color-box");
         if (!cells.length) {
             return;
         }
-        var width = parseFloat(cells[0].style.width);
-        var columns = Math.round(100 / width);
+        var width = 2 * parseFloat(cells[0].style.width);  // a hexagon, in % of the picker's width
+        var columns = Math.round(200 / width);
         var rows = Math.round(cells.length / columns);
+        var hexHeight = width * 2 / Math.sqrt(3);  // also in % of the width
+        var pickerHeight = rows * hexHeight * 3 / 4 + hexHeight / 4;
+        picker.classList.add(HEX_CLASS);
         for (var ii = 0; ii < cells.length; ii++) {
             var box = cells[ii];
+            // a height in % is of the picker's height, a margin in % of its width
             if (!box.getAttribute("data-value")) {
+                box.style.height = (hexHeight * 3 / 4 / pickerHeight * 100) + "%";
                 continue;
             }
             var gap = box.nextElementSibling;
             if (gap && !gap.getAttribute("data-value")) {
                 gap.style.display = "none";
             }
-            var hex = swatchHex(box);
-            box.textContent = hex;
-            box.title = COLOR_NAMES[hex] || hex;
-            // appended, so Clay's own height and background survive. The font shorthand also
-            // clears the italics the swatch inherits from being an <i>.
-            box.style.cssText += ";width:" + (2 * width) + "%" +
-                ";display:flex;align-items:center;justify-content:center" +
-                ";font:normal 0.46rem/1 monospace;letter-spacing:0;color:" + swatchInk(box);
+            box.style.width = width + "%";
+            box.style.height = (hexHeight / pickerHeight * 100) + "%";
+            box.style.marginBottom = (-hexHeight / 4) + "%";
         }
-        // swatches four fifths as tall as they are wide
         var wrap = picker.querySelector(".color-box-wrap");
         if (wrap) {
-            wrap.style.paddingBottom = (rows * 2 * 0.8 / columns * 100) + "%";
+            wrap.style.paddingBottom = pickerHeight + "%";
         }
     }
 
-    // Give a picker a readout naming the color in force, kept up as the value changes
-    // Clay's own class, so the readout is spaced and colored the way a description would be. It
-    // goes ahead of the picker rather than after it because the picker is position fixed and takes
-    // up no room in the flow, so appending would leave the name floating in a gap. It follows the
-    // item rather than the taps, since a switch of contrast can move the pick as well.
-    function describePicker(item, picker) {
-        var readout = document.createElement("div");
-        readout.className = "description";
-        picker.insertBefore(readout, picker.querySelector(".picker-wrap"));
-        function announce() {
-            var hex = hexOf(item.get());
-            readout.textContent = (COLOR_NAMES[hex] || "Custom") + "  #" + hex;
-        }
-        item.on("change", announce);
-        announce();
-    }
-
-    // Offer each picker only the colors the contrast mode can draw, and move a pick it cannot
-    // The swatches keep their places in the map and are only hidden, so switching modes does not
+    // Offer each picker only the colors the palette in force offers, and move a pick it does not
+    // The swatches keep their places in the map and are only hidden, so switching palettes does not
     // shuffle what is left.
-    function applyContrast(pickers) {
-        var high = contrastHigh();
+    function applyPalette(pickers) {
+        var inForce = coarse();
         pickers.forEach(function(entry) {
             var boxes = entry.picker.querySelectorAll(".color-box[data-value]");
             for (var ii = 0; ii < boxes.length; ii++) {
                 var value = parseInt(boxes[ii].getAttribute("data-value"), 10);
-                boxes[ii].style.visibility = (accentFor(value, high) === value) ? "" : "hidden";
+                boxes[ii].style.visibility = (accentFor(value, inForce) === value) ? "" : "hidden";
             }
             var current = parseInt(entry.item.get(), 10);
-            var moved = accentFor(current, high);
+            var moved = accentFor(current, inForce);
             if (moved !== current) {
                 entry.item.set(moved);
             }
         });
     }
 
-    // Shape, label and filter both color pickers, and follow the contrast mode as it changes
-    function describeColorPickers() {
+    // Both color pickers, with the elements they are drawn in
+    function colorPickers() {
         var pickers = [];
         ["timerColor", "chronoColor"].forEach(function(key) {
             var item = clayConfig.getItemByMessageKey(key);
@@ -270,30 +214,27 @@ var clay = new Clay(clayConfig, function() {
                 pickers.push({item: item, picker: item.$element[0]});
             }
         });
-        pickers.forEach(function(entry) {
-            shapePicker(entry.picker);
-            describePicker(entry.item, entry.picker);
-        });
-        applyContrast(pickers);
-        var contrast = clayConfig.getItemByMessageKey("contrast");
-        if (contrast) {
-            contrast.on("change", function() {
-                applyContrast(pickers);
-            });
-        }
+        return pickers;
     }
 
     clayConfig.on(clayConfig.EVENTS.AFTER_BUILD, function() {
-        // also normalizes a redundant pair which was stored before this ran
-        resolveThresholdOverlap();
-        describeColorPickers();
-        var tenSecond = clayConfig.getItemByMessageKey("tenSecondUpdatesAbove");
-        var minute = clayConfig.getItemByMessageKey("minuteUpdatesAbove");
-        if (tenSecond) {
-            tenSecond.on("change", resolveThresholdOverlap);
+        var pickers = colorPickers();
+        addHexStyle();
+        pickers.forEach(function(entry) {
+            shapePicker(entry.picker);
+        });
+        // the overlap first, since it can switch a threshold the palette then follows. It also
+        // normalizes a redundant pair which was stored before this ran.
+        function followThresholds() {
+            resolveThresholdOverlap();
+            applyPalette(pickers);
         }
-        if (minute) {
-            minute.on("change", resolveThresholdOverlap);
-        }
+        followThresholds();
+        ["tenSecondUpdatesAbove", "minuteUpdatesAbove"].forEach(function(key) {
+            var item = clayConfig.getItemByMessageKey(key);
+            if (item) {
+                item.on("change", followThresholds);
+            }
+        });
     });
 });

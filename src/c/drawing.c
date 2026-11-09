@@ -95,10 +95,12 @@ typedef enum {
   ScalableFontFooter, //< The footer: the projected end clock, or a held split's fraction
 } ScalableFontIds;
 
-// The one color which never changes: the digits, header and footer are black, and everything they
-// are written on is light in both contrast modes. The rest is the palette in the structure below,
-// which prv_palette_update changes per counting direction and per contrast mode.
+// The colors which never change: the digits, header and footer are black on a white center, and
+// black is behind the ring. The ring and its band are in the structure below, which
+// prv_palette_update changes per counting direction and per palette.
 #define FORE_COLOR GColorBlack
+#define MID_COLOR GColorWhite
+#define BACK_COLOR GColorBlack
 
 // Main drawing state description, used to determine changes in state
 typedef struct {
@@ -124,10 +126,8 @@ static struct {
   int16_t bounce_digits;               //< How far the hopping digits are displaced, zero at rest
   int16_t bounce_box;                  //< The same for the focus box, which trails them by a beat
   uint8_t bounce_index;                //< Which field the hop belongs to, pinned as it starts
-  GColor mid_color;                    //< Color of center
   GColor ring_color;                   //< Color of ring
   GColor band_color;                   //< Color of the ring within the current refresh interval
-  GColor back_color;                   //< Color behind the ring, where the arc has not reached
   bool accent_chrono;                  //< Whether the accent in force is the counting up one
 } drawing_data;
 
@@ -377,34 +377,14 @@ static void prv_render_main_text(GContext *ctx) {
 // Progress Ring
 //
 
-#ifndef PBL_BW
-// Shift every channel of a color by the same amount, clamped
-static GColor prv_shift(GColor color, int8_t step) {
-  const int8_t channels[3] = {(int8_t)color.r + step, (int8_t)color.g + step,
-                              (int8_t)color.b + step};
-  uint8_t clamped[3];
-  for (uint8_t ii = 0; ii < 3; ii++) {
-    clamped[ii] = (channels[ii] < 0) ? 0 : ((channels[ii] > 3) ? 3 : (uint8_t)channels[ii]);
-  }
-  GColor out = color;
-  out.r = clamped[0];
-  out.g = clamped[1];
-  out.b = clamped[2];
-  return out;
-}
-
-#endif
-
-// Adopt the accent color for the direction the timer is counting, and shade it for the mode
+// Adopt the accent color for the direction the timer is counting, and its band
 // Only a running stopwatch gets the counting up accent: a timer of zero length counts as one by
 // its value alone, but while that length is being set it is a timer, and it is the timer's color
 // which belongs there. A reset holds on to the accent it was counting in until the ring has run
 // down, since the value is zero from the moment the button is released and recoloring an arc
 // which is still collapsing would hand the run that just ended the other direction's color.
-// The two contrast modes then shade it differently. Regular is the look the app has always had,
-// dark gray behind the ring and the center two steps up from the accent, with the band one step
-// down. High puts black behind the ring and white in the center, and takes the band two steps
-// down, so it stands off the black.
+// The band is drawn only in coarse mode, and comes with the accent from the settings, each of
+// coarse mode's accents having a band picked for it.
 // On one bit hardware there is nothing to choose, so the ring stays white and the dither in
 // prv_render_progress_ring carries the distinction instead
 static void prv_palette_update(void) {
@@ -417,19 +397,11 @@ static void prv_palette_update(void) {
   if (timer_get_value_ms() > 0 || drawing_data.progress_angle == 0) {
     drawing_data.accent_chrono = timer_shows_run();
   }
-  // settings_accent_rgb hands the accent over already moved into the contrast mode, so every one
-  // of the shades below exists and differs from the others
-  const GColor accent = GColorFromHEX(settings_accent_rgb(drawing_data.accent_chrono));
-  drawing_data.ring_color = accent;
-  if (settings_contrast_high()) {
-    drawing_data.back_color = GColorBlack;
-    drawing_data.mid_color = GColorWhite;
-    drawing_data.band_color = prv_shift(accent, -2);
-  } else {
-    drawing_data.back_color = GColorDarkGray;
-    drawing_data.mid_color = prv_shift(accent, 2);
-    drawing_data.band_color = prv_shift(accent, -1);
-  }
+  // settings_accent_rgb hands the accent over already moved into the palette in force
+  drawing_data.ring_color = GColorFromHEX(settings_accent_rgb(drawing_data.accent_chrono));
+  drawing_data.band_color = settings_coarse()
+                                ? GColorFromHEX(settings_band_rgb(drawing_data.accent_chrono))
+                                : drawing_data.ring_color;
 #endif
 }
 
@@ -449,7 +421,7 @@ static void prv_render_progress_ring(GContext *ctx, GRect bounds) {
   // the screen is already filled with the ring, so the ring is drawn by covering what is past it
   const int16_t solid_angle = drawing_data.progress_angle;
   const int16_t band_angle = drawing_data.show_band ? drawing_data.band_angle : solid_angle;
-  graphics_context_set_fill_color(ctx, drawing_data.back_color);
+  graphics_context_set_fill_color(ctx, BACK_COLOR);
 #ifdef PBL_BW
   // one bit has no third tone to fill a wedge with, so cover from the solid arc, lay a lighter
   // dither over everything (a no-op on the arc, whose pattern already contains it) and cover
@@ -466,7 +438,7 @@ static void prv_render_progress_ring(GContext *ctx, GRect bounds) {
     graphics_context_set_fill_color(ctx, drawing_data.band_color);
     graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius,
                          RING_ANGLE_TRIG(solid_angle), RING_ANGLE_TRIG(band_angle));
-    graphics_context_set_fill_color(ctx, drawing_data.back_color);
+    graphics_context_set_fill_color(ctx, BACK_COLOR);
   }
   graphics_fill_radial(ctx, bounds, GOvalScaleModeFillCircle, radius, RING_ANGLE_TRIG(band_angle),
                        TRIG_MAX_ANGLE);
@@ -646,7 +618,7 @@ void drawing_render(Layer *layer, GContext *ctx) {
   prv_fill_ring_tone(ctx, bounds);
   prv_render_progress_ring(ctx, bounds);
   // draw main circle
-  graphics_context_set_fill_color(ctx, drawing_data.mid_color);
+  graphics_context_set_fill_color(ctx, MID_COLOR);
   graphics_fill_circle(ctx, grect_center_point(&bounds), CIRCLE_RADIUS);
   // draw focus layer
   prv_render_focus_layer(ctx);
@@ -736,13 +708,10 @@ void drawing_initialize(Layer *layer) {
     .g = font_bitham_34_numbers, // Gabbro (Pebble Round 2)
   });
   // clang-format on
-  // seed the palette; it is chosen per counting direction and contrast mode, and the first frame is
-  // rendered before any refresh runs. Behind the ring is black on one bit hardware, which never
-  // changes it.
-  drawing_data.mid_color = GColorWhite;
+  // seed the palette; it is chosen per counting direction and palette, and the first frame is
+  // rendered before any refresh runs. One bit hardware never changes it.
   drawing_data.ring_color = GColorWhite;
   drawing_data.band_color = GColorWhite;
-  drawing_data.back_color = GColorBlack;
   prv_palette_update();
 }
 

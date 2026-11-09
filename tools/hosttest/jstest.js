@@ -22,7 +22,7 @@ function loadIndexJs(stored) {
     var path = require('path');
     var KEYS = {tenSecondUpdatesAbove: 10001, minuteUpdatesAbove: 10002,
                 timerColor: 10003, chronoColor: 10004, settingsRequest: 10005,
-                instantStart: 10006, contrast: 10007};
+                instantStart: 10006};
     // message_keys is the phone runtime's; the page HTML is written by the Pebble build. Both
     // are stood in for so the rest of Clay is the real thing.
     // message_keys is the phone runtime's, the page HTML is written by the Pebble build, and
@@ -72,7 +72,7 @@ function loadIndexJs(stored) {
 console.log('\nthe phone answers the watch when it asks for the settings:');
 try {
     var saved = {tenSecondUpdatesAbove: 30, minuteUpdatesAbove: 2,
-                 timerColor: 0x00ff00, chronoColor: 0xff0000, instantStart: 10, contrast: 1};
+                 timerColor: 0x00ff00, chronoColor: 0xff0000, instantStart: 10};
     var app = loadIndexJs(saved);
     if (!app.listeners.appmessage) {
         fail('index.js registers no appmessage listener, so the watch is never answered');
@@ -167,44 +167,36 @@ var SDK_MAP = [
 ];
 var MAP_COLUMNS = 20;
 
-// The two contrast modes' rules, stated here on their own rather than taken from the page: regular
-// shades the center two steps up, so it needs a channel at 00; high shades the band two steps
-// down, so it needs a channel at ff; and neither can do anything with a color which has no hue.
-// Channels are the two-bit levels GColorFromHEX takes from the top of each byte.
-function channelsOf(hex) {
-    return [0, 2, 4].map(function(i) { return parseInt(hex.substr(i, 2), 16) >> 6; });
+// The palettes' rules. Coarse mode offers the 24 accents palettes.json pairs with bands and
+// moves every other color as its table says; without it anything goes but black and white, which
+// become the default green. The table is gen_palette.js's, run again here so it cannot drift from
+// the rule it was worked out by; settingstest.c holds the watch to the same table.
+var gen = require('./gen_palette.js');
+var PALETTES = JSON.parse(fs.readFileSync(require('path').join(__dirname, 'palettes.json')));
+function offered(hex, coarse) {
+    return coarse ? PALETTES.coarse[hex] === hex : hex !== '000000' && hex !== 'ffffff';
 }
-function drawable(hex, high) {
-    var c = channelsOf(hex);
-    var lo = Math.min.apply(Math, c), hi = Math.max.apply(Math, c);
-    return lo < hi && (high ? hi === 3 : lo === 0);
+function movedTo(hex, coarse) {
+    if (coarse) { return PALETTES.coarse[hex]; }
+    return offered(hex, false) ? hex : gen.DEFAULT;
 }
-// Where each mode moves a color it cannot draw: one list, which settingstest.c holds the watch to
-var MOVES = JSON.parse(fs.readFileSync(require('path').join(__dirname, 'accent_moves.json')));
-function movedTo(hex, high) {
-    return MOVES[high ? 'high' : 'regular'][hex] || hex;
-}
-var ALL64 = [];
-[0, 0x55, 0xaa, 0xff].forEach(function(r) { [0, 0x55, 0xaa, 0xff].forEach(function(g) {
-    [0, 0x55, 0xaa, 0xff].forEach(function(b) {
-        ALL64.push(('00000' + (r << 16 | g << 8 | b).toString(16)).slice(-6));
-    });
-}); });
+var ALL64 = gen.ALL;
 
 (function () {
-    // the list and the rules agree: a mode moves exactly the colors it cannot draw, onto ones it can
+    if (JSON.stringify(PALETTES.pairs) !== JSON.stringify(gen.PAIRS) ||
+        JSON.stringify(PALETTES.coarse) !== JSON.stringify(gen.moves())) {
+        fail('palettes.json is not what gen_palette.js works out; run node gen_palette.js');
+    }
+    // every color moves onto one of the 24, and each of the 24 stays where it is
+    var accents = PALETTES.pairs.map(function(pair) { return pair[0]; });
     ALL64.forEach(function(hex) {
-        [false, true].forEach(function(high) {
-            var mode = high ? 'high' : 'regular';
-            if (drawable(hex, high) === (hex in MOVES[mode])) {
-                fail('accent_moves.json ' + (drawable(hex, high) ? 'moves ' : 'leaves ') + hex +
-                     ', which ' + mode + ' ' + (drawable(hex, high) ? 'can' : 'cannot') + ' draw');
-            }
-            if (!drawable(movedTo(hex, high), high)) {
-                fail(mode + ' moves ' + hex + ' to ' + movedTo(hex, high) + ', which it cannot draw');
-            }
-        });
+        if (accents.indexOf(PALETTES.coarse[hex]) < 0) {
+            fail('coarse mode moves ' + hex + ' to ' + PALETTES.coarse[hex] + ', which it does not offer');
+        }
     });
+    if (ALL64.filter(function(hex) { return offered(hex, true); }).length !== 24) {
+        fail('coarse mode does not leave exactly its 24 accents where they are');
+    }
     var layouts = ['timerColor', 'chronoColor'].map(function(key) { return itemFor(key).layout; });
     if (JSON.stringify(layouts[0]) !== JSON.stringify(layouts[1])) {
         fail('the two pickers are laid out differently');
@@ -216,17 +208,18 @@ var ALL64 = [];
         fail('the layout is not the map\'s ' + SDK_MAP.length + ' rows of ' + MAP_COLUMNS);
         return;
     }
-    // every hexagon where the map has it, offered if some mode can draw it, and nothing anywhere else
+    // every hexagon where the map has it, offered if some palette offers it, and nothing anywhere
+    // else
     var expected = SDK_MAP.map(function() {
         var row = []; for (var i = 0; i < MAP_COLUMNS; i++) { row.push(false); } return row;
     });
     SDK_MAP.forEach(function(row, r) {
         row.forEach(function(cell) {
             var hex = cell[1];
-            expected[r][cell[0]] = (drawable(hex, false) || drawable(hex, true)) ? hex : false;
+            expected[r][cell[0]] = (offered(hex, false) || offered(hex, true)) ? hex : false;
         });
     });
-    var placed = 0, regular = 0, high = 0;
+    var placed = 0, coarse = 0;
     layout.forEach(function(row, r) {
         row.forEach(function(value, c) {
             if (value !== expected[r][c]) {
@@ -235,24 +228,22 @@ var ALL64 = [];
             }
             if (value) {
                 placed++;
-                regular += drawable(value, false) ? 1 : 0;
-                high += drawable(value, true) ? 1 : 0;
+                coarse += offered(value, true) ? 1 : 0;
             }
         });
     });
-    if (placed !== 54 || regular !== 36 || high !== 36) {
-        fail('placed ' + placed + ' colors, ' + regular + ' for regular and ' + high +
-             ' for high; expected 54, 36 and 36');
+    if (placed !== 62 || coarse !== 24) {
+        fail('placed ' + placed + ' colors, ' + coarse + ' for coarse mode; expected 62 and 24');
     }
     ['timerColor', 'chronoColor'].forEach(function(key) {
         var hex = String(itemFor(key).defaultValue);
-        if (!drawable(hex, false) || !drawable(hex, true)) {
-            fail(key + ' defaults to ' + hex + ', which one of the modes cannot draw');
+        if (!offered(hex, false) || !offered(hex, true)) {
+            fail(key + ' defaults to ' + hex + ', which one of the palettes does not offer');
         }
     });
     if (!failures) {
-        console.log('both pickers follow the SDK color map: 54 placed, 36 drawable in each mode, ' +
-                    'defaults in both');
+        console.log('both pickers follow the SDK color map: 62 placed, 24 in coarse mode, ' +
+                    'defaults in both, the table as gen_palette.js works it out');
     }
 })();
 
@@ -279,14 +270,11 @@ function customFunction() {
 // handful of calls that code makes, and a stub written to fit the code it tests can catch that
 // code changing but never that it was right to begin with. What established that was a browser:
 // the real Clay page, built from this config and this custom function, rendered in Chromium,
-// with every swatch measured against its own cell in both modes. This keeps the result from
-// rotting.
+// with every hexagon measured in both palettes. This keeps the result from rotting.
 //
 // It builds what Clay's color component builds: every cell of the layout as a box with its width
-// set inline, colors carrying a data-value and gaps carrying none, inside the same wrappers. The
-// backgrounds it reports are the uncorrected hex, which is what Clay paints while the color items
-// set "sunlight": false. Turn that on and the page shades the swatches through Clay's sunlight
-// map, and this would have to learn it before the lettering test meant anything.
+// set inline, colors carrying a data-value and gaps carrying none, inside the same wrappers, and
+// a head for the stylesheet the hexagons are cut by.
 function fakeDom() {
     function matches(node, selector) {
         var ok = true;
@@ -302,10 +290,12 @@ function fakeDom() {
         return out;
     }
     function element(className, attrs) {
-        return {
-            className: className, title: '', textContent: '', hex: null,
-            attrs: attrs || {}, children: [], nextElementSibling: null, style: {cssText: ''},
+        var node = {
+            className: className, id: '', title: '', textContent: '', hex: null,
+            attrs: attrs || {}, children: [], nextElementSibling: null, style: {},
+            classList: {add: function(cls) { node.className += ' ' + cls; }},
             getAttribute: function(name) { return this.attrs[name]; },
+            appendChild: function(child) { this.children.push(child); return child; },
             insertBefore: function(child, before) {
                 var at = this.children.indexOf(before);
                 this.children.splice(at < 0 ? this.children.length : at, 0, child);
@@ -318,6 +308,7 @@ function fakeDom() {
                 return this.querySelectorAll(selector)[0] || null;
             }
         };
+        return node;
     }
     function picker(layout) {
         var root = element('component component-color');
@@ -346,21 +337,19 @@ function fakeDom() {
     }
     var pickers = {timerColor: picker(itemFor('timerColor').layout),
                    chronoColor: picker(itemFor('chronoColor').layout)};
+    var head = element('head');
     var root = element('root');
-    root.children = [pickers.timerColor, pickers.chronoColor];
+    root.children = [head, pickers.timerColor, pickers.chronoColor];
     return {
         document: {
+            head: head,
             querySelectorAll: function(selector) { return root.querySelectorAll(selector); },
+            getElementById: function(id) {
+                return root.querySelectorAll('').filter(function(n) { return n.id === id; })[0] || null;
+            },
             createElement: function() { return element(''); }
         },
-        window: {
-            getComputedStyle: function(node) {
-                var channels = [0, 2, 4].map(function(i) {
-                    return parseInt((node.hex || '000000').substr(i, 2), 16);
-                });
-                return {backgroundColor: 'rgb(' + channels.join(', ') + ')'};
-            }
-        },
+        window: {},
         pickers: pickers
     };
 }
@@ -372,7 +361,6 @@ function fakeDom() {
 // element is the picker the stand-in DOM built for it.
 function buildPage(customFn, opts) {
     var values = {tenSecondUpdatesAbove: opts.ten, minuteUpdatesAbove: opts.min,
-                  contrast: opts.contrast || 0,
                   timerColor: opts.timer === undefined ? 0x00ff00 : opts.timer,
                   chronoColor: opts.chrono === undefined ? 0x00ff00 : opts.chrono};
     var dom = fakeDom();
@@ -404,7 +392,7 @@ function buildPage(customFn, opts) {
     });
     // the custom function is compiled in global scope, exactly as the page compiles it, so the
     // document it works on has to be reachable from there rather than passed in. It stays in
-    // place for whatever the caller does next, a switch of contrast included; done() takes it away
+    // place for whatever the caller does next, a change of threshold included; done() takes it away
     global.document = dom.document;
     global.window = dom.window;
     afterBuild.forEach(function(handler) { handler(); });
@@ -465,126 +453,137 @@ if (customFn) {
     });
 }
 
-// Every swatch says which color it is and sits where the map puts it, because a good many of the
-// accents on offer differ by a single two-bit channel and a phone screen does not make that plain.
+// Every swatch is a pointed hexagon where the map puts it, the rows interlocking as the SDK
+// page's do, and none carries a label
 if (customFn) {
     var shaped = buildPage(customFn, {ten: NEVER, min: NEVER});
     shaped.done();
+    var styles = shaped.dom.document.head.children;
+    var hexagon = 'clip-path:polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%)';
+    if (styles.length !== 1 ||
+        !['-webkit-' + hexagon, ';' + hexagon].every(function(rule) {
+            return styles[0].textContent.indexOf(rule) >= 0;
+        }) ||
+        !/\.color-box\.selected\{[^}]*radial-gradient/.test(styles[0].textContent)) {
+        fail('expected one stylesheet cutting hexagons and marking the pick, got ' + styles.length);
+    }
     ['timerColor', 'chronoColor'].forEach(function(key) {
         var picker = shaped.dom.pickers[key];
         var cells = picker.querySelectorAll('.color-box');
         var boxes = picker.querySelectorAll('.color-box[data-value]');
-        var inks = {};
-        if (boxes.length !== 54) { fail(key + ': ' + boxes.length + ' swatches, expected 54'); }
+        var wrap = picker.querySelector('.color-box-wrap');
+        if (picker.className.split(' ').indexOf('hex-map') < 0) {
+            fail(key + ': the picker is not marked for the hexagon stylesheet');
+        }
+        if (boxes.length !== 62 || cells.length !== 220 || !wrap) {
+            fail(key + ': ' + boxes.length + ' swatches in ' + cells.length + ' cells, expected 62 in 220');
+            return;
+        }
+        // in percent of the picker's width: a hexagon spans two of the 20 half-columns, is
+        // 2/sqrt(3) as tall as it is wide, and the 11 rows sit three quarters of that apart, with
+        // the last row's points below them
+        var hexWidth = 10, hexHeight = hexWidth * 2 / Math.sqrt(3);
+        var pickerHeight = parseFloat(wrap.style.paddingBottom);
+        var near = function(a, b) { return Math.abs(a - b) < 1e-9; };
+        if (!near(pickerHeight, 11 * hexHeight * 3 / 4 + hexHeight / 4)) {
+            fail(key + ': rows padded to ' + wrap.style.paddingBottom);
+        }
         boxes.forEach(function(box) {
-            // the label is the swatch's own hex, recovered from the decimal Clay writes on it, so a
-            // dropped leading zero shows up here rather than on the phone
-            if (box.textContent !== box.hex) {
-                fail(key + ': swatch ' + box.hex + ' is labeled "' + box.textContent + '"');
-            }
-            if (!box.title || box.title === box.hex) {
-                fail(key + ': swatch ' + box.hex + ' is offered but has no name');
-            }
-            var ink = /color:(#[0-9a-f]{3,6})/.exec(box.style.cssText);
-            if (!ink) {
-                fail(key + ': swatch ' + box.hex + ' got no lettering color');
-            } else {
-                inks[ink[1]] = (inks[ink[1]] || 0) + 1;
-                // the two unarguable ones: yellow cannot carry white, blue cannot carry black
-                if (box.hex === 'ffff00' && ink[1] !== '#000') { fail(key + ': yellow is lettered ' + ink[1]); }
-                if (box.hex === '0000ff' && ink[1] !== '#fff') { fail(key + ': blue is lettered ' + ink[1]); }
-            }
-            // a hexagon is two half-columns: the swatch spans its own cell and the gap after it
-            if (box.style.cssText.indexOf(';width:10%') < 0) {
-                fail(key + ': swatch ' + box.hex + ' was not widened over its gap');
+            // a height in % is of the picker's height, a margin in % of its width
+            var height = parseFloat(box.style.height) * pickerHeight / 100;
+            if (!near(parseFloat(box.style.width), hexWidth) || !near(height, hexHeight) ||
+                !near(parseFloat(box.style.marginBottom), -hexHeight / 4)) {
+                fail(key + ': swatch ' + box.hex + ' is ' + box.style.width + ' by ' +
+                     box.style.height + ', margin ' + box.style.marginBottom);
             }
             var gap = box.nextElementSibling;
             if (!gap || gap.getAttribute('data-value') || gap.style.display !== 'none') {
                 fail(key + ': the gap after ' + box.hex + ' is still taking up room');
             }
+            if (box.textContent || box.title) {
+                fail(key + ': swatch ' + box.hex + ' is labeled "' + (box.textContent || box.title) + '"');
+            }
         });
-        if (Object.keys(inks).length < 2) {
-            fail(key + ': every swatch was lettered alike, so the lettering does not follow it');
-        }
-        // the 11 rows of 20 half-columns, with swatches four fifths as tall as they are wide
-        var wrap = picker.querySelector('.color-box-wrap');
-        var want = (11 * 2 * 0.8 / 20 * 100) + '%';
-        if (cells.length !== 220 || !wrap || wrap.style.paddingBottom !== want) {
-            fail(key + ': ' + cells.length + ' cells and rows padded to ' +
-                 (wrap && wrap.style.paddingBottom) + ', expected 220 and ' + want);
+        // and every empty cell is one row's pitch tall, so no float snags on one taller than a row
+        cells.filter(function(cell) { return !cell.getAttribute('data-value'); })
+            .forEach(function(cell, ii) {
+                if (!near(parseFloat(cell.style.height) * pickerHeight / 100, hexHeight * 3 / 4)) {
+                    fail(key + ': empty cell ' + ii + ' is ' + cell.style.height + ' tall');
+                }
+            });
+        if (picker.querySelectorAll('.description').length) {
+            fail(key + ': the picker carries a readout');
         }
     });
     if (!failures) {
-        console.log('every swatch carries its hex and its name, laid out as the SDK map\'s hexagons');
+        console.log('every swatch is an unlabeled hexagon, laid out as the SDK map\'s');
     }
 
-    // each mode offers exactly the colors it can draw, the others hidden but keeping their places
-    [false, true].forEach(function(high) {
-        var page = buildPage(customFn, {ten: NEVER, min: NEVER, contrast: high ? 1 : 0});
+    // each palette offers exactly its colors, the others hidden but keeping their places
+    [false, true].forEach(function(coarse) {
+        var page = buildPage(customFn, {ten: NEVER, min: coarse ? 5 : NEVER});
         page.done();
         ['timerColor', 'chronoColor'].forEach(function(key) {
             var shown = 0;
             page.dom.pickers[key].querySelectorAll('.color-box[data-value]').forEach(function(box) {
                 var visible = box.style.visibility !== 'hidden';
                 shown += visible ? 1 : 0;
-                if (visible !== drawable(box.hex, high)) {
-                    fail((high ? 'high' : 'regular') + ' ' + (visible ? 'shows ' : 'hides ') + box.hex);
+                if (visible !== offered(box.hex, coarse)) {
+                    fail((coarse ? 'coarse' : 'without coarse') + ' ' + (visible ? 'shows ' : 'hides ') + box.hex);
                 }
             });
-            if (shown !== 36) { fail((high ? 'high' : 'regular') + ' shows ' + shown + ' in ' + key); }
+            if (shown !== (coarse ? 24 : 62)) {
+                fail((coarse ? 'coarse' : 'without coarse') + ' shows ' + shown + ' in ' + key);
+            }
         });
     });
-    if (!failures) { console.log('each mode shows its own 36 colors and hides the rest in place'); }
+    if (!failures) { console.log('coarse mode shows its 24, otherwise all 62, the rest hidden in place'); }
 
-    // a stored color the mode cannot draw is moved on build, as the watch moves it, and the readout
-    // names where it went: every color the pickers place, in both modes
+    // a stored color the palette does not offer is moved on build, as the watch moves it: all 64,
+    // in both palettes, and either coarse mode
     var checked = 0;
-    [false, true].forEach(function(high) {
-        SDK_MAP.forEach(function(row) {
-            row.forEach(function(cell) {
-                var hex = cell[1];
-                if (!drawable(hex, false) && !drawable(hex, true)) { return; } // never placed
-                var page = buildPage(customFn, {ten: NEVER, min: NEVER, contrast: high ? 1 : 0,
-                                                timer: parseInt(hex, 16)});
-                page.done();
-                var got = ('00000' + page.values.timerColor.toString(16)).slice(-6);
-                var want = movedTo(hex, high);
-                var readout = page.dom.pickers.timerColor.querySelector('.description');
-                if (got !== want) {
-                    fail((high ? 'high' : 'regular') + ' kept a stored ' + hex + ' as ' + got +
-                         ', the list says ' + want);
-                } else if (!readout || readout.textContent.slice(-7) !== '#' + want) {
-                    fail('a stored ' + hex + ' moved to ' + want + ' but the readout says "' +
-                         (readout && readout.textContent) + '"');
-                }
-                checked++;
-            });
+    [[NEVER, NEVER], [20, NEVER], [NEVER, 5]].forEach(function(pair) {
+        var coarse = pair[0] !== NEVER || pair[1] !== NEVER;
+        ALL64.forEach(function(hex) {
+            var page = buildPage(customFn, {ten: pair[0], min: pair[1], timer: parseInt(hex, 16)});
+            page.done();
+            var got = ('00000' + page.values.timerColor.toString(16)).slice(-6);
+            if (got !== movedTo(hex, coarse)) {
+                fail('10s>' + pair[0] + ' min>' + pair[1] + ' kept a stored ' + hex + ' as ' + got +
+                     ', the table says ' + movedTo(hex, coarse));
+            }
+            checked++;
         });
     });
     if (!failures) {
-        console.log('a stored color moves into the mode as the watch moves it: ' + checked +
-                    ' cases, the readout following');
+        console.log('a stored color moves into the palette as the watch moves it: ' + checked + ' cases');
     }
 
-    // and switching the mode does the same to a pick which no longer fits, both ways round
-    var page = buildPage(customFn, {ten: NEVER, min: NEVER, contrast: 0,
-                                    timer: 0xffff00, chrono: 0x00aa00});
+    // and turning a coarse mode on does the same to a pick which no longer fits, while turning it
+    // off again moves nothing back
+    var page = buildPage(customFn, {ten: NEVER, min: NEVER, timer: 0xff0000, chrono: 0x00ff00});
     var hex = function(key) { return ('00000' + page.values[key].toString(16)).slice(-6); };
-    if (hex('chronoColor') !== '00aa00') { fail('regular moved Islamic Green, which it can draw'); }
-    page.items.contrast.set(1);
-    if (hex('chronoColor') !== '00ff00' || hex('timerColor') !== 'ffff00') {
-        fail('switching to high left ' + hex('timerColor') + ' and ' + hex('chronoColor') +
-             ', expected ffff00 and 00ff00');
+    if (hex('timerColor') !== 'ff0000') { fail('without coarse mode Red was moved'); }
+    page.items.minuteUpdatesAbove.set(5);
+    if (hex('timerColor') !== 'ff5555' || hex('chronoColor') !== '00ff00') {
+        fail('turning on minute updates left ' + hex('timerColor') + ' and ' + hex('chronoColor') +
+             ', expected ff5555 and 00ff00');
     }
-    var shownHigh = page.dom.pickers.timerColor.querySelectorAll('.color-box[data-value]')
-        .filter(function(box) { return box.style.visibility !== 'hidden'; })
-        .every(function(box) { return drawable(box.hex, true); });
-    if (!shownHigh) { fail('after the switch to high, the picker still shows regular\'s colors'); }
-    page.items.contrast.set(0);
-    if (hex('chronoColor') !== '00ff00') { fail('switching back moved Green, which both can draw'); }
+    var shownCoarse = page.dom.pickers.timerColor.querySelectorAll('.color-box[data-value]')
+        .filter(function(box) { return box.style.visibility !== 'hidden'; });
+    if (shownCoarse.length !== 24) { fail('after turning coarse mode on, ' + shownCoarse.length + ' are shown'); }
+    page.items.minuteUpdatesAbove.set(NEVER);
+    page.items.tenSecondUpdatesAbove.set(20);
+    if (hex('timerColor') !== 'ff5555') { fail('ten second updates moved ' + hex('timerColor')); }
+    page.items.tenSecondUpdatesAbove.set(NEVER);
+    var shownFine = page.dom.pickers.timerColor.querySelectorAll('.color-box[data-value]')
+        .filter(function(box) { return box.style.visibility !== 'hidden'; });
+    if (hex('timerColor') !== 'ff5555' || shownFine.length !== 62) {
+        fail('turning coarse mode off left ' + hex('timerColor') + ' with ' + shownFine.length + ' shown');
+    }
     page.done();
     if (!failures) {
-        console.log('switching contrast moves a pick that no longer fits, and leaves one that does');
+        console.log('turning coarse mode on moves a pick that no longer fits; turning it off moves nothing');
     }
 }
 

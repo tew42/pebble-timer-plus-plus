@@ -1,0 +1,171 @@
+{
+  "_note": [
+    "Coarse mode: its 24 accents with their bands, and the accent each of the 64 colors",
+    "becomes. Written by gen_palette.js; read by jstest.js and, through gen_configopts.js,",
+    "by settingstest.c and shadetest.c, so the page and the watch are held to one table."
+  ],
+  "pairs": [
+    [
+      "00aaaa",
+      "005555"
+    ],
+    [
+      "00ff00",
+      "005500"
+    ],
+    [
+      "5555ff",
+      "0000ff"
+    ],
+    [
+      "aa5555",
+      "aa0000"
+    ],
+    [
+      "55aa55",
+      "005500"
+    ],
+    [
+      "aa55aa",
+      "550055"
+    ],
+    [
+      "aaaa00",
+      "555500"
+    ],
+    [
+      "ff5500",
+      "aa0000"
+    ],
+    [
+      "ff00ff",
+      "550055"
+    ],
+    [
+      "ff5555",
+      "ff0000"
+    ],
+    [
+      "5555aa",
+      "0000aa"
+    ],
+    [
+      "00aaff",
+      "005555"
+    ],
+    [
+      "aa55ff",
+      "5500aa"
+    ],
+    [
+      "00aa00",
+      "005500"
+    ],
+    [
+      "ff00aa",
+      "550055"
+    ],
+    [
+      "55aaaa",
+      "005555"
+    ],
+    [
+      "ff55aa",
+      "aa0055"
+    ],
+    [
+      "ffaa00",
+      "555500"
+    ],
+    [
+      "aa00aa",
+      "550055"
+    ],
+    [
+      "55ff00",
+      "005500"
+    ],
+    [
+      "55aaff",
+      "0055aa"
+    ],
+    [
+      "aa00ff",
+      "5500aa"
+    ],
+    [
+      "ff55ff",
+      "550055"
+    ],
+    [
+      "ffaa55",
+      "aa5500"
+    ]
+  ],
+  "coarse": {
+    "550000": "aa5555",
+    "550055": "aa00aa",
+    "555500": "55aa55",
+    "555555": "5555aa",
+    "000000": "00ff00",
+    "000055": "5555aa",
+    "0000aa": "5555aa",
+    "0000ff": "5555ff",
+    "005500": "00aa00",
+    "005555": "00aaaa",
+    "0055aa": "5555aa",
+    "0055ff": "5555ff",
+    "00aa00": "00aa00",
+    "00aa55": "55aa55",
+    "00aaaa": "00aaaa",
+    "00aaff": "00aaff",
+    "00ff00": "00ff00",
+    "00ff55": "00ff00",
+    "00ffaa": "00ff00",
+    "00ffff": "55aaaa",
+    "5500aa": "5555aa",
+    "5500ff": "5555ff",
+    "5555aa": "5555aa",
+    "5555ff": "5555ff",
+    "55aa00": "00aa00",
+    "55aa55": "55aa55",
+    "55aaaa": "55aaaa",
+    "55aaff": "55aaff",
+    "55ff00": "55ff00",
+    "55ff55": "55ff00",
+    "55ffaa": "00ff00",
+    "55ffff": "55aaaa",
+    "aa0000": "aa5555",
+    "aa0055": "aa5555",
+    "aa00aa": "aa00aa",
+    "aa00ff": "aa00ff",
+    "aa5500": "aa5555",
+    "aa5555": "aa5555",
+    "aa55aa": "aa55aa",
+    "aa55ff": "aa55ff",
+    "aaaa00": "aaaa00",
+    "aaaa55": "aaaa00",
+    "aaaaaa": "55aaaa",
+    "aaaaff": "55aaff",
+    "aaff00": "55ff00",
+    "aaff55": "55ff00",
+    "aaffaa": "55ff00",
+    "aaffff": "55aaaa",
+    "ff0000": "ff5555",
+    "ff0055": "ff5555",
+    "ff00aa": "ff00aa",
+    "ff00ff": "ff00ff",
+    "ff5500": "ff5500",
+    "ff5555": "ff5555",
+    "ff55aa": "ff55aa",
+    "ff55ff": "ff55ff",
+    "ffaa00": "ffaa00",
+    "ffaa55": "ffaa55",
+    "ffaaaa": "ff5555",
+    "ffaaff": "ff55ff",
+    "ffff00": "aaaa00",
+    "ffff55": "aaaa00",
+    "ffffaa": "ffaa00",
+    "ffffff": "00ff00"
+  }
+}

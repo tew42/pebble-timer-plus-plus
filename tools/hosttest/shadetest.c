@@ -1,7 +1,8 @@
-// The accent colors are shaded, not listed: drawing.c takes the color in force for a counting
-// direction, already moved into the contrast mode by settings.c, and shifts every channel to get
-// the center and the band. This mirrors that arithmetic (GColor8 gives each channel two bits) and
-// pins what the two modes draw, so changing the shading cannot quietly restyle the app.
+// The ring's colors are listed, not shaded: drawing.c takes the accent in force for a counting
+// direction, already moved into the palette by settings.c, and in coarse mode the band listed
+// with it, on black behind the ring and a white center in both palettes. This mirrors that from
+// the table settings.c is held to (palettes.json, by way of configopts.h) and pins what the
+// palettes draw, so a change to the table cannot quietly make two surfaces one.
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -12,106 +13,77 @@ static int failures = 0;
 #define CHECK(c, ...) do { if (!(c)) { printf("  FAIL: "); printf(__VA_ARGS__); printf("\n"); failures++; } } while (0)
 
 // 0xRRGGBB -> the three two-bit channels Pebble quantizes it to
-static void channels(uint32_t rgb, int *r, int *g, int *b) {
-  *r = ((rgb >> 16) & 0xFF) * 3 / 255;
-  *g = ((rgb >> 8) & 0xFF) * 3 / 255;
-  *b = (rgb & 0xFF) * 3 / 255;
+static void channels(uint32_t rgb, int c[3]) {
+  c[0] = ((rgb >> 16) & 0xFF) * 3 / 255;
+  c[1] = ((rgb >> 8) & 0xFF) * 3 / 255;
+  c[2] = (rgb & 0xFF) * 3 / 255;
 }
-static uint32_t to_rgb(int r, int g, int b) {
-  const uint8_t level[4] = {0x00, 0x55, 0xAA, 0xFF};
-  return ((uint32_t)level[r] << 16) | ((uint32_t)level[g] << 8) | level[b];
-}
-// mirrors prv_shift() in drawing.c
-static uint32_t shift(uint32_t rgb, int step) {
-  int c[3];
-  channels(rgb, &c[0], &c[1], &c[2]);
-  for (int i = 0; i < 3; i++) {
-    c[i] += step;
-    if (c[i] < 0) { c[i] = 0; }
-    if (c[i] > 3) { c[i] = 3; }
-  }
-  return to_rgb(c[0], c[1], c[2]);
-}
-// mirrors prv_palette_update() in drawing.c: regular puts dark gray behind the ring, the center
-// two steps up and the band one step down; high puts black behind, white in the center and the
-// band two steps down
+// mirrors prv_palette_update() in drawing.c, by way of settings_accent_rgb and settings_band_rgb
 struct palette { uint32_t ring, center, band, back; };
-static struct palette shade_for(uint32_t accent, bool high) {
-  if (high) {
-    return (struct palette){accent, 0xFFFFFF, shift(accent, -2), 0x000000};
+static struct palette palette_for(uint32_t stored, bool coarse) {
+  if (!coarse) {
+    const uint32_t ring = (stored == 0x000000 || stored == 0xFFFFFF) ? TIMER_COLOR_DEFAULT : stored;
+    return (struct palette){ring, 0xFFFFFF, ring, 0x000000};
   }
-  return (struct palette){accent, shift(accent, 2), shift(accent, -1), 0x555555};
-}
-// where settings.c moves a color the mode cannot draw, from the list the page is held to as well
-static uint32_t moved(uint32_t rgb, bool high) {
-  const uint32_t (*moves)[2] = high ? MOVES_HIGH : MOVES_REGULAR;
-  const unsigned count = high ? ARRAY_SIZE(MOVES_HIGH) : ARRAY_SIZE(MOVES_REGULAR);
-  for (unsigned i = 0; i < count; i++) {
-    if (moves[i][0] == rgb) { return moves[i][1]; }
+  uint32_t ring = 0, band = 0;
+  for (unsigned i = 0; i < ARRAY_SIZE(COARSE_MOVES_FIXTURE); i++) {
+    if (COARSE_MOVES_FIXTURE[i][0] == stored) { ring = COARSE_MOVES_FIXTURE[i][1]; }
   }
-  return rgb;
+  for (unsigned i = 0; i < ARRAY_SIZE(COARSE_PAIRS_FIXTURE); i++) {
+    if (COARSE_PAIRS_FIXTURE[i][0] == ring) { band = COARSE_PAIRS_FIXTURE[i][1]; }
+  }
+  return (struct palette){ring, 0xFFFFFF, band, 0x000000};
 }
 
 int main(void) {
-  // regular is the original look: a green ring, a mint green center, on dark gray
-  const uint32_t GColorGreen = 0x00FF00, GColorMintGreen = 0xAAFFAA;
-  printf("green in each mode:\n");
+  const uint32_t GColorGreen = 0x00FF00;
+  printf("green in each palette:\n");
   CHECK(TIMER_COLOR_DEFAULT == GColorGreen, "counting down no longer defaults to green");
-  const struct palette regular = shade_for(GColorGreen, false), high = shade_for(GColorGreen, true);
-  CHECK(regular.center == GColorMintGreen && regular.band == 0x00AA00 && regular.back == 0x555555,
-        "regular green is center %06x, band %06x, back %06x; wanted aaffaa, 00aa00, 555555",
-        regular.center, regular.band, regular.back);
-  CHECK(high.center == 0xFFFFFF && high.band == 0x005500 && high.back == 0x000000,
-        "high green is center %06x, band %06x, back %06x; wanted ffffff, 005500, 000000",
-        high.center, high.band, high.back);
-  printf("  regular: ring %06x, center %06x, band %06x, on %06x\n", regular.ring, regular.center,
-         regular.band, regular.back);
-  printf("  high:    ring %06x, center %06x, band %06x, on %06x\n", high.ring, high.center,
-         high.band, high.back);
+  const struct palette coarse = palette_for(GColorGreen, true);
+  const struct palette fine = palette_for(GColorGreen, false);
+  CHECK(coarse.ring == GColorGreen && coarse.center == 0xFFFFFF && coarse.band == 0x005500 &&
+        coarse.back == 0x000000,
+        "coarse green is ring %06x, center %06x, band %06x, back %06x; wanted 00ff00, ffffff, "
+        "005500, 000000", coarse.ring, coarse.center, coarse.band, coarse.back);
+  CHECK(fine.ring == GColorGreen, "green without coarse mode became %06x", fine.ring);
+  printf("  coarse: ring %06x, center %06x, band %06x, on %06x\n", coarse.ring, coarse.center,
+         coarse.band, coarse.back);
+  printf("  without: ring %06x, center %06x, on %06x\n", fine.ring, fine.center, fine.back);
 
-  // whatever the watch has stored, once settings.c has moved it into the mode, the four surfaces
-  // the eye has to tell apart are four different colors, and the shading keeps its direction
-  printf("\nevery color the watch could hold draws four distinct surfaces in both modes:\n");
+  // whatever the watch has stored, once settings.c has moved it into the palette, the surfaces the
+  // eye has to tell apart are different colors, and the band is darker than its ring
+  printf("\nevery color the watch could hold draws distinct surfaces in both palettes:\n");
   int checked = 0;
-  for (int mode = 0; mode < 2; mode++) {
-    for (int r = 0; r < 4; r++) {
-      for (int g = 0; g < 4; g++) {
-        for (int b = 0; b < 4; b++) {
-          const uint32_t stored = to_rgb(r, g, b);
-          const struct palette p = shade_for(moved(stored, mode), mode);
-          const uint32_t surfaces[4] = {p.ring, p.center, p.band, p.back};
-          for (int i = 0; i < 4; i++) {
-            for (int j = i + 1; j < 4; j++) {
-              CHECK(surfaces[i] != surfaces[j], "%s, stored %06x: two surfaces are both %06x",
-                    mode ? "high" : "regular", stored, surfaces[i]);
-            }
-          }
-          int ar, ag, ab, br, bg, bb, cr, cg, cb;
-          channels(p.ring, &ar, &ag, &ab);
-          channels(p.band, &br, &bg, &bb);
-          channels(p.center, &cr, &cg, &cb);
-          // the center carries black digits, so it is never darker than the ring, and the band
-          // never lighter: that ordering is what makes both read
-          CHECK(cr >= ar && cg >= ag && cb >= ab, "%s, stored %06x: center darker than the ring",
-                mode ? "high" : "regular", stored);
-          CHECK(br <= ar && bg <= ag && bb <= ab, "%s, stored %06x: band lighter than the ring",
-                mode ? "high" : "regular", stored);
-          checked++;
-          if (failures) { return 1; }
-        }
+  for (unsigned i = 0; i < ARRAY_SIZE(COARSE_MOVES_FIXTURE); i++) {
+    const uint32_t stored = COARSE_MOVES_FIXTURE[i][0];
+    const struct palette p = palette_for(stored, true);
+    const uint32_t surfaces[4] = {p.ring, p.center, p.band, p.back};
+    for (int a = 0; a < 4; a++) {
+      for (int b = a + 1; b < 4; b++) {
+        CHECK(surfaces[a] != surfaces[b], "coarse, stored %06x: two surfaces are both %06x",
+              stored, surfaces[a]);
       }
     }
+    int ring[3], band[3];
+    channels(p.ring, ring);
+    channels(p.band, band);
+    // a band is the stretch the ring will reach by the next refresh, so it reads as the ring dimmed
+    CHECK(band[0] <= ring[0] && band[1] <= ring[1] && band[2] <= ring[2],
+          "coarse, stored %06x: band %06x is lighter than the ring %06x", stored, p.band, p.ring);
+    const struct palette q = palette_for(stored, false);
+    CHECK(q.ring != q.center && q.ring != q.back, "without coarse, stored %06x: the ring is %06x",
+          stored, q.ring);
+    checked += 2;
   }
-  printf("  ok: %d cases, ring, center, band and back always four colors\n", checked);
+  printf("  ok: %d cases, ring, center, band and back always apart\n", checked);
 
-  // both directions default to the same green, which both modes can draw, so a fresh install
-  // looks like the original and switching modes moves nothing
+  // both directions default to the same green, which both palettes offer, so a fresh install
+  // looks like the original and turning coarse mode on moves nothing
   printf("\nboth directions start on the color the app shipped with:\n");
   CHECK(CHRONO_COLOR_DEFAULT == GColorGreen, "counting up no longer defaults to green");
-  CHECK(moved(TIMER_COLOR_DEFAULT, false) == TIMER_COLOR_DEFAULT &&
-        moved(TIMER_COLOR_DEFAULT, true) == TIMER_COLOR_DEFAULT,
-        "the default green is moved by one of the modes");
-  printf("  counting down %06x, counting up %06x, the same in both modes\n", TIMER_COLOR_DEFAULT,
+  CHECK(palette_for(TIMER_COLOR_DEFAULT, true).ring == TIMER_COLOR_DEFAULT,
+        "coarse mode moves the default green");
+  printf("  counting down %06x, counting up %06x, the same in both palettes\n", TIMER_COLOR_DEFAULT,
          CHRONO_COLOR_DEFAULT);
 
   // Which accent is in force is a small state machine, because a reset cannot be read off the

@@ -40,22 +40,12 @@
 #define SETTINGS_INSTANT_START_MAX_SEC 10
 
 //! Accent colors, as 0xRRGGBB, one for each counting direction. Both default to the green this
-//! app has always used: in regular contrast drawing.c shades it to the original mint green center,
-//! and adds the band this fork introduced one step below it. Setting the two apart is what makes
+//! app has always used, which is in both palettes. Setting the two apart is what makes
 //! the counting directions distinguishable, and makes a timer running past zero change color as
 //! it turns into a stopwatch.
 //! These must match the defaults in src/pkjs/config.json.
 #define SETTINGS_TIMER_RGB_DEFAULT 0x00FF00  //< GColorGreen
 #define SETTINGS_CHRONO_RGB_DEFAULT 0x00FF00 //< GColorGreen, the same until it is changed
-
-//! Contrast modes, as the configuration page sends them. Regular is the look the app has always
-//! had: dark gray behind the ring and a center shaded up from the accent. High puts black behind
-//! the ring and white in the center, for light the regular mode washes out in. Only colors with a
-//! channel at 00 suit regular and only colors with a channel at ff suit high, so
-//! settings_accent_rgb() moves an accent into whichever mode is in force. These must match the
-//! options in src/pkjs/config.json.
-#define SETTINGS_CONTRAST_REGULAR 0
-#define SETTINGS_CONTRAST_HIGH 1
 
 //! Load the settings and open AppMessage to receive updates from the phone
 //! @param on_change Called whenever new settings arrive, to refresh anything derived from them
@@ -79,17 +69,25 @@ uint32_t settings_refresh_step_ms(int64_t value_ms);
 //! @return True if instant start is on, in which case window_ms was written
 bool settings_instant_start_ms(uint32_t *window_ms);
 
-//! Get the accent color for one of the two counting directions, moved into the contrast mode
-//! A stored color the mode cannot shade legibly, picked under the other mode or before there were
-//! modes, comes back as the same hue made fully saturated (regular) or fully bright (high), the
-//! same move the configuration page makes; black, the grays and white come back as the default.
+//! Get whether either coarse update mode is switched on, which decides the palette
+//! Both palettes put black behind the ring and white in the center. Coarse mode adds a band,
+//! and offers only the 24 accents chosen to stand off it and the black, each with a band of its
+//! own; without it the accent may be anything but black or white.
+//! @return True if either threshold is set to something other than SETTINGS_NEVER
+bool settings_coarse(void);
+
+//! Get the accent color for one of the two counting directions, moved into the palette in force
+//! A stored color coarse mode does not offer, picked without it or before there were palettes,
+//! comes back as the nearest of its 24 by hue first and lightness second, the same move the
+//! configuration page makes; black and white come back as the default in either palette.
 //! @param chrono True when counting up, which has its own color
 //! @return The color as 0xRRGGBB, ready for GColorFromHEX
 uint32_t settings_accent_rgb(bool chrono);
 
-//! Get whether the high contrast mode is in force
-//! @return True for high contrast, false for regular
-bool settings_contrast_high(void);
+//! Get the band color for one of the two counting directions, as coarse mode draws it
+//! @param chrono True when counting up, which has its own color
+//! @return The band for the accent settings_accent_rgb() gives in coarse mode, as 0xRRGGBB
+uint32_t settings_band_rgb(bool chrono);
 
 //! Get how long until the display next needs refreshing
 //! @param value_ms The exact timer value in milliseconds; this one rounds it itself

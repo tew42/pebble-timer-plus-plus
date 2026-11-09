@@ -18,15 +18,15 @@
 // dictionary larger than the inbox is dropped whole, with no inbox-dropped handler registered to
 // say so, so every setting stops arriving at once: this has to grow with the page, and
 // settingstest counts the page's settings in config.json to hold it to that.
-#define SETTINGS_PAGE_TUPLES 6
+#define SETTINGS_PAGE_TUPLES 5
 #define SETTINGS_INBOX_SIZE (1 + SETTINGS_PAGE_TUPLES * (7 + 4))
 #define SETTINGS_OUTBOX_SIZE 32
 
 // Persistent storage
-// Version 3 added the instant start window and version 4 the contrast mode; a mismatch discards
-// what is stored, so the settings come back from the phone on the next launch rather than being
-// read as the wrong shape
-#define PERSIST_SETTINGS_VERSION 4
+// Version 3 added the instant start window, version 4 a contrast mode and version 5 took it out
+// again; a mismatch discards what is stored, so the settings come back from the phone on the next
+// launch rather than being read as the wrong shape
+#define PERSIST_SETTINGS_VERSION 5
 #define PERSIST_SETTINGS_VERSION_KEY 91742
 #define PERSIST_SETTINGS_KEY 91743
 
@@ -43,7 +43,6 @@ typedef struct {
   uint8_t ten_second_above_sec; //< Update every ten seconds above this many seconds, or NEVER
   uint8_t minute_above_min;     //< Update every minute above this many minutes, or NEVER
   uint8_t instant_start_sec;    //< Instant start window in seconds, or NEVER for off
-  uint8_t contrast;             //< SETTINGS_CONTRAST_REGULAR or SETTINGS_CONTRAST_HIGH
   uint32_t timer_rgb;           //< Accent color while counting down
   uint32_t chrono_rgb;          //< Accent color while counting up
 } Settings;
@@ -53,7 +52,6 @@ static Settings settings_data = {
     .ten_second_above_sec = SETTINGS_NEVER,
     .minute_above_min = SETTINGS_NEVER,
     .instant_start_sec = SETTINGS_NEVER,
-    .contrast = SETTINGS_CONTRAST_REGULAR,
     .timer_rgb = SETTINGS_TIMER_RGB_DEFAULT,
     .chrono_rgb = SETTINGS_CHRONO_RGB_DEFAULT,
 };
@@ -169,30 +167,19 @@ static Cadence prv_cadence(int64_t value_ms) {
 }
 
 // Whether two settings hold the same values
-// Field by field rather than memcmp, because Settings can carry padding between its byte fields
-// and its colors -- it had a byte of it until the contrast mode filled the gap -- and memcmp reads
-// it. That was safe here only by a chain of accidents: the structure is a file-scope object so
-// its padding starts zeroed, prv_persist_read copies named members out of
-// the blob rather than assigning the whole thing, and a struct assignment happens to carry
-// padding on every toolchain this builds with. Break any one of those -- most easily by reading
-// flash straight into settings_data, where the padding is whatever an older build wrote -- and
-// every inbound message looks like a change, which means a flash write and a redraw each time.
-// Comparing the fields costs nothing and depends on none of it.
+// Field by field rather than memcmp, because Settings carries padding between its byte fields and
+// its colors, and memcmp reads it. That was safe here only by a chain of accidents: the structure
+// is a file-scope object so its padding starts zeroed, prv_persist_read copies named members out of
+// the blob rather than assigning the whole thing, and a struct assignment happens to carry padding
+// on every toolchain this builds with. Break any one of those -- most easily by reading flash
+// straight into settings_data, where the padding is whatever an older build wrote -- and every
+// inbound message looks like a change, which means a flash write and a redraw each time. Comparing
+// the fields costs nothing and depends on none of it.
 static bool prv_settings_equal(const Settings *a, const Settings *b) {
   return a->ten_second_above_sec == b->ten_second_above_sec &&
          a->minute_above_min == b->minute_above_min &&
-         a->instant_start_sec == b->instant_start_sec && a->contrast == b->contrast &&
-         a->timer_rgb == b->timer_rgb && a->chrono_rgb == b->chrono_rgb;
-}
-
-// Accept a contrast mode if it is one of the two, otherwise keep the existing one
-// Not prv_validate, which lets SETTINGS_NEVER through as the off value a threshold may take: a
-// contrast has no off, and a stray 255 is no more a mode than any other number.
-static uint8_t prv_validate_contrast(int32_t value, uint8_t current) {
-  if (value == SETTINGS_CONTRAST_REGULAR || value == SETTINGS_CONTRAST_HIGH) {
-    return (uint8_t)value;
-  }
-  return current;
+         a->instant_start_sec == b->instant_start_sec && a->timer_rgb == b->timer_rgb &&
+         a->chrono_rgb == b->chrono_rgb;
 }
 
 // Accept a threshold if it is in range or SETTINGS_NEVER, otherwise keep the existing one
@@ -221,7 +208,6 @@ static void prv_persist_read(void) {
   settings_data.instant_start_sec =
       prv_validate(stored.instant_start_sec, SETTINGS_INSTANT_START_MIN_SEC,
                    SETTINGS_INSTANT_START_MAX_SEC, settings_data.instant_start_sec);
-  settings_data.contrast = prv_validate_contrast(stored.contrast, settings_data.contrast);
   // any 24 bit value names a color; GColorFromHEX quantizes whatever it is handed
   settings_data.timer_rgb = stored.timer_rgb & 0xFFFFFF;
   settings_data.chrono_rgb = stored.chrono_rgb & 0xFFFFFF;
@@ -302,10 +288,6 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context) 
   }
   // the color settings are only offered on color hardware, so a watch which cannot use them never
   // sends them and keeps whatever is stored
-  tuple = dict_find(iter, MESSAGE_KEY_contrast);
-  if (tuple && prv_tuple_int(tuple, &value)) {
-    settings_data.contrast = prv_validate_contrast(value, settings_data.contrast);
-  }
   tuple = dict_find(iter, MESSAGE_KEY_timerColor);
   if (tuple && prv_tuple_int(tuple, &value)) {
     settings_data.timer_rgb = (uint32_t)value & 0xFFFFFF;
@@ -336,7 +318,6 @@ uint8_t settings_masked_second_digits(int64_t value_ms) {
   return (step_ms > MSEC_IN_SEC) ? 1 : 0;
 }
 
-// Get the accent color for one of the two counting directions
 // Get the instant start window, which is also the largest credit a start will be given
 bool settings_instant_start_ms(uint32_t *window_ms) {
   if (settings_data.instant_start_sec == SETTINGS_NEVER) {
@@ -346,47 +327,65 @@ bool settings_instant_start_ms(uint32_t *window_ms) {
   return true;
 }
 
-// Move an accent into a contrast mode, keeping its hue
-// Regular shades the center two steps up, so it needs a channel at 00, or every channel reaches
-// ff and the center is white. High shades the band two steps down, so it needs a channel at ff,
-// or every channel reaches 00 and the band is the black behind it. The configuration page offers
-// only colors which already qualify, and moves a pick by this same rule when the mode is switched,
-// so this is for what is stored: a color picked under the other mode, or before there were modes.
-// Regular stretches the channels until the lowest is 00 and high scales them until the highest
-// is ff, both rounding half up, which keeps the hue. Black, the grays and white have no hue to
-// keep, and get the default green.
+// The coarse accents and the band each is drawn with, as 0xRRGGBB
+// Coarse mode draws a band between the ring and the black behind it, and only these 24 accents
+// were chosen to stand off both: each band was picked by hand for its own accent, rather than by
+// any one shift, so they are listed here as they were picked. The order matters only to
+// tools/hosttest/gen_palette.js, where it settles a tie.
+static const uint32_t COARSE_PAIRS[][2] = {
+    {0x00AAAA, 0x005555}, {0x00FF00, 0x005500}, {0x5555FF, 0x0000FF}, {0xAA5555, 0xAA0000},
+    {0x55AA55, 0x005500}, {0xAA55AA, 0x550055}, {0xAAAA00, 0x555500}, {0xFF5500, 0xAA0000},
+    {0xFF00FF, 0x550055}, {0xFF5555, 0xFF0000}, {0x5555AA, 0x0000AA}, {0x00AAFF, 0x005555},
+    {0xAA55FF, 0x5500AA}, {0x00AA00, 0x005500}, {0xFF00AA, 0x550055}, {0x55AAAA, 0x005555},
+    {0xFF55AA, 0xAA0055}, {0xFFAA00, 0x555500}, {0xAA00AA, 0x550055}, {0x55FF00, 0x005500},
+    {0x55AAFF, 0x0055AA}, {0xAA00FF, 0x5500AA}, {0xFF55FF, 0x550055}, {0xFFAA55, 0xAA5500},
+};
+
+// Which of COARSE_PAIRS each of the 64 colors becomes in coarse mode, indexed by the color's
+// two-bit channels as rrggbb
+// The nearest accent by hue first and lightness second, black and white taking the default
+// green. tools/hosttest/gen_palette.js works it out and prints these rows; the configuration page
+// carries the same table, so the two always agree on the color in force.
+static const uint8_t COARSE_MOVES[64] = {
+    1, 10, 10, 2, 13, 0, 10, 2, 13, 4, 0, 11, 1, 1, 1, 15,      // red 00
+    3, 18, 10, 2, 4, 10, 10, 2, 13, 4, 15, 20, 19, 19, 1, 15,   // red 55
+    3, 3, 18, 21, 3, 3, 5, 12, 6, 6, 15, 20, 19, 19, 19, 15,    // red aa
+    9, 9, 14, 8, 7, 9, 16, 22, 17, 23, 9, 22, 6, 6, 17, 1,      // red ff
+};
+
+// Get the stored accent for one of the two counting directions as the watch draws it
 // Channels are Pebble's two-bit levels, taken from the top of each byte as GColorFromHEX takes
 // them, so the color this judges is the color the watch would draw.
-static uint32_t prv_accent_in_mode(uint32_t rgb, bool high) {
-  uint8_t channels[3] = {(uint8_t)((rgb >> 22) & 3), (uint8_t)((rgb >> 14) & 3),
-                         (uint8_t)((rgb >> 6) & 3)};
-  uint8_t lo = 3;
-  uint8_t hi = 0;
-  for (uint8_t ii = 0; ii < 3; ii++) {
-    lo = (channels[ii] < lo) ? channels[ii] : lo;
-    hi = (channels[ii] > hi) ? channels[ii] : hi;
+static uint8_t prv_accent_index(bool chrono) {
+  const uint32_t rgb = chrono ? settings_data.chrono_rgb : settings_data.timer_rgb;
+  return (uint8_t)(((rgb >> 18) & 0x30) | ((rgb >> 12) & 0x0C) | ((rgb >> 6) & 0x03));
+}
+
+// Get whether either coarse update mode is switched on
+bool settings_coarse(void) {
+  return settings_data.ten_second_above_sec != SETTINGS_NEVER ||
+         settings_data.minute_above_min != SETTINGS_NEVER;
+}
+
+// Get the accent color for one of the two counting directions, moved into the palette in force
+// Coarse mode takes the nearest of its 24. Otherwise any color will do but black and white, which
+// would vanish into what is behind the ring or the center, and take the default green.
+uint32_t settings_accent_rgb(bool chrono) {
+  const uint8_t index = prv_accent_index(chrono);
+  if (settings_coarse()) {
+    return COARSE_PAIRS[COARSE_MOVES[index]][0];
   }
-  if (lo == hi) {
+  if (index == 0x00 || index == 0x3F) {
     return SETTINGS_TIMER_RGB_DEFAULT;
   }
-  if (high ? (hi != 3) : (lo != 0)) {
-    for (uint8_t ii = 0; ii < 3; ii++) {
-      channels[ii] = high ? (uint8_t)((6 * channels[ii] + hi) / (2 * hi))
-                          : (uint8_t)((2 * hi * (channels[ii] - lo) + (hi - lo)) / (2 * (hi - lo)));
-    }
-  }
-  return ((uint32_t)channels[0] * 0x55 << 16) | ((uint32_t)channels[1] * 0x55 << 8) |
-         ((uint32_t)channels[2] * 0x55);
+  return (uint32_t)((index >> 4) & 3) * 0x550000 + (uint32_t)((index >> 2) & 3) * 0x5500 +
+         (uint32_t)(index & 3) * 0x55;
 }
 
-// Get the accent color for one of the two counting directions, moved into the contrast mode
-uint32_t settings_accent_rgb(bool chrono) {
-  return prv_accent_in_mode(chrono ? settings_data.chrono_rgb : settings_data.timer_rgb,
-                            settings_data.contrast == SETTINGS_CONTRAST_HIGH);
+// Get the band color for one of the two counting directions in coarse mode
+uint32_t settings_band_rgb(bool chrono) {
+  return COARSE_PAIRS[COARSE_MOVES[prv_accent_index(chrono)]][1];
 }
-
-// Get whether the high contrast mode is in force
-bool settings_contrast_high(void) { return settings_data.contrast == SETTINGS_CONTRAST_HIGH; }
 
 // Get how long the display holds each frame at a certain timer value
 uint32_t settings_refresh_step_ms(int64_t value_ms) { return prv_cadence(value_ms).step_ms; }
