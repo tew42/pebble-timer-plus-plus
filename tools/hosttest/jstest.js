@@ -116,6 +116,18 @@ function itemFor(key) {
     })(cfg);
     return found;
 }
+// The phone app gives a manifestVersion 1 (legacy) app with JavaScript internet, location, timeline
+// and notification permissions without asking, and a version 2 app only what it declares. The
+// page's JavaScript needs none of them, so the app declares version 2 and nothing.
+(function () {
+    var pebble = JSON.parse(fs.readFileSync(ROOT + '/package.json')).pebble;
+    if (pebble.manifestVersion !== 2 || !Array.isArray(pebble.usesPermissions) ||
+        pebble.usesPermissions.length) {
+        fail('package.json should declare manifestVersion 2 and an empty usesPermissions, got ' +
+             pebble.manifestVersion + ' and ' + JSON.stringify(pebble.usesPermissions));
+    }
+})();
+
 // the overrun toggle defaults on, the behavior the app has always had
 (function () {
     var item = itemFor('overrunChrono');

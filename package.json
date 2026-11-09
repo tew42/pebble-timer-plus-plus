@@ -24,6 +24,8 @@
             "overrunChrono"
         ],
         "projectType": "native",
+        "manifestVersion": 2,
+        "usesPermissions": [],
         "resources": {
             "media": [
                 {

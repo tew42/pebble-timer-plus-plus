@@ -32,7 +32,8 @@ On touch watches the same actions are on the screen (peek and split remain butto
 
 ## Settings
 
-Configured from the Pebble app.
+Configured from the Pebble app. Timer++ asks the phone for no permissions: its settings page
+runs on the phone and sends nothing anywhere but the watch.
 
 ### Display updates
 
@@ -54,21 +55,6 @@ Off by default. Switched on, timers and stopwatches both start from when you ope
 
 There is a configurable time window of 5s or 10s; if nothing is pressed within that window after app opening, the stopwatch starts itself. If you do press up, down, or select to begin editing the timer, then you've committed to timer mode. The time you spent editing (or waiting) will automatically be accounted for after the stopwatch or timer starts.
 
-### Alarm
-
-When a timer reaches zero it buzzes for 30 seconds. Any button stops the buzz and does nothing
-else, and select inside the alarm puts the timer back to its length, ready to start again.
-
-**Overrun becomes stopwatch** is on by default: after the alarm, the timer carries on counting up
-as a stopwatch. Switched off, the alarm stands for up to 5 minutes instead:
-
-- Up and down only stop the buzz. Back stops it too, and a second back leaves the app.
-- Left alone, the app closes at 5 minutes with the timer paused at its length, ready to run again.
-- Select hands back the timer's length for editing, with the footer showing when it ended. The
-  timer keeps its original start, so it only starts once it is set to end in the future: a 30
-  minute timer answered 2 minutes late has to be set above 32 minutes, and then finishes on the
-  original schedule. Until then, select shakes the digits instead of starting.
-
 ### Colors
 
 Counting down (timer) and counting up (stopwatch) each get their own accent, both green to start.
@@ -86,6 +72,21 @@ first and its lightness second; for example, red becomes `ff5555`, and yellow be
 watch makes the same move for a color it already has stored. Turning coarse mode off again moves
 nothing back. The picker's hexagons are laid out like the color map in the Pebble SDK's color
 picker.
+
+### Alarm
+
+When a timer reaches zero it buzzes for 30 seconds. Any button stops the buzz and does nothing
+else, and select inside the alarm puts the timer back to its length, ready to start again.
+
+**Overrun becomes stopwatch** is on by default: after the alarm, the timer carries on counting up
+as a stopwatch. Switched off, the alarm stands for up to 5 minutes instead:
+
+- Up and down only stop the buzz. Back stops it too, and a second back leaves the app.
+- Left alone, the app closes at 5 minutes with the timer paused at its length, ready to run again.
+- Select hands back the timer's length for editing, with the footer showing when it ended. The
+  timer keeps its original start, so it only starts once it is set to end in the future: a 30
+  minute timer answered 2 minutes late has to be set above 32 minutes, and then finishes on the
+  original schedule. Until then, select shakes the digits instead of starting.
 
 ## Closing itself
 

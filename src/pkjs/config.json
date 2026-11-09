@@ -124,22 +124,6 @@
   },
   {
     "type": "section",
-    "items": [
-      {
-        "type": "heading",
-        "defaultValue": "Alarm"
-      },
-      {
-        "type": "toggle",
-        "messageKey": "overrunChrono",
-        "label": "Overrun becomes stopwatch",
-        "description": "After zero, the timer keeps counting up as a stopwatch. Off, the alarm shows for up to 5 minutes, then the app closes with the timer ready to run again. Select during the alarm lets you extend the timer from when it was started.",
-        "defaultValue": true
-      }
-    ]
-  },
-  {
-    "type": "section",
     "capabilities": [
       "COLOR"
     ],
@@ -191,6 +175,22 @@
           [false, false, false, false, false, false, "0055ff", false, "5555ff", false, "5555aa", false, "aa00ff", false, "aa55aa", false, "ff55ff", false, "ffaaff", false],
           [false, false, false, false, false, false, false, false, false, "aaaaff", false, false, false, "aa55ff", false, false, false, false, false, false]
         ]
+      }
+    ]
+  },
+  {
+    "type": "section",
+    "items": [
+      {
+        "type": "heading",
+        "defaultValue": "Alarm"
+      },
+      {
+        "type": "toggle",
+        "messageKey": "overrunChrono",
+        "label": "Overrun becomes stopwatch",
+        "description": "After zero, the timer keeps counting up as a stopwatch. Off, the alarm shows for up to 5 minutes, then the app closes with the timer ready to run again. Select during the alarm lets you extend the timer from when it was started.",
+        "defaultValue": true
       }
     ]
   },
