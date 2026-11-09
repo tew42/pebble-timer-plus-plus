@@ -81,12 +81,6 @@ static void check_defaults(void) {
 
 #include "configopts.h"
 
-// timer.c asserts these at compile time; re-check them here since the harness does not build it
-_Static_assert((SETTINGS_TEN_SECOND_MIN_SEC) * (MSEC_IN_SEC) >= TIMER_C_VIBRATION_LENGTH_MS,
-               "ten second updates must not begin before the elapse vibration has finished");
-_Static_assert((SETTINGS_MINUTE_MIN_MIN) * (MSEC_IN_MIN) >= TIMER_C_VIBRATION_LENGTH_MS,
-               "minute updates must not begin before the elapse vibration has finished");
-
 // Every value the settings page can send must survive validation unchanged, in both the integer
 // and the legacy cstring serialization, and the page's defaults must match the C defaults.
 static void check_config_values(void) {
@@ -141,25 +135,12 @@ static void check_config_values(void) {
     CHECK(prv_validate(bad[i], SETTINGS_TEN_SECOND_MIN_SEC, SETTINGS_TEN_SECOND_MAX_SEC, 40) == 40,
           "10s threshold accepted out-of-range %d", bad[i]);
   }
-  // in particular, nothing below the floor which guards the elapse vibration can get in
+  // in particular, nothing below the floor gets in
   for (int32_t v = 1; v < SETTINGS_TEN_SECOND_MIN_SEC; v++) {
     CHECK(prv_validate(v, SETTINGS_TEN_SECOND_MIN_SEC, SETTINGS_TEN_SECOND_MAX_SEC, 40) == 40,
-          "10s threshold accepted %d, below the vibration floor", v);
+          "10s threshold accepted %d, below the floor", v);
   }
-  for (unsigned i = 0; i < sizeof(TEN_OPTS) / sizeof(*TEN_OPTS); i++) {
-    CHECK(TEN_OPTS[i] == SETTINGS_NEVER
-              || TEN_OPTS[i] * MSEC_IN_SEC >= TIMER_C_VIBRATION_LENGTH_MS,
-          "10s option %ds starts coarse updates before the %dms vibration ends", TEN_OPTS[i],
-          TIMER_C_VIBRATION_LENGTH_MS);
-  }
-  for (unsigned i = 0; i < sizeof(MIN_OPTS) / sizeof(*MIN_OPTS); i++) {
-    CHECK(MIN_OPTS[i] == SETTINGS_NEVER
-              || MIN_OPTS[i] * MSEC_IN_MIN >= TIMER_C_VIBRATION_LENGTH_MS,
-          "minute option %dmin starts coarse updates before the vibration ends", MIN_OPTS[i]);
-  }
-  printf("  ok: every option accepted, out-of-range refused, defaults agree,\n");
-  printf("      and every option clears the %dms elapse vibration\n",
-         TIMER_C_VIBRATION_LENGTH_MS);
+  printf("  ok: every option accepted, out-of-range refused, defaults agree\n");
 }
 
 int main(void) {

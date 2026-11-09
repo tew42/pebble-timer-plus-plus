@@ -10,23 +10,17 @@
 // @bugs No known bugs
 
 #include "timer.h"
-#include "settings.h"
 #include "utility.h"
 
 #define PERSIST_VERSION 4
 #define PERSIST_VERSION_KEY 4342896
 #define PERSIST_TIMER_KEY 58734
-#define VIBRATION_LENGTH_MS 20000
-
-// The vibration below is re-enqueued from the same callback which refreshes the display, so a
-// reduced-frequency update mode which began part way through would cut it short. Every threshold
-// the settings page can select is at or beyond the end of the vibration, so the whole of it is
-// enqueued on a one second cadence; if this length grows past them, those thresholds and the
-// options offered in src/pkjs/config.json have to grow with it.
-_Static_assert((SETTINGS_TEN_SECOND_MIN_SEC) * (MSEC_IN_SEC) >= VIBRATION_LENGTH_MS,
-               "ten second updates must not begin before the elapse vibration has finished");
-_Static_assert((SETTINGS_MINUTE_MIN_MIN) * (MSEC_IN_MIN) >= VIBRATION_LENGTH_MS,
-               "minute updates must not begin before the elapse vibration has finished");
+// How long the elapse alert buzzes. The buzz is re-enqueued from the display refresh, which
+// main.c keeps on a one second cadence for as long as timer_is_vibrating(), whatever the coarse
+// update modes would otherwise ask for.
+#define VIBRATION_LENGTH_MS 30000
+// How long the alert stands when the overrun is not to become a stopwatch
+#define ALARM_HOLD_MS (5 * MSEC_IN_MIN)
 
 // Vibration sequence
 static const uint32_t vibe_sequence[] = {150, 200, 300};
@@ -59,6 +53,13 @@ _Static_assert(sizeof(Timer) == 24, "the persisted Timer changed shape; bump PER
 // survive the app being closed.
 static int64_t split_value_ms;
 static bool split_active;
+
+// The start a timer keeps while it is being edited after its alert, zero when there is none.
+// Select at a held alert hands the length back for editing without forgetting when the run began,
+// so a start from there finishes on the original schedule. Session state like the split: no other
+// stored state remembers a start, so this is not stored either, and a timer saved mid-edit comes
+// back as a plain paused length.
+static int64_t origin_ms;
 
 // Whether the elapse alert has sounded in this session. Not persisted: a new session which finds
 // the alert window already past has still to sound it once.
@@ -171,7 +172,11 @@ bool timer_is_alerting(void) {
 }
 
 // Check if the timer is vibrating
-bool timer_is_vibrating(void) { return timer_is_alerting() && !silenced; }
+// Only for the length of the buzz: a held alert stands far longer than it sounds
+bool timer_is_vibrating(void) {
+  return timer_is_alerting() && !silenced &&
+         (timer_get_value_ms() <= VIBRATION_LENGTH_MS || late_tries > 0);
+}
 
 // Call off the buzzing, leaving the alert itself standing
 void timer_silence(void) { silenced = true; }
@@ -200,17 +205,18 @@ bool timer_is_split(void) { return split_active; }
 bool timer_is_paused(void) { return !timer_data.running; }
 
 // Check if the timer is elapsed and vibrate if this is the first call after elapsing
-void timer_check_elapsed(void) {
+bool timer_check_elapsed(bool hold) {
   if (!timer_is_alerting()) {
-    return;
+    return false;
   }
-  // The window closes on time whether or not the noise was called off early, or the alert would
-  // stand for as long as the app stayed open: select would go on offering the set time back and
-  // the header would go on saying so.
+  // The buzz stops on time whether or not the noise was called off early, and with it, unless the
+  // alert is being held, the window: otherwise the alert would stand for as long as the app stayed
+  // open, select going on offering the set time back and the header going on saying so.
   // Closing it does not enqueue one last burst past the end either: this runs on the display
   // refresh, so once the coarse cadences begin the next call can be a whole minute later and the
   // alert would buzz long after it visibly finished.
-  const bool past_window = timer_get_value_ms() > VIBRATION_LENGTH_MS;
+  const int64_t value_ms = timer_get_value_ms();
+  const bool past_window = value_ms > VIBRATION_LENGTH_MS;
   // A session which only started after the window closed has not sounded the alert at all, which
   // is what happens when the wakeup could only be scheduled late. It gets a few goes rather than
   // one, so that a dropped enqueue is not the end of it; a button saying no ends it immediately,
@@ -221,11 +227,20 @@ void timer_check_elapsed(void) {
     late_tries = LATE_ALERT_TRIES;
   }
   const bool sounding_late = late_tries > 0;
-  if (past_window && !sounding_late) {
+  // A held alert stands until ALARM_HOLD_MS and then puts the length back. The coarse cadences
+  // land on whole minutes and tens of seconds, so the refresh meets the end exactly rather than
+  // overshooting it. A launch which finds the hold long over rewinds the same way, but only a
+  // session which sounded the alert has watched it run out.
+  if (hold && value_ms >= ALARM_HOLD_MS) {
+    const bool sounded = has_vibrated;
+    timer_rewind(false);
+    return sounded;
+  }
+  if (!hold && past_window && !sounding_late) {
     timer_data.can_vibrate = false;
   }
   if (silenced || (past_window && has_vibrated && !sounding_late)) {
-    return;
+    return false;
   }
   if (sounding_late) {
     late_tries--;
@@ -233,6 +248,7 @@ void timer_check_elapsed(void) {
   // vibrate
   has_vibrated = true;
   vibes_enqueue_custom_pattern(vibe_pattern);
+  return false;
 }
 
 // Increment timer value currently being edited
@@ -298,11 +314,26 @@ void timer_toggle_play_pause(void) {
   const int64_t elapsed_ms = prv_elapsed_ms();
   timer_data.running = !timer_data.running;
   prv_set_elapsed_ms(elapsed_ms);
+  // a start from an edit after the alert runs from the start the timer kept
+  if (timer_data.running && origin_ms) {
+    timer_data.anchor_ms = origin_ms;
+  }
+  origin_ms = 0;
 }
+
+// Check whether a start now would have somewhere to run to
+bool timer_can_start(void) {
+  return !origin_ms || origin_ms + timer_data.target_ms > (int64_t)epoch();
+}
+
+// Get the start the timer is keeping, zero when there is none
+int64_t timer_get_origin_ms(void) { return origin_ms; }
 
 //! Rewind the timer back to its original value
 // The run is given back and the clock stops, so this lands where a timer waiting to be started is
-void timer_rewind(void) {
+void timer_rewind(bool keep_start) {
+  // a running anchor is the epoch the run started at
+  origin_ms = (keep_start && timer_data.running) ? timer_data.anchor_ms : 0;
   timer_split_release();
   silenced = false;
   timer_data.running = false;
@@ -317,6 +348,7 @@ void timer_rewind(void) {
 void timer_reset(void) {
   timer_split_release();
   silenced = false;
+  origin_ms = 0;
   timer_data.target_ms = 0;
   timer_data.running = false;
   prv_set_elapsed_ms(0);

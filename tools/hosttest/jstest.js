@@ -22,7 +22,7 @@ function loadIndexJs(stored) {
     var path = require('path');
     var KEYS = {tenSecondUpdatesAbove: 10001, minuteUpdatesAbove: 10002,
                 timerColor: 10003, chronoColor: 10004, settingsRequest: 10005,
-                instantStart: 10006};
+                instantStart: 10006, overrunChrono: 10007};
     // message_keys is the phone runtime's; the page HTML is written by the Pebble build. Both
     // are stood in for so the rest of Clay is the real thing.
     // message_keys is the phone runtime's, the page HTML is written by the Pebble build, and
@@ -72,7 +72,8 @@ function loadIndexJs(stored) {
 console.log('\nthe phone answers the watch when it asks for the settings:');
 try {
     var saved = {tenSecondUpdatesAbove: 30, minuteUpdatesAbove: 2,
-                 timerColor: 0x00ff00, chronoColor: 0xff0000, instantStart: 10};
+                 timerColor: 0x00ff00, chronoColor: 0xff0000, instantStart: 10,
+                 overrunChrono: false};
     var app = loadIndexJs(saved);
     if (!app.listeners.appmessage) {
         fail('index.js registers no appmessage listener, so the watch is never answered');
@@ -84,11 +85,13 @@ try {
             var dict = app.sent[0];
             Object.keys(saved).forEach(function(key) {
                 var id = app.keys[key];
-                if (dict[id] !== saved[key]) {
-                    fail(key + ' came back as ' + dict[id] + ', expected ' + saved[key]);
+                // a toggle goes over as the integer the watch reads, 1 or 0
+                var want = (typeof saved[key] === 'boolean') ? (saved[key] ? 1 : 0) : saved[key];
+                if (dict[id] !== want) {
+                    fail(key + ' came back as ' + dict[id] + ', expected ' + want);
                 }
             });
-            console.log('  ok: the five saved settings go back under their own message keys');
+            console.log('  ok: the six saved settings go back under their own message keys');
         }
     }
     // and with nothing ever saved the phone stays quiet, so the watch keeps its own defaults
@@ -113,6 +116,14 @@ function itemFor(key) {
     })(cfg);
     return found;
 }
+// the overrun toggle defaults on, the behavior the app has always had
+(function () {
+    var item = itemFor('overrunChrono');
+    if (!item || item.type !== 'toggle' || item.defaultValue !== true) {
+        fail('the overrun toggle is missing or does not default on');
+    }
+})();
+
 function optionsFor(key) {
     return itemFor(key).options.map(function(o) { return parseInt(o.value, 10); });
 }

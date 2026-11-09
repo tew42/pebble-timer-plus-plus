@@ -124,6 +124,22 @@
   },
   {
     "type": "section",
+    "items": [
+      {
+        "type": "heading",
+        "defaultValue": "Alarm"
+      },
+      {
+        "type": "toggle",
+        "messageKey": "overrunChrono",
+        "label": "Overrun becomes stopwatch",
+        "description": "After zero, the timer keeps counting up as a stopwatch. Off, the alarm shows for up to 5 minutes, then the app closes with the timer ready to run again. Select during the alarm lets you extend the timer from when it was started.",
+        "defaultValue": true
+      }
+    ]
+  },
+  {
+    "type": "section",
     "capabilities": [
       "COLOR"
     ],

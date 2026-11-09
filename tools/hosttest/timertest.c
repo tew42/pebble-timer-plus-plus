@@ -65,7 +65,7 @@ int main(void) {
   start_chrono();
   advance(5000);
   timer_split_hold();
-  timer_rewind();
+  timer_rewind(false);
   CHECK(!timer_is_split(), "timer_rewind left a split held");
   printf("  ok\n");
 
@@ -98,12 +98,12 @@ int main(void) {
   timer_toggle_play_pause();
   advance(1000); // elapsed
   vibe_burst_count = 0;
-  for (int64_t t = 0; t <= 30000; t += 1000) {
-    timer_check_elapsed();
+  for (int64_t t = 0; t <= 45000; t += 1000) {
+    timer_check_elapsed(false);
     advance(1000);
   }
-  CHECK(vibe_burst_count > 0 && vibe_burst_count <= 21,
-        "expected bursts only within the 20s window, got %d", vibe_burst_count);
+  CHECK(vibe_burst_count >= 30 && vibe_burst_count <= 31,
+        "expected a burst a second for the 30s window, got %d", vibe_burst_count);
   printf("  %d bursts, none past %dms of overtime\n", vibe_burst_count, VIBRATION_LENGTH_MS);
 
   // a wakeup which could only be scheduled late opens the app after the alert window has already
@@ -115,16 +115,16 @@ int main(void) {
   advance(1000 + 90000); // elapsed, and 90s of overtime: the window is long past
   has_vibrated = false;  // a fresh launch
   vibe_burst_count = 0;
-  timer_check_elapsed();
+  timer_check_elapsed(false);
   CHECK(vibe_burst_count == 1, "a late launch gave %d bursts, expected 1", vibe_burst_count);
   // and a second go, because the first enqueue can be swallowed without a word when another
   // pattern is already playing -- an alert sounding inside its window re-enqueues every second
   // and rides that out, where a late one used to have a single attempt and no way to know
-  timer_check_elapsed();
+  timer_check_elapsed(false);
   CHECK(vibe_burst_count == 2, "the late alert got %d attempts, expected 2", vibe_burst_count);
   // but bounded: it must not go on buzzing
   for (int i = 0; i < 5; i++) {
-    timer_check_elapsed();
+    timer_check_elapsed(false);
   }
   CHECK(vibe_burst_count == 2, "it kept buzzing past its attempts (%d)", vibe_burst_count);
   printf("  one burst on arrival, then silence\n");
@@ -137,13 +137,13 @@ int main(void) {
   advance(1000);
   has_vibrated = false;
   vibe_burst_count = 0;
-  for (int64_t t = 0; t <= 20000; t += 1000) {
-    timer_check_elapsed();
+  for (int64_t t = 0; t <= 30000; t += 1000) {
+    timer_check_elapsed(false);
     advance(1000);
   }
   const int within = vibe_burst_count;
   advance(40000); // the next coarse refresh lands well past the window
-  timer_check_elapsed();
+  timer_check_elapsed(false);
   CHECK(vibe_burst_count == within, "a burst landed past the window (%d after %d)",
         vibe_burst_count, within);
   printf("  %d bursts inside the window, none after\n", within);
@@ -259,11 +259,105 @@ int main(void) {
   timer_toggle_play_pause();
   advance(5000);
   CHECK(timer_is_chrono() && !timer_is_paused(), "the timer should have run past zero");
-  timer_rewind();
+  timer_rewind(false);
   CHECK(timer_get_value_ms() == 3000 && timer_is_paused() && !timer_is_chrono(),
         "expected 0:03 held, got %lldms paused=%d chrono=%d", (long long)timer_get_value_ms(),
         timer_is_paused(), timer_is_chrono());
   printf("  ok: 0:03 back on the clock, waiting to be started\n");
+
+  // A held alert keeps the run's start through the rewind, so the edit it hands back finishes on
+  // the original schedule: it will not start until its length reaches past now, and then runs
+  // from that start rather than from the press.
+  printf("\na rewind from a held alert keeps the run's start:\n");
+  {
+    timer_reset();
+    timer_increment(30 * MSEC_IN_MIN, false);
+    timer_toggle_play_pause();
+    const int64_t start_ms = (int64_t)epoch();
+    advance(32 * MSEC_IN_MIN); // two minutes into the alert
+    CHECK(timer_is_alerting(), "the timer should be alerting");
+    timer_rewind(true);
+    CHECK(timer_is_paused() && timer_get_display_ms() == 30 * MSEC_IN_MIN,
+          "expected 30:00 held, got %lldms", (long long)timer_get_display_ms());
+    CHECK(timer_get_origin_ms() == start_ms, "the kept start is %lld, not the run's %lld",
+          (long long)timer_get_origin_ms(), (long long)start_ms);
+    CHECK(!timer_can_start(), "30:00 from a start 32 minutes ago would start already over");
+    for (int i = 0; i < 2; i++) {
+      timer_increment(MSEC_IN_MIN, false);
+    }
+    CHECK(!timer_can_start(), "32:00 ends right now, and should not start");
+    timer_increment(MSEC_IN_MIN, false);
+    CHECK(timer_can_start(), "33:00 ends a minute from now, and should start");
+    CHECK(timer_get_origin_ms() == start_ms, "editing the length lost the kept start");
+    timer_toggle_play_pause();
+    CHECK(!timer_is_paused() && timer_get_value_ms() == MSEC_IN_MIN && !timer_get_origin_ms(),
+          "the start should run from the original, a minute left; got %lldms, origin %lld",
+          (long long)timer_get_value_ms(), (long long)timer_get_origin_ms());
+
+    // an unheld rewind keeps nothing, and a reset clears a kept start
+    advance(2 * MSEC_IN_MIN);
+    timer_rewind(false);
+    CHECK(!timer_get_origin_ms() && timer_can_start(), "an unheld rewind kept a start");
+    timer_toggle_play_pause();
+    advance(34 * MSEC_IN_MIN);
+    timer_rewind(true);
+    CHECK(timer_get_origin_ms(), "the held rewind kept nothing");
+    timer_reset();
+    CHECK(!timer_get_origin_ms(), "a reset left the kept start in place");
+
+    // and it is session state: a store and read brings back the length, paused, and nothing more
+    timer_increment(MSEC_IN_MIN, false);
+    timer_toggle_play_pause();
+    advance(2 * MSEC_IN_MIN);
+    timer_rewind(true);
+    timer_persist_store();
+    memcpy(stub_persist_stored, stub_persist_last, stub_persist_last_size);
+    stub_persist_stored_size = stub_persist_last_size;
+    stub_persist_stored_int = stub_persist_last_int;
+    origin_ms = 0; // a fresh launch
+    timer_persist_read();
+    CHECK(timer_is_paused() && timer_get_display_ms() == MSEC_IN_MIN && timer_can_start(),
+          "expected 1:00 paused and free to start after a relaunch, got %lldms",
+          (long long)timer_get_display_ms());
+    printf("  ok: 30:00 refused to start until it reached past now, then ran from the original\n");
+  }
+
+  // Held, the alert stands for five minutes: the buzz still stops at thirty seconds, and at five
+  // minutes the timer is rewound, reporting the end only to a session which sounded the alert
+  printf("\na held alert stands five minutes, then rewinds:\n");
+  {
+    timer_reset();
+    timer_increment(MSEC_IN_MIN, false);
+    timer_toggle_play_pause();
+    advance(MSEC_IN_MIN);
+    has_vibrated = false;
+    vibe_burst_count = 0;
+    bool ended = false;
+    int64_t ended_at = -1;
+    for (int64_t t = 0; t <= 6 * MSEC_IN_MIN && !ended; t += MSEC_IN_SEC) {
+      ended = timer_check_elapsed(true);
+      if (ended) { ended_at = t; }
+      if (t == 4 * MSEC_IN_MIN) {
+        CHECK(timer_is_alerting() && !timer_is_vibrating(), "at 4:00 the alert should stand silent");
+      }
+      advance(MSEC_IN_SEC);
+    }
+    CHECK(vibe_burst_count >= 30 && vibe_burst_count <= 31, "the held alert buzzed %d times",
+          vibe_burst_count);
+    CHECK(ended && ended_at == 5 * MSEC_IN_MIN, "expected the end at 5:00, got %lldms",
+          (long long)ended_at);
+    CHECK(timer_is_paused() && timer_get_display_ms() == MSEC_IN_MIN && !timer_get_origin_ms(),
+          "expected 1:00 paused with no kept start, got %lldms", (long long)timer_get_display_ms());
+
+    // a launch which finds the hold already over rewinds the same way, but did not watch it end
+    timer_toggle_play_pause();
+    advance(MSEC_IN_MIN + 20 * MSEC_IN_MIN);
+    has_vibrated = false;
+    CHECK(!timer_check_elapsed(true) && timer_is_paused() && timer_get_display_ms() == MSEC_IN_MIN,
+          "a late launch should rewind quietly");
+    printf("  ok: %d bursts, ended at 5:00 back at 1:00; a late launch rewinds quietly\n",
+           vibe_burst_count);
+  }
 
   // A field wraps inside its own place, and a carry takes the next place up instead. Asking the
   // timer for it keeps the value off zero on the way, which is the only thing that tells a

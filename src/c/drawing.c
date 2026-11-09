@@ -266,7 +266,10 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
   } else {
     // in timer mode, get time
     time_t end_time = epoch() / MSEC_IN_SEC;
-    if (timer_is_paused() && !timer_is_chrono()) {
+    if (timer_get_origin_ms()) {
+      // being edited after a held alert, so the end is still reckoned from the original start
+      end_time = (timer_get_origin_ms() + timer_get_length_ms()) / MSEC_IN_SEC;
+    } else if (timer_is_paused() && !timer_is_chrono()) {
       // a length which has been dialed inside an open instant start window will begin credited,
       // so it finishes that much sooner than the digits on their own would say
       end_time += (timer_get_display_ms() - main_instant_credit_ms()) / MSEC_IN_SEC;

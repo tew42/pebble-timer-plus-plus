@@ -18,15 +18,15 @@
 // dictionary larger than the inbox is dropped whole, with no inbox-dropped handler registered to
 // say so, so every setting stops arriving at once: this has to grow with the page, and
 // settingstest counts the page's settings in config.json to hold it to that.
-#define SETTINGS_PAGE_TUPLES 5
+#define SETTINGS_PAGE_TUPLES 6
 #define SETTINGS_INBOX_SIZE (1 + SETTINGS_PAGE_TUPLES * (7 + 4))
 #define SETTINGS_OUTBOX_SIZE 32
 
 // Persistent storage
-// Version 3 added the instant start window, version 4 a contrast mode and version 5 took it out
-// again; a mismatch discards what is stored, so the settings come back from the phone on the next
-// launch rather than being read as the wrong shape
-#define PERSIST_SETTINGS_VERSION 5
+// Version 3 added the instant start window, version 4 a contrast mode, version 5 took it out again
+// and version 6 added the overrun toggle; a mismatch discards what is stored, so the settings come
+// back from the phone on the next launch rather than being read as the wrong shape
+#define PERSIST_SETTINGS_VERSION 6
 #define PERSIST_SETTINGS_VERSION_KEY 91742
 #define PERSIST_SETTINGS_KEY 91743
 
@@ -43,6 +43,7 @@ typedef struct {
   uint8_t ten_second_above_sec; //< Update every ten seconds above this many seconds, or NEVER
   uint8_t minute_above_min;     //< Update every minute above this many minutes, or NEVER
   uint8_t instant_start_sec;    //< Instant start window in seconds, or NEVER for off
+  uint8_t overrun_chrono;       //< Whether a timer run past zero carries on as a stopwatch
   uint32_t timer_rgb;           //< Accent color while counting down
   uint32_t chrono_rgb;          //< Accent color while counting up
 } Settings;
@@ -52,6 +53,7 @@ static Settings settings_data = {
     .ten_second_above_sec = SETTINGS_NEVER,
     .minute_above_min = SETTINGS_NEVER,
     .instant_start_sec = SETTINGS_NEVER,
+    .overrun_chrono = 1,
     .timer_rgb = SETTINGS_TIMER_RGB_DEFAULT,
     .chrono_rgb = SETTINGS_CHRONO_RGB_DEFAULT,
 };
@@ -167,19 +169,26 @@ static Cadence prv_cadence(int64_t value_ms) {
 }
 
 // Whether two settings hold the same values
-// Field by field rather than memcmp, because Settings carries padding between its byte fields and
-// its colors, and memcmp reads it. That was safe here only by a chain of accidents: the structure
-// is a file-scope object so its padding starts zeroed, prv_persist_read copies named members out of
-// the blob rather than assigning the whole thing, and a struct assignment happens to carry padding
-// on every toolchain this builds with. Break any one of those -- most easily by reading flash
-// straight into settings_data, where the padding is whatever an older build wrote -- and every
-// inbound message looks like a change, which means a flash write and a redraw each time. Comparing
-// the fields costs nothing and depends on none of it.
+// Field by field rather than memcmp, because Settings can carry padding between its byte fields and
+// its colors -- four byte fields leave none, but a fifth would bring it back -- and memcmp reads
+// it. That was safe here only by a chain of accidents: the structure is a file-scope object so its
+// padding starts zeroed, prv_persist_read copies named members out of the blob rather than
+// assigning the whole thing, and a struct assignment happens to carry padding on every toolchain
+// this builds with. Break any one of those -- most easily by reading flash straight into
+// settings_data, where the padding is whatever an older build wrote -- and every inbound message
+// looks like a change, which means a flash write and a redraw each time. Comparing the fields costs
+// nothing and depends on none of it.
 static bool prv_settings_equal(const Settings *a, const Settings *b) {
   return a->ten_second_above_sec == b->ten_second_above_sec &&
          a->minute_above_min == b->minute_above_min &&
-         a->instant_start_sec == b->instant_start_sec && a->timer_rgb == b->timer_rgb &&
+         a->instant_start_sec == b->instant_start_sec &&
+         a->overrun_chrono == b->overrun_chrono && a->timer_rgb == b->timer_rgb &&
          a->chrono_rgb == b->chrono_rgb;
+}
+
+// Accept a switch if it is off or on, otherwise keep the existing one
+static uint8_t prv_validate_switch(int32_t value, uint8_t current) {
+  return (value == 0 || value == 1) ? (uint8_t)value : current;
 }
 
 // Accept a threshold if it is in range or SETTINGS_NEVER, otherwise keep the existing one
@@ -208,6 +217,8 @@ static void prv_persist_read(void) {
   settings_data.instant_start_sec =
       prv_validate(stored.instant_start_sec, SETTINGS_INSTANT_START_MIN_SEC,
                    SETTINGS_INSTANT_START_MAX_SEC, settings_data.instant_start_sec);
+  settings_data.overrun_chrono =
+      prv_validate_switch(stored.overrun_chrono, settings_data.overrun_chrono);
   // any 24 bit value names a color; GColorFromHEX quantizes whatever it is handed
   settings_data.timer_rgb = stored.timer_rgb & 0xFFFFFF;
   settings_data.chrono_rgb = stored.chrono_rgb & 0xFFFFFF;
@@ -286,6 +297,10 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context) 
         prv_validate(value, SETTINGS_INSTANT_START_MIN_SEC, SETTINGS_INSTANT_START_MAX_SEC,
                      settings_data.instant_start_sec);
   }
+  tuple = dict_find(iter, MESSAGE_KEY_overrunChrono);
+  if (tuple && prv_tuple_int(tuple, &value)) {
+    settings_data.overrun_chrono = prv_validate_switch(value, settings_data.overrun_chrono);
+  }
   // the color settings are only offered on color hardware, so a watch which cannot use them never
   // sends them and keeps whatever is stored
   tuple = dict_find(iter, MESSAGE_KEY_timerColor);
@@ -352,6 +367,9 @@ static const uint8_t COARSE_MOVES[64] = {
     3, 3, 18, 21, 3, 3, 5, 12, 6, 6, 15, 20, 19, 19, 19, 15,    // red aa
     9, 9, 14, 8, 7, 9, 16, 22, 17, 23, 9, 22, 6, 6, 17, 1,      // red ff
 };
+
+// Get whether a timer run past zero carries on as a stopwatch
+bool settings_overrun_chrono(void) { return settings_data.overrun_chrono; }
 
 // Get the stored accent for one of the two counting directions as the watch draws it
 // Channels are Pebble's two-bit levels, taken from the top of each byte as GColorFromHEX takes

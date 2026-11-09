@@ -20,7 +20,8 @@
             "timerColor",
             "chronoColor",
             "settingsRequest",
-            "instantStart"
+            "instantStart",
+            "overrunChrono"
         ],
         "projectType": "native",
         "resources": {

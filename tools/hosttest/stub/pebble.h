@@ -45,6 +45,7 @@ AppMessageResult app_message_outbox_send(void);
 void dict_write_uint8(DictionaryIterator *iter, uint32_t key, uint8_t value);
 #define MESSAGE_KEY_settingsRequest 5
 #define MESSAGE_KEY_instantStart 6
+#define MESSAGE_KEY_overrunChrono 7
 // what the harness watches: the stub records the outbox traffic and the pending AppTimer so a
 // test can see a request go out, fail, and be retried
 extern int stub_outbox_sends;

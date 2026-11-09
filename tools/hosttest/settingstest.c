@@ -257,9 +257,47 @@ int main(void) {
     printf("  ok: coarse with either mode on, not with both off\n");
   }
 
-  // A blob from before the palettes is not read as this shape: version 4 had a contrast byte
-  // where this version's colors begin
-  printf("\na blob from the contrast modes is discarded:\n");
+  // The overrun toggle: off the page, through the inbox, into storage and back on the next launch
+  printf("\nthe overrun toggle arrives, is checked, and survives a relaunch:\n");
+  {
+    stub_reset();
+    settings_initialize(&on_change);
+    CHECK(settings_overrun_chrono(), "the overrun should become a stopwatch by default");
+    CHECK(CFG_OVERRUN_CHRONO_DEFAULT == 1, "the page defaults the toggle off");
+    static const struct { int32_t sent; bool on; } arrivals[] = {
+        {0, false}, {1, true}, {0, false}, {2, false}, {255, false}, {-1, false}, {1, true}};
+    for (unsigned ii = 0; ii < ARRAY_LENGTH(arrivals); ii++) {
+      Tuple t = {.type = TUPLE_INT, .length = 4, .value = {{.int32 = arrivals[ii].sent}}};
+      stub_dict_reset();
+      stub_dict_put(MESSAGE_KEY_overrunChrono, &t);
+      prv_inbox_received_handler(NULL, NULL);
+      CHECK(settings_overrun_chrono() == arrivals[ii].on, "after %ld the toggle is %s",
+            (long)arrivals[ii].sent, settings_overrun_chrono() ? "on" : "off");
+    }
+    Tuple off = {.type = TUPLE_INT, .length = 1, .value = {{.int8 = 0}}};
+    stub_dict_reset();
+    stub_dict_put(MESSAGE_KEY_overrunChrono, &off);
+    prv_inbox_received_handler(NULL, NULL);
+    uint8_t blob[64];
+    const size_t size = stub_persist_last_size;
+    memcpy(blob, stub_persist_last, size);
+    settings_terminate();
+    stub_reset();
+    settings_data.overrun_chrono = 1;
+    stub_persist_stored_int = PERSIST_SETTINGS_VERSION;
+    memcpy(stub_persist_stored, blob, size);
+    stub_persist_stored_size = size;
+    settings_initialize(&on_change);
+    CHECK(!settings_overrun_chrono(), "a stored off came back on");
+    settings_terminate();
+    stub_dict_reset();
+    settings_data.overrun_chrono = 1;
+    printf("  ok: on by default, 0 and 1 taken, anything else left alone, stored and read back\n");
+  }
+
+  // A blob from before the toggle is not read as this shape: version 5 had the colors where this
+  // version's toggle and padding begin
+  printf("\na blob from before the toggle is discarded:\n");
   {
     stub_reset();
     settings_initialize(&on_change);
@@ -267,13 +305,13 @@ int main(void) {
     stub_dict_reset();
     stub_dict_put(MESSAGE_KEY_timerColor, &red);
     prv_inbox_received_handler(NULL, NULL);
-    CHECK(stub_persist_last_int == PERSIST_SETTINGS_VERSION && PERSIST_SETTINGS_VERSION == 5,
+    CHECK(stub_persist_last_int == PERSIST_SETTINGS_VERSION && PERSIST_SETTINGS_VERSION == 6,
           "stored under version %ld", (long)stub_persist_last_int);
     uint8_t blob[64];
     const size_t size = stub_persist_last_size;
     memcpy(blob, stub_persist_last, size);
     settings_terminate();
-    for (int32_t version = 5; version >= 4; version--) {
+    for (int32_t version = 6; version >= 5; version--) {
       stub_reset();
       settings_data.timer_rgb = SETTINGS_TIMER_RGB_DEFAULT;
       stub_persist_stored_int = version;
@@ -281,12 +319,12 @@ int main(void) {
       stub_persist_stored_size = size;
       settings_initialize(&on_change);
       const bool read = (settings_data.timer_rgb == 0xFF0000);
-      CHECK(read == (version == 5), "a version %ld blob was %s", (long)version,
+      CHECK(read == (version == 6), "a version %ld blob was %s", (long)version,
             read ? "read" : "discarded");
       settings_terminate();
     }
     stub_dict_reset();
-    printf("  ok: stored under version 5 and read back, a version 4 blob discarded\n");
+    printf("  ok: stored under version 6 and read back, a version 5 blob discarded\n");
   }
 
   // Every color the watch could have stored, in both palettes, against the one table the

@@ -87,15 +87,21 @@ static bool prv_silence_alert(void) {
   return true;
 }
 
+// Check whether the alert is being held rather than turning into a stopwatch
+// While it stands, select is the only press which does anything beyond stopping the noise.
+static bool prv_alarm_held(void) { return timer_is_alerting() && !settings_overrun_chrono(); }
+
 // Put the timer back to the time it was set to, if it is inside its alert window
-// This is select's job at the alert: the timer is ready to run again, held, on the seconds field
+// This is select's job at the alert: the timer is ready to run again, held, on the seconds field.
+// A held alert keeps the start of the run as well, so a start from the edit finishes on the
+// original schedule, and the length has to be taken past the time already gone before it will.
 static bool prv_rewind_alert(void) {
   if (!timer_is_alerting()) {
     return false;
   }
   prv_silence_alert();
   main_data.field = FieldSec;
-  timer_rewind();
+  timer_rewind(!settings_overrun_chrono());
   prv_refresh_stop();
   drawing_update_animated();
   return true;
@@ -384,6 +390,9 @@ static void prv_up_click_handler(ClickRecognizerRef recognizer, void *ctx) {
     layer_mark_dirty(main_data.layer);
     return;
   }
+  if (prv_alarm_held()) {
+    return; // the overrun under a held alert is not a stopwatch, so there is nothing to reveal
+  }
   if (!timer_is_paused()) {
     prv_reveal_exact_time();
     drawing_update();
@@ -413,7 +422,8 @@ static void prv_select_advance(void) {
       main_data.field = FieldMin;
     } else if (main_data.field == FieldMin) {
       main_data.field = FieldSec;
-    } else {
+    } else if (timer_can_start()) {
+      // after a held alert the length runs from the original start, so it has to reach past now
       timer_toggle_play_pause();
       prv_instant_spend();
       prv_refresh_restart();
@@ -515,6 +525,9 @@ static void prv_down_click_handler(ClickRecognizerRef recognizer, void *ctx) {
     layer_mark_dirty(main_data.layer);
     return;
   }
+  if (prv_alarm_held()) {
+    return; // the overrun under a held alert is not a stopwatch, so there is nothing to reveal
+  }
   if (!timer_is_paused()) {
     prv_reveal_exact_time();
     drawing_update();
@@ -546,12 +559,34 @@ static void prv_click_config_provider(void *ctx) {
 
 // AppTimer callback
 static void prv_app_timer_callback(void *data) {
-  // check if timer is complete
-  timer_check_elapsed();
-  // schedule next call, landing on the exact instant the shown time changes
   main_data.app_timer = NULL;
+  // check if timer is complete. A held alert which ran out with nobody answering it closes the
+  // app, as five minutes left alone would anywhere else, storing the timer it has rewound. Not
+  // from under a finger, for prv_idle_expire's reason: the idle close, which waits one out, is
+  // left to do it then, and the rewound timer is drawn meanwhile.
+  const bool was_running = !timer_is_paused();
+  bool close = timer_check_elapsed(!settings_overrun_chrono());
+#if APP_TOUCH_CONTROLS
+  close = close && !rotary_kit_in_progress();
+#endif
+  if (close) {
+    prv_instant_close();
+    window_stack_pop(false);
+    return;
+  }
+  // a hold found already over at launch is rewound without closing, and lands where select would
+  if (was_running && timer_is_paused()) {
+    main_data.field = FieldSec;
+  }
+  // schedule next call, landing on the exact instant the shown time changes
   if (!timer_is_paused()) {
     uint32_t duration = settings_next_refresh_ms(timer_get_value_ms(), timer_is_chrono());
+    // the buzz is re-enqueued from here, so it keeps a one second cadence while it lasts whatever
+    // the coarse update modes ask for
+    const uint32_t to_second = MSEC_IN_SEC - (uint32_t)(timer_get_value_ms() % MSEC_IN_SEC);
+    if (timer_is_vibrating() && duration > to_second) {
+      duration = to_second;
+    }
     main_data.app_timer = app_timer_register(duration, prv_app_timer_callback, NULL);
   }
   // refresh, unless the shown time is being held: the loop still runs so timer_check_elapsed

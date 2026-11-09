@@ -83,7 +83,11 @@ bool timer_is_split(void);
 bool timer_is_paused(void);
 
 //! Check if the timer is elapsed and vibrate if this is the first call after elapsing
-void timer_check_elapsed(void);
+//! The buzz lasts thirty seconds. Unheld, the alert ends with it, and the overrun carries on as a
+//! stopwatch; held, it stands for five minutes and then the timer is rewound to its length.
+//! @param hold True to hold the alert rather than let the overrun become a stopwatch
+//! @return True if a held alert this session sounded has just run out, the timer now rewound
+bool timer_check_elapsed(bool hold);
 
 //! Increment the field of the displayed value currently being edited
 //! A field wraps inside its own place: seconds roll over at a minute, minutes at an hour and hours
@@ -108,10 +112,21 @@ bool timer_increment(int64_t increment, bool carry);
 void timer_add_elapsed(int64_t ms);
 
 //! Toggle play pause state for timer
+//! A start from an edit made after the alert runs from the start the timer kept there
 void timer_toggle_play_pause(void);
 
+//! Check whether a start now would have somewhere to run to
+//! @return False only while a kept start puts the end of the length in the past
+bool timer_can_start(void);
+
+//! Get the start the timer is keeping from before its alert, while it is edited
+//! @return The epoch in milliseconds, or zero when there is none
+int64_t timer_get_origin_ms(void);
+
 //! Rewind the timer back to its original value
-void timer_rewind(void);
+//! @param keep_start True to keep the start of the run, so that a start from the edit runs from it
+//!   and finishes on the original schedule; false to begin afresh, as a new start always has
+void timer_rewind(bool keep_start);
 
 //! Reset the timer to zero
 void timer_reset(void);

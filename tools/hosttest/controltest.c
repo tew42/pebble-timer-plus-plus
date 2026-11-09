@@ -48,9 +48,11 @@ static bool rewind_if_alerting(void) {
   timer_silence();
   stored = ModeEditSec;
   field = FieldSec;
-  timer_rewind();
+  timer_rewind(!settings_overrun_chrono());
   return true;
 }
+// prv_alarm_held: while a held alert stands, select is the only press which does anything more
+static bool alarm_held(void) { return timer_is_alerting() && !settings_overrun_chrono(); }
 // Instant start, mirroring main.c's window. The AppTimer it uses is a due epoch here, and
 // instant_tick() stands in for the callback firing: nothing else about it is different.
 static int64_t instant_ms;     // the epoch the window opened at, zero when it is closed
@@ -97,6 +99,23 @@ static void instant_settings_updated(void) {
   if (!settings_instant_start_ms(&window_ms)) { instant_close(); }
 }
 
+// prv_app_timer_callback: the elapse check, which can close the app, and the sleep it then takes,
+// held to a second while the buzz lasts
+static bool refresh_tick(void) {
+  if (timer_check_elapsed(!settings_overrun_chrono())) {
+    instant_close();
+    left = true;
+    return true;
+  }
+  return false;
+}
+static uint32_t refresh_sleep_ms(void) {
+  uint32_t duration = settings_next_refresh_ms(timer_get_value_ms(), timer_is_chrono());
+  const uint32_t to_second = MSEC_IN_SEC - (uint32_t)(timer_get_value_ms() % MSEC_IN_SEC);
+  if (timer_is_vibrating() && duration > to_second) { duration = to_second; }
+  return duration;
+}
+
 // The auto-close, mirroring main.c's. The AppTimer is a deadline here, as the instant window's
 // is, and idle_tick() stands in for the callback firing. IDLE_CLOSE_MS must match main.c.
 // What this cannot reach: main.c defers the close while a finger is on the screen, and there is
@@ -138,7 +157,7 @@ static void select_up(void) {
   if (timer_is_paused()) {
     if (field == FieldHr) { stored = ModeEditMin; field = FieldMin; }
     else if (field == FieldMin) { stored = ModeEditSec; field = FieldSec; }
-    else { stored = ModeCounting; timer_toggle_play_pause(); instant_spend(); }
+    else if (timer_can_start()) { stored = ModeCounting; timer_toggle_play_pause(); instant_spend(); }
     return;
   }
   stored = ModeEditSec;
@@ -187,12 +206,14 @@ static void step_field(int direction) {
 static void press_up(void) {
   idle_seen();
   if (silence_if_vibrating()) { return; }
+  if (alarm_held()) { return; }
   if (!timer_is_paused()) { reveal_exact_time(); return; }
   step_field(1);
 }
 static void press_down(void) {
   idle_seen();
   if (silence_if_vibrating()) { return; }
+  if (alarm_held()) { return; }
   if (!timer_is_paused()) { reveal_exact_time(); return; }
   step_field(-1);
 }
@@ -375,6 +396,93 @@ int main(void) {
   step("hold at the alert");
   printf("  ok: press hands back, hold resets\n");
 
+  // The buzz is re-sent from the refresh, so it keeps a one second cadence for its thirty seconds
+  // even where a coarse mode would already have slowed the display, and lets it slow after
+  printf("\nthe buzz keeps a one second refresh, whatever the coarse modes say:\n");
+  {
+    settings_data.ten_second_above_sec = 20;
+    timer_reset();
+    timer_increment(MSEC_IN_MIN, false);
+    timer_toggle_play_pause();
+    fake_now_ms += MSEC_IN_MIN + 500;
+    int ticks = 0;
+    while (timer_get_value_ms() < 31000) {
+      refresh_tick();
+      const uint32_t sleep_ms = refresh_sleep_ms();
+      CHECK(!timer_is_vibrating() || sleep_ms <= MSEC_IN_SEC,
+            "at %lldms into the buzz the refresh slept %ums", (long long)timer_get_value_ms(),
+            (unsigned)sleep_ms);
+      fake_now_ms += sleep_ms;
+      ticks++;
+    }
+    CHECK(ticks >= 30, "only %d refreshes across the buzz", ticks);
+    CHECK(refresh_sleep_ms() > MSEC_IN_SEC, "past the buzz the coarse cadence should resume");
+    settings_data.ten_second_above_sec = SETTINGS_NEVER;
+    printf("  ok: %d refreshes across the 30s buzz with ten second updates from 20s\n", ticks);
+  }
+
+  // With the overrun not becoming a stopwatch, the alert is held for five minutes. Any other press
+  // stops the noise and nothing more; left alone the app closes at five minutes, rewound; select
+  // hands back the length with the run's start kept, and will not start it until it reaches past
+  // now.
+  printf("\na held alert: five minutes, select only, and a start which must reach past now:\n");
+  {
+    settings_data.overrun_chrono = 0;
+    // left alone, buzz silenced or not, it closes at 5:00, storing the length paused
+    for (int silence = 0; silence < 2; silence++) {
+      timer_reset();
+      timer_increment(MSEC_IN_MIN, false);
+      timer_toggle_play_pause();
+      fake_now_ms += MSEC_IN_MIN;
+      left = false;
+      if (silence) {
+        press_down();
+        CHECK(!timer_is_vibrating() && !left, "down should only have stopped the noise");
+      }
+      int64_t closed_at = -1;
+      for (int64_t t = 0; t <= 6 * MSEC_IN_MIN; t += MSEC_IN_SEC) {
+        if (refresh_tick()) { closed_at = t; break; }
+        fake_now_ms += MSEC_IN_SEC;
+      }
+      CHECK(left && closed_at == 5 * MSEC_IN_MIN, "expected the app to close at 5:00, got %lldms",
+            (long long)closed_at);
+      CHECK(timer_is_paused() && timer_get_display_ms() == MSEC_IN_MIN,
+            "expected 1:00 stored paused, got %lldms", (long long)timer_get_display_ms());
+    }
+    // the other presses: up and down stop the noise and then do nothing, not even a split
+    timer_reset();
+    timer_increment(MSEC_IN_MIN, false);
+    timer_toggle_play_pause();
+    fake_now_ms += MSEC_IN_MIN + 2 * MSEC_IN_SEC;
+    left = false;
+    press_up();
+    press_up();
+    press_down();
+    CHECK(!timer_is_split() && !timer_is_paused() && timer_is_alerting() && !left,
+          "up and down should do nothing under a held alert beyond stopping the noise");
+    // select, two minutes in, hands back 1:00 with the start kept, which cannot start yet
+    fake_now_ms += 2 * MSEC_IN_MIN - 2 * MSEC_IN_SEC;
+    press_select();
+    CHECK(timer_is_paused() && timer_get_display_ms() == MSEC_IN_MIN && field == FieldSec,
+          "select should hand back 1:00 on the seconds, got %lldms", (long long)timer_get_display_ms());
+    press_select();
+    CHECK(timer_is_paused(), "a length whose end has passed should not start");
+    press_back(); // to the minutes
+    press_up();
+    press_up();
+    press_select(); // to the seconds
+    press_select();
+    CHECK(timer_is_paused(), "3:00 from a start three minutes ago ends now, and should not start");
+    press_up();
+    press_select();
+    CHECK(!timer_is_paused() && timer_get_value_ms() == MSEC_IN_SEC,
+          "3:01 should start with a second left on the original schedule, got %lldms paused=%d",
+          (long long)timer_get_value_ms(), timer_is_paused());
+    step("a held alert extended and started");
+    settings_data.overrun_chrono = 1;
+    printf("  ok: closes at 5:00 rewound; select edits on the original start, past now only\n");
+  }
+
   // up and down never destroy anything: the run is only ever adjusted or held
   printf("\nup and down are never destructive:\n");
   timer_reset();
@@ -451,8 +559,8 @@ int main(void) {
   press_up(); // and now takes a split, which the alert outranks
   CHECK(timer_is_split() && !strcmp(LABEL(), "Alarm"),
         "split inside the alert window: expected Alarm, got %s", LABEL());
-  fake_now_ms += 25000;
-  timer_check_elapsed(); // the window closes here
+  fake_now_ms += 30000;
+  timer_check_elapsed(false); // the window closes here
   CHECK(!timer_is_alerting() && !strcmp(LABEL(), "Split"),
         "past the window, still held: expected Split, got %s", LABEL());
   press_up();

@@ -20,9 +20,6 @@
 #define SETTINGS_NEVER 255
 
 //! Smallest thresholds the configuration page may select.
-//! These must outlast the elapse vibration, because the vibration is re-enqueued from the same
-//! refresh callback the display uses; timer.c asserts that they do, so raising
-//! VIBRATION_LENGTH_MS past them will fail the build.
 //! Nothing checks these against src/pkjs/config.json, so they must be kept in step with the
 //! options it offers by hand: an option below these is silently rejected on arrival, leaving a
 //! setting the configuration page offers but the watch ignores.
@@ -68,6 +65,12 @@ uint32_t settings_refresh_step_ms(int64_t value_ms);
 //! @param window_ms A pointer to where to store the window in milliseconds
 //! @return True if instant start is on, in which case window_ms was written
 bool settings_instant_start_ms(uint32_t *window_ms);
+
+//! Get whether a timer run past zero carries on as a stopwatch, the app's behavior from the start.
+//! Off, the alert is held for five minutes instead, and select there hands the length back for
+//! editing with the run's start kept, so a start from the edit finishes on the original schedule.
+//! @return True unless the configuration page has switched it off
+bool settings_overrun_chrono(void);
 
 //! Get whether either coarse update mode is switched on, which decides the palette
 //! Both palettes put black behind the ring and white in the center. Coarse mode adds a band,
