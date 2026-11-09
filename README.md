@@ -2,9 +2,9 @@
 
 A beautiful, simple timer/stopwatch for the Pebble smartwatch, now with optimized battery life and more! 
 
-Tell it how coarsely to show the time while it is a long way from zero, and it stops redrawing every second - but if you want to take a peek at the exact time, you can. It also runs in the background using the WakeUp API, so there is no need to keep the app open
+Tell it how coarsely to show the time while it is a long way from zero, and it stops redrawing every second - but if you want to take a peek at the exact time, you can. It also runs in the background using the WakeUp API, so there is no need to keep the app open.
 
-Also here: touch controls, updated button controls including stopwatch split & edit, independent timer & stopwatch color configuration, an optional instant-start mode, and some bug fixes.
+Also here: touch controls, updated button controls including stopwatch split & edit, independent timer & stopwatch color configuration, an optional instant-start mode, auto-close after inactivity, and some bug fixes.
 
 A fork of [Timer+](https://github.com/YclepticStudios/pebble-timer-plus) by way of [BrianEnders's touch fork](https://github.com/BrianEnders/pebble-timer-plus-touch).
 
@@ -57,48 +57,12 @@ There is a configurable time window of 5s or 10s; if nothing is pressed within t
 
 ### Colors
 
-Counting down (timer) and counting up (stopwatch) each get their own accent, both green to start.
-The ring is drawn in the accent on black, around a white center. Color watches only.
+The ring is drawn in the accent on black, around a white center. Color watches only: Counting down (timer) and counting up (stopwatch) each get their own accent, both green to start. In coarse mode, only a restricted set of colors is available; on switching modes, colors get mapped to nearest match.
 
-Which colors are offered depends on the coarse update modes:
+### Timer alarm behavior override
 
-- **With either coarse mode on**, the ring also shows a darker band for the stretch it will reach
-  by the next redraw. Only 24 accents are offered, each chosen with a band of its own that stands
-  clear of both the ring and the black.
-- **With both off**, there is no band, and any color is offered except black and white.
+By default, when a timer reaches zero it buzzes for 30 seconds, and elapsed time shows for up to 5 minutes unless reset. Select allows editing the original timer, with the total time since original start preserved. The override setting reverts this to legacy behavior, where a timer buzzes but otherwise becomes a standard stopwatch.
 
-Turning a coarse mode on moves an accent outside the 24 to the nearest of them, keeping its hue
-first and its lightness second; for example, red becomes `ff5555`, and yellow becomes `aaaa00`. The
-watch makes the same move for a color it already has stored. Turning coarse mode off again moves
-nothing back. The picker's hexagons are laid out like the color map in the Pebble SDK's color
-picker.
-
-### Alarm
-
-When a timer reaches zero it buzzes for 30 seconds, and the alarm stands for up to 5 minutes:
-
-- Up and down only stop the buzz. Back stops it too, and a second back leaves the app.
-- Left alone, the app closes at 5 minutes with the timer paused at its length, ready to run again.
-- Select hands back the timer's length for editing, with the footer showing when it ended. The
-  timer keeps its original start, so it only starts once it is set to end in the future: a 30
-  minute timer answered 2 minutes late has to be set above 32 minutes, and then finishes on the
-  original schedule. Until then, select shakes the digits instead of starting.
-
-**Overrun becomes stopwatch (legacy)** brings back the earlier behavior: after zero the timer
-carries on counting up as a stopwatch. Any button stops the buzz and does nothing else, except
-select during the 30 seconds, which puts the timer back to its length, ready to start again. It is
-off for a fresh install, and on for one from before 1.5, so nothing changes for anyone upgrading.
-
-## Closing itself
-
-If the app is left alone for five minutes it goes back to the watchface on its own, rather than
-sitting in the foreground costing battery. It costs most on the touch watches, where the screen
-stays powered for as long as the app is up.
-
-A running timer or stopwatch keeps it open, and that is the only thing that does. Anywhere the
-clock is stopped it will go: sitting at nothing, a length you dialed but never started, a
-stopwatch you paused. Nothing is lost when it does, because the app stores where it was on the way
-out, so opening it again puts back exactly what you left.
 
 ## Building
 
