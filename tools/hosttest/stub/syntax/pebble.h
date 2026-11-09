@@ -188,4 +188,5 @@ typedef enum { APP_LAUNCH_SYSTEM, APP_LAUNCH_QUICK_LAUNCH, APP_LAUNCH_WAKEUP } A
 AppLaunchReason launch_reason(void);
 void app_event_loop(void);
 void vibes_cancel(void);
+void vibes_short_pulse(void);
 bool clock_is_24h_style(void);

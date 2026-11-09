@@ -21,10 +21,6 @@
 
 // Main constants
 #define BUTTON_HOLD_REPEAT_MS 100
-// A swipe has no travel or click to feel, so it gets the one pulse the buttons do not need. It is
-// fired from the handler rather than by RotaryKit's swipe_vibe_ms, which cannot know that this app
-// acts on two directions out of the four and would buzz for the two it ignores.
-#define SWIPE_VIBE_MS 40
 #define PEEK_DURATION_MS 1000
 // How long the instant start window waits before asking again whether the finger has gone.
 // Short enough that the start is not visibly late, and it only ever runs while a finger is
@@ -674,9 +670,11 @@ static void on_swipe(RotarySwipeDirection direction, void *context) {
   if (direction != RotarySwipeDirection_Left && direction != RotarySwipeDirection_Right) {
     return; // up and down are not bound, so they are silent as well as inert
   }
-  const uint32_t vibe_ms = SWIPE_VIBE_MS;
-  const VibePattern swipe_vibe = {.durations = &vibe_ms, .num_segments = 1};
-  vibes_enqueue_custom_pattern(swipe_vibe);
+  // A swipe has no travel or click to feel, so it gets the one pulse the buttons do not need: the
+  // system's own short pulse, which is felt where a custom 40 ms one was not. Fired from here
+  // rather than by RotaryKit's swipe_vibe_ms, which cannot know that this app acts on two
+  // directions out of the four and would buzz for the two it ignores.
+  vibes_short_pulse();
   if (direction == RotarySwipeDirection_Right) {
     prv_back_retreat();
   } else if (prv_rewind_alert()) {
