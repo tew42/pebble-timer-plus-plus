@@ -864,6 +864,12 @@ static void prv_terminate(void) {
     app_timer_cancel(main_data.idle_timer);
     main_data.idle_timer = NULL;
   }
+  // Leaving inside a held alert stores what its five minutes running out would: the length,
+  // paused. Stored as it stands, the overrun would come back as the stopwatch the setting turned
+  // off, since a stored run past zero carries no alert and never reaches the rewind.
+  if (prv_alarm_held()) {
+    timer_rewind(false);
+  }
   // schedule wakeup on the second the digits count down to, rather than truncating to just
   // before it
   if (!timer_is_chrono() && !timer_is_paused()) {

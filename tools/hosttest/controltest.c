@@ -302,7 +302,9 @@ static bool exit_app(int64_t animation_ms) {
   if (!left) { return false; } // back stepped a field instead of leaving
   fake_now_ms += animation_ms;
   const bool fired = instant_tick();
-  instant_close(); // prv_terminate
+  // prv_terminate
+  instant_close();
+  if (alarm_held()) { timer_rewind(false); }
   return fired;
 }
 
@@ -479,6 +481,20 @@ int main(void) {
           "3:01 should start with a second left on the original schedule, got %lldms paused=%d",
           (long long)timer_get_value_ms(), timer_is_paused());
     step("a held alert extended and started");
+    // leaving inside a held alert stores the length paused, as the five minutes would: stored
+    // running, the overrun would come back as the stopwatch the setting turned off
+    timer_reset();
+    timer_increment(MSEC_IN_MIN, false);
+    timer_toggle_play_pause();
+    fake_now_ms += MSEC_IN_MIN + 2 * MSEC_IN_SEC;
+    field = FieldSec;
+    stored = ModeCounting;
+    exit_app(0); // the first back only stops the noise
+    CHECK(!left && timer_is_alerting(), "the first back should only have stopped the noise");
+    exit_app(0);
+    CHECK(left && timer_is_paused() && timer_get_display_ms() == MSEC_IN_MIN,
+          "leaving a held alert should store 1:00 paused, got %lldms paused=%d",
+          (long long)timer_get_display_ms(), timer_is_paused());
     settings_data.overrun_chrono = 1;
     printf("  ok: closes at 5:00 rewound; select edits on the original start, past now only\n");
   }

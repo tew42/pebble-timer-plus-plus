@@ -394,8 +394,9 @@ static void prv_render_main_text(GContext *ctx) {
 // which belongs there. A reset holds on to the accent it was counting in until the ring has run
 // down, since the value is zero from the moment the button is released and recoloring an arc
 // which is still collapsing would hand the run that just ended the other direction's color.
-// The band is drawn only in coarse mode, and comes with the accent from the settings, each of
-// coarse mode's accents having a band picked for it.
+// The band comes with the accent from the settings, each of coarse mode's accents having a band
+// picked for it. It is only drawn while digits are masked, which only coarse mode does, so it is
+// taken unconditionally.
 // On one bit hardware there is nothing to choose, so the ring stays white and the dither in
 // prv_render_progress_ring carries the distinction instead
 static void prv_palette_update(void) {
@@ -410,9 +411,7 @@ static void prv_palette_update(void) {
   }
   // settings_accent_rgb hands the accent over already moved into the palette in force
   drawing_data.ring_color = GColorFromHEX(settings_accent_rgb(drawing_data.accent_chrono));
-  drawing_data.band_color = settings_coarse()
-                                ? GColorFromHEX(settings_band_rgb(drawing_data.accent_chrono))
-                                : drawing_data.ring_color;
+  drawing_data.band_color = GColorFromHEX(settings_band_rgb(drawing_data.accent_chrono));
 #endif
 }
 
