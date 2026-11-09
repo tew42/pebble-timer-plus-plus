@@ -125,20 +125,27 @@ var clay = new Clay(clayConfig, function() {
         });
     }
 
-    // Draw the swatches as hexagons, and mark the one picked
-    // The hexagons clip away the shadow Clay marks the pick with, so it gets a dot in the middle
-    // instead, white in a dark ring to show on any color. Clay paints each swatch with an inline
-    // background shorthand, which would clear the dot without the !important.
+    // Draw the swatches as hexagons, edged in black, and mark the one picked
+    // The edge is a black ring laid over the inside of each hexagon, between its outline and the
+    // same outline shrunk by a twelfth about the middle, so two neighbors meet across a line of
+    // twice that. The hexagons clip away the shadow Clay marks the pick with, so it gets a dot in
+    // the middle instead, white in a dark ring to show on any color. Clay paints each swatch with
+    // an inline background shorthand, which would clear the dot without the !important.
     var HEX_CLASS = "hex-map";
     function addHexStyle() {
         if (document.getElementById(HEX_CLASS)) {
             return;
         }
         var hexagon = "polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%)";
+        var ring = "polygon(evenodd, 50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%, 50% 0, " +
+                   "50% 4%, 4% 27%, 4% 73%, 50% 96%, 96% 73%, 96% 27%, 50% 4%)";
         var style = document.createElement("style");
         style.id = HEX_CLASS;
         style.textContent =
-            "." + HEX_CLASS + " .color-box{-webkit-clip-path:" + hexagon + ";clip-path:" + hexagon +
+            "." + HEX_CLASS + " .color-box[data-value]{position:relative;-webkit-clip-path:" + hexagon +
+            ";clip-path:" + hexagon + "}" +
+            "." + HEX_CLASS + " .color-box[data-value]::after{content:'';position:absolute;top:0;right:0;" +
+            "bottom:0;left:0;background:#000;-webkit-clip-path:" + ring + ";clip-path:" + ring +
             "}" +
             "." + HEX_CLASS + " .color-box.selected{box-shadow:none;background-image:" +
             "radial-gradient(circle,#fff 0 14%,#000 14% 22%,transparent 22%) !important}";

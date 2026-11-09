@@ -464,8 +464,10 @@ if (customFn) {
         !['-webkit-' + hexagon, ';' + hexagon].every(function(rule) {
             return styles[0].textContent.indexOf(rule) >= 0;
         }) ||
-        !/\.color-box\.selected\{[^}]*radial-gradient/.test(styles[0].textContent)) {
-        fail('expected one stylesheet cutting hexagons and marking the pick, got ' + styles.length);
+        !/\.color-box\.selected\{[^}]*radial-gradient/.test(styles[0].textContent) ||
+        !/\.color-box\[data-value\]::after\{[^}]*background:#000;[^}]*clip-path:polygon\(evenodd,/
+            .test(styles[0].textContent)) {
+        fail('expected one stylesheet cutting hexagons, edging them in black and marking the pick');
     }
     ['timerColor', 'chronoColor'].forEach(function(key) {
         var picker = shaped.dom.pickers[key];
