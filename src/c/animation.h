@@ -40,6 +40,13 @@ void animation_int16_start(int16_t *target, int16_t to, uint32_t duration, Anima
 void animation_int16_bounce(int16_t *target, int16_t peak, uint32_t out_ms, uint32_t back_ms,
                             uint32_t delay_ms);
 
+//! Swing an integer out to one side of zero, across to the other and back to zero, as a single
+//! animation: a shake, for a press which was heard and refused
+//! @param target The value to animate, which is also its identity
+//! @param amplitude How far to each side it swings
+//! @param leg_ms The length of the swing out and of the swing back; the crossing takes twice that
+void animation_int16_shake(int16_t *target, int16_t amplitude, uint32_t leg_ms);
+
 //! Cancel whatever is animating a value, by its pointer
 //! @param target A pointer to the value to leave where it is
 void animation_stop(void *target);

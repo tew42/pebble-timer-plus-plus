@@ -15,10 +15,10 @@
 #include <string.h>
 
 // One slot per animated value. The drawing code animates five text fields, the focus field, the
-// focus inset, the ring angle and the two bounce displacements, which is exactly this many; a slot
-// is claimed the first time a value animates and belongs to it from then on. The count is an
-// inventory, so a new animated value has to be added to both it and this list.
-#define ANI_SLOT_COUNT 10
+// focus inset, the ring angle, the two bounce displacements and the shake, which is exactly this
+// many; a slot is claimed the first time a value animates and belongs to it from then on. The count
+// is an inventory, so a new animated value has to be added to both it and this list.
+#define ANI_SLOT_COUNT 11
 
 // What one animated value is running
 typedef struct {
@@ -241,6 +241,32 @@ void animation_int16_bounce(int16_t *target, int16_t peak, uint32_t out_ms, uint
   }
   animation_set_delay(bounce, delay_ms);
   if (!prv_slot_schedule(target, bounce)) {
+    const int16_t home = 0;
+    prv_arrive(target, &home, sizeof(int16_t));
+  }
+}
+
+// Swing an integer to either side of zero and back, as a single animation
+void animation_int16_shake(int16_t *target, int16_t amplitude, uint32_t leg_ms) {
+  int16_t left = -amplitude;
+  Animation *out = prv_int16_leg(target, NULL, amplitude, leg_ms, AnimationCurveEaseOut);
+  Animation *across = prv_int16_leg(target, &amplitude, left, 2 * leg_ms, AnimationCurveEaseInOut);
+  Animation *back = prv_int16_leg(target, &left, 0, leg_ms, AnimationCurveEaseIn);
+  Animation *shake =
+      (out && across && back) ? animation_sequence_create(out, across, back, NULL) : NULL;
+  if (!shake || !prv_slot_schedule(target, shake)) {
+    // as the bounce: a shake ends where it started, so one which cannot run has already finished
+    if (!shake) {
+      if (out) {
+        animation_destroy(out);
+      }
+      if (across) {
+        animation_destroy(across);
+      }
+      if (back) {
+        animation_destroy(back);
+      }
+    }
     const int16_t home = 0;
     prv_arrive(target, &home, sizeof(int16_t));
   }

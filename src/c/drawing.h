@@ -20,6 +20,9 @@
 //! @param upward Animate the bounce upward or downward
 void drawing_start_bounce_animation(bool upward);
 
+//! Shake the digits and the focus box sideways once, for a press which was heard and refused
+void drawing_start_shake_animation(void);
+
 //! Shrink the focus layer while select is held, hinting at the reset the hold will perform
 void drawing_start_reset_animation(void);
 

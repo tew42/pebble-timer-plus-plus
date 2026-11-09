@@ -80,6 +80,9 @@ _Static_assert(RING_ANGLE_MAX <= INT16_MAX,
 #define FOCUS_BOUNCE_ANI_HEIGHT scl_y(48)
 #define FOCUS_BOUNCE_ANI_DURATION ANI_FRAMES(2)
 #define FOCUS_BOUNCE_ANI_SETTLE_DURATION ANI_FRAMES(4)
+// The sideways shake for a start which is refused
+#define SHAKE_ANI_WIDTH scl_x(40)
+#define SHAKE_ANI_LEG_DURATION ANI_FRAMES(2)
 // Header Text (different font on Emery and Gabbro)
 #if defined(PBL_PLATFORM_APLITE) || defined(PBL_PLATFORM_BASALT) || defined(PBL_PLATFORM_CHALK) || \
     defined(PBL_PLATFORM_DIORITE) || defined(PBL_PLATFORM_FLINT)
@@ -126,6 +129,7 @@ static struct {
   bool reset_hint;                     //< Whether that shrink is up, so it is put away once
   int16_t bounce_digits;               //< How far the hopping digits are displaced, zero at rest
   int16_t bounce_box;                  //< The same for the focus box, which trails them by a beat
+  int16_t shake;                       //< How far the digits and the box are shaken sideways
   uint8_t bounce_index;                //< Which field the hop belongs to, pinned as it starts
   GColor ring_color;                   //< Color of ring
   GColor band_color;                   //< Color of the ring within the current refresh interval
@@ -205,6 +209,7 @@ static void prv_render_focus_layer(GContext *ctx) {
   // The hop goes on before the inset, because grect_inset flattens a rect it would have to give a
   // negative extent, and the box starts life with no size at all.
   GRect box = drawing_data.focus_field;
+  box.origin.x += drawing_data.shake;
   const int16_t hop = drawing_data.bounce_box;
   if (hop < 0) {
     box.origin.y += hop;
@@ -368,6 +373,7 @@ static void prv_render_main_text(GContext *ctx) {
   // draw the main text elements in their respective bounds
   for (uint8_t ii = 0; ii < TEXT_FIELD_COUNT; ii++) {
     GRect field = drawing_data.text_fields[ii];
+    field.origin.x += drawing_data.shake;
     if (ii == drawing_data.bounce_index) {
       // the hop, applied here rather than written into the rect the layout owns. Only the origin
       // moves, so the size text_render fits its glyphs to is the settled one and the digits keep
@@ -588,6 +594,12 @@ void drawing_start_bounce_animation(bool upward) {
                          FOCUS_BOUNCE_ANI_SETTLE_DURATION, FOCUS_BOUNCE_ANI_DURATION);
 }
 
+// Shake the digits and the focus box sideways, for a press which was heard and refused
+// A displacement the render adds on, as the hop is, so the layout underneath is left alone
+void drawing_start_shake_animation(void) {
+  animation_int16_shake(&drawing_data.shake, SHAKE_ANI_WIDTH, SHAKE_ANI_LEG_DURATION);
+}
+
 // Shrink the focus layer while select is held, hinting at the reset the hold will perform
 void drawing_start_reset_animation(void) {
   drawing_data.reset_hint = true;
@@ -685,6 +697,7 @@ void drawing_initialize(Layer *layer) {
   drawing_data.bounce_digits = 0;
   drawing_data.bounce_box = 0;
   drawing_data.bounce_index = 0;
+  drawing_data.shake = 0;
   drawing_data.focus_field.origin = grect_center_point(&bounds);
   if (!timer_is_paused()) {
     drawing_data.focus_field.origin.x = bounds.size.w;

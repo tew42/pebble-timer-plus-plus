@@ -67,7 +67,7 @@ as a stopwatch. Switched off, the alarm stands for up to 5 minutes instead:
 - Select hands back the timer's length for editing, with the footer showing when it ended. The
   timer keeps its original start, so it only starts once it is set to end in the future: a 30
   minute timer answered 2 minutes late has to be set above 32 minutes, and then finishes on the
-  original schedule.
+  original schedule. Until then, select shakes the digits instead of starting.
 
 ### Colors
 

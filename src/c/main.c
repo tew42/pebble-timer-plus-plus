@@ -423,10 +423,12 @@ static void prv_select_advance(void) {
     } else if (main_data.field == FieldMin) {
       main_data.field = FieldSec;
     } else if (timer_can_start()) {
-      // after a held alert the length runs from the original start, so it has to reach past now
       timer_toggle_play_pause();
       prv_instant_spend();
       prv_refresh_restart();
+    } else {
+      // after a held alert the length runs from the original start, so it has to reach past now
+      drawing_start_shake_animation();
     }
     return;
   }
