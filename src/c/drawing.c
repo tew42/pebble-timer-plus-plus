@@ -92,7 +92,8 @@ _Static_assert(RING_ANGLE_MAX <= INT16_MAX,
 // Fonts
 typedef enum {
   ScalableFontLabel,  //< The header word: Timer, Chrono, Split, Peek, Alarm
-  ScalableFontFooter, //< The footer: the projected end clock, or a held split's fraction
+  ScalableFontFooter, //< The footer: the projected end clock
+  ScalableFontSplit,  //< The footer while a split is held: its fraction of a second
 } ScalableFontIds;
 
 // The colors which never change: the digits, header and footer are black on a white center, and
@@ -258,8 +259,10 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
   // is room for it: the clock time it usually gives is the least of what the screen says, and it
   // comes back the moment the split is let go
   uint16_t fraction_ms;
+  GFont font = scl_get_font(ScalableFontFooter);
   if (timer_get_held_fraction_ms(&fraction_ms)) {
     snprintf(buff, sizeof(buff), ".%03d", fraction_ms);
+    font = scl_get_font(ScalableFontSplit);
   } else {
     // in timer mode, get time
     time_t end_time = epoch() / MSEC_IN_SEC;
@@ -276,8 +279,7 @@ static void prv_render_footer_text(GContext *ctx, GRect bounds) {
     }
   }
   // draw text
-  graphics_draw_text(ctx, buff, scl_get_font(ScalableFontFooter), bounds, GTextOverflowModeFill,
-                     GTextAlignmentCenter, NULL);
+  graphics_draw_text(ctx, buff, font, bounds, GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -693,9 +695,14 @@ void drawing_initialize(Layer *layer) {
   // The footer is drawn a size up on the two large screens, so it keeps the share of the height it
   // has everywhere else: Bitham 34's digits stand 24 px on emery where Gothic 28's stand 18, which
   // is 10.5% of the screen against basalt's 10.7%. It is a numbers font, [0-9:.,-] and nothing
-  // more, which is everything the footer draws -- a clock and a split's fraction -- but a letter
-  // put there would come out in the firmware's small fallback.
+  // more, which is everything the clock draws, but a letter put there would come out in the
+  // firmware's small fallback.
   GFont font_bitham_34_numbers = fonts_get_system_font(FONT_KEY_BITHAM_34_MEDIUM_NUMBERS);
+  // A held split's fraction is the timer's own reading carried on past the seconds, so it is drawn
+  // in LECO, the family the digits above it are drawn in. 32 Bold stands 22 px on the large
+  // screens; on the others it runs past the circle, and 26 Bold, at Gothic 28's 18 px, fits.
+  GFont font_leco_26_bold = fonts_get_system_font(FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM);
+  GFont font_leco_32_bold = fonts_get_system_font(FONT_KEY_LECO_32_BOLD_NUMBERS);
   // clang-format off
   scl_set_fonts(ScalableFontLabel, {
     .o = font_gothic_24_bold, // Everything else
@@ -706,6 +713,11 @@ void drawing_initialize(Layer *layer) {
     .o = font_gothic_28_bold, // Everything else
     .e = font_bitham_34_numbers, // Emery (Pebble Time 2*)
     .g = font_bitham_34_numbers, // Gabbro (Pebble Round 2)
+  });
+  scl_set_fonts(ScalableFontSplit, {
+    .o = font_leco_26_bold, // Everything else
+    .e = font_leco_32_bold, // Emery (Pebble Time 2*)
+    .g = font_leco_32_bold, // Gabbro (Pebble Round 2)
   });
   // clang-format on
   // seed the palette; it is chosen per counting direction and palette, and the first frame is

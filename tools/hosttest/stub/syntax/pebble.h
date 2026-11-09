@@ -166,6 +166,8 @@ GSize graphics_text_layout_get_content_size(const char *text, GFont font, GRect 
 #define FONT_KEY_GOTHIC_24_BOLD "gothic-24-bold"
 #define FONT_KEY_GOTHIC_28_BOLD "gothic-28-bold"
 #define FONT_KEY_BITHAM_34_MEDIUM_NUMBERS "bitham-34-medium-numbers"
+#define FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM "leco-26-bold-numbers-am-pm"
+#define FONT_KEY_LECO_32_BOLD_NUMBERS "leco-32-bold-numbers"
 GFont fonts_get_system_font(const char *key);
 
 // logging
