@@ -19,17 +19,20 @@ Everything it builds is gitignored. A green run is every test plus a syntax pass
 | --- | --- |
 | `timertest` | the timer's value arithmetic, rounding, splits, persistence |
 | `controltest` | `main.c`'s control grammar, mirrored against the real `timer.c` |
-| `settingstest` | the settings module, its validation and its persist versioning, and the contrast mode's move of every stored color |
+| `settingstest` | the settings module, its validation and its persist versioning, and each palette's move of every stored color, with coarse mode's bands |
 | `rotarytest` | `rotary_kit.c`: telling a swipe from a turn, the wheel, the dead zone |
 | `clocktest` | the footer's projected finish time |
-| `ringtest`, `shadetest`, `flicker`, `convention` | the progress ring's geometry, and the shading of both contrast modes |
+| `ringtest`, `shadetest`, `flicker`, `convention` | the progress ring's geometry, and the surfaces each palette draws |
 | `glyphtest`, `layouttest` | `text_render.c`'s glyphs and layout |
-| `jstest` | the Clay configuration page: its options against `settings.h`'s bounds, the pickers' layout against the SDK color map, each contrast mode's colors, the moves it makes, and that every swatch is labeled with its hex and named |
+| `jstest` | the Clay configuration page: its options against `settings.h`'s bounds, the pickers' layout against the SDK color map, the hexagons they are drawn as, each palette's colors, and the moves it makes |
 | `syntax.sh` | `main.c`, `drawing.c` and `animation.c` compiled for every platform, both sides of `PBL_TOUCH` |
 
-`accent_moves.json` lists where each contrast mode moves a color it cannot shade legibly, for all
-64 colors. `jstest` holds the configuration page to it, and `settingstest` holds the watch to it by
-way of `configopts.h`, so the two can only disagree by both being wrong the same way.
+`palettes.json` lists coarse mode's 24 accents with their bands, and the accent each of the 64
+colors becomes in coarse mode. `gen_palette.js` works it out (nearest by hue first and lightness
+second, in OKLCH) and prints the tables `settings.c` and `index.js` carry; `jstest` runs it again to
+hold the file to the rule and holds the configuration page to the file, and `settingstest` holds
+the watch to it by way of `configopts.h`, so the two can only disagree by both being wrong the
+same way. After changing a pair, run `node gen_palette.js` and paste the tables it prints.
 
 ## Three things it cannot do
 

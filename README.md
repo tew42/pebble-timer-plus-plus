@@ -57,21 +57,20 @@ There is a configurable time window of 5s or 10s; if nothing is pressed within t
 ### Colors
 
 Counting down (timer) and counting up (stopwatch) each get their own accent, both green to start.
-Only the ring color is chosen; the center and the interval band are shaded from it. Color watches
-only.
+The ring is drawn in the accent on black, around a white center. Color watches only.
 
-**Contrast** decides how they are shaded:
+Which colors are offered depends on the coarse update modes:
 
-- **Regular** is the original look: a dark gray track behind the ring, a center two steps lighter
-  than the accent, and an interval band one step darker.
-- **High** puts black behind the ring and white in the center, with the band two steps darker,
-  for bright light.
+- **With either coarse mode on**, the ring also shows a darker band for the stretch it will reach
+  by the next redraw. Only 24 accents are offered, each chosen with a band of its own that stands
+  clear of both the ring and the black.
+- **With both off**, there is no band, and any color is offered except black and white.
 
-Each mode offers the colors that stay legible in it. Regular needs one channel fully off, or the
-center turns white; high needs one channel fully on, or the band disappears into the black. The 18
-full-strength hues around the edge of the picker suit both. Switching modes moves a color that no
-longer fits to the same hue, made fully saturated or fully bright. The picker is laid out like the
-color map in the Pebble SDK's color picker, with each swatch labeled by its hex code.
+Turning a coarse mode on moves an accent outside the 24 to the nearest of them, keeping its hue
+first and its lightness second; for example, red becomes `ff5555`, and yellow becomes `aaaa00`. The
+watch makes the same move for a color it already has stored. Turning coarse mode off again moves
+nothing back. The picker's hexagons are laid out like the color map in the Pebble SDK's color
+picker.
 
 ## Closing itself
 
