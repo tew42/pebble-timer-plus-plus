@@ -1,0 +1,26 @@
+Capture build only: never apply this to src/ or commit it.
+
+The SDK 4.44 emulator's time_ms() steps back about 990 ms once a second, so the app redraws stale
+digits in a recording. Real watches do not do this: a probe sampling time_ms() every 10 ms on
+hardware saw 12000 samples and no step back. Apply this to a throwaway copy of the app:
+
+  git archive HEAD | tar -x -C /path/to/copy
+  cd /path/to/copy && patch -p1 < .../tools/screencap/epoch_guard.patch
+
+--- a/src/c/utility.c
++++ b/src/c/utility.c
+@@ -100,5 +100,13 @@
+ uint64_t epoch(void) {
+   time_t sec;
+   const uint16_t ms = time_ms(&sec, NULL);
+-  return (uint64_t)sec * 1000 + ms;
++  // CAPTURE BUILD ONLY: the SDK emulator's time_ms() steps back ~990 ms once a second (real
++  // watches don't), so a sub-second step back is held at the last reading
++  static uint64_t last;
++  const uint64_t now = (uint64_t)sec * 1000 + ms;
++  if (now < last && last - now < 1000) {
++    return last;
++  }
++  last = now;
++  return now;
+ }
